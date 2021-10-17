@@ -1,8 +1,8 @@
 Package: LMMstar
 Type: Package
 Title: Repeated Measurement Models for Discrete Times
-Version: 0.3.2
-Date: 2021-10-04
+Version: 0.3.3
+Date: 2021-10-16
 Authors@R: c(
     person("Brice", "Ozenne", role = c("aut", "cre"), email = "brice.mh.ozenne@gmail.com", comment = c(ORCID = "0000-0001-9694-2956")),
     person("Julie", "Forman", role = "aut", email = "jufo@sund.ku.dk", comment = c(ORCID = "0000-0001-7368-0869"))
@@ -35,9 +35,9 @@ Collate: '0-onload.R' 'LMMstar-package.R' 'LMMstar.options.R' 'anova.R'
         'structure-skeleton.R' 'structure.R' 'summarize.R' 'summary.R'
         'utils.R' 'vcov.R'
 NeedsCompilation: no
-Packaged: 2021-10-04 21:05:26 UTC; bozenne
+Packaged: 2021-10-16 10:14:00 UTC; bozenne
 Author: Brice Ozenne [aut, cre] (<https://orcid.org/0000-0001-9694-2956>),
   Julie Forman [aut] (<https://orcid.org/0000-0001-7368-0869>)
 Maintainer: Brice Ozenne <brice.mh.ozenne@gmail.com>
 Repository: CRAN
-Date/Publication: 2021-10-05 08:30:12 UTC
+Date/Publication: 2021-10-17 20:00:11 UTC
