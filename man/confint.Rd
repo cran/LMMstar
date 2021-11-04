@@ -12,7 +12,6 @@
   effects = NULL,
   robust = FALSE,
   null = NULL,
-  type.object = "lmm",
   strata = NULL,
   columns = NULL,
   df = NULL,
@@ -41,8 +40,6 @@ or only for correlation coefficients (\code{"correlation"}).}
 
 \item{null}{[numeric vector] the value of the null hypothesis relative to each coefficient.}
 
-\item{type.object}{[character] Set this argument to \code{"gls"} to obtain the output from the gls object and related methods.}
-
 \item{strata}{[character vector] When not \code{NULL}, only output coefficient relative to specific levels of the variable used to stratify the mean and covariance structure.}
 
 \item{columns}{[character vector] Columns to be output. Can be any of \code{"estimate"}, \code{"se"}, \code{"statistic"}, \code{"df"}, \code{"null"}, \code{"lower"}, \code{"upper"}, \code{"p.value"}.}
@@ -68,7 +65,7 @@ A data.frame containing for each coefficient (in rows): \itemize{
 }
 }
 \description{
-Compute confidence intervals (CIs) and p-values for the coefficients of a multivariate gaussian model.
+Compute confidence intervals (CIs) and p-values for the coefficients of a linear mixed model.
 }
 \examples{
 ## simulate data in the long format

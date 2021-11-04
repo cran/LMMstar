@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:38) 
 ## Version: 
-## Last-Updated: okt  1 2021 (17:22) 
+## Last-Updated: nov  4 2021 (10:30) 
 ##           By: Brice Ozenne
-##     Update #: 581
+##     Update #: 584
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -30,7 +30,6 @@
 ##' @param rhs [numeric vector] the right hand side of the hypothesis. Only used when the argument effects is a matrix.
 ##' @param ci [logical] Should a confidence interval be output for each hypothesis?
 ##' @param level [numeric, 0-1] nominal coverage of the confidence intervals.
-##' @param type.object [character] Set this argument to \code{"gls"} to obtain the output from the gls object and related methods.
 ##' @param print.null [logical] should the null hypotheses be printed in the console?
 ##' @param df [logical] Should a F-distribution be used to model the distribution of the Wald statistic. Otherwise a chi-squared distribution is used.
 ##' @param method [character] type of adjustment for multiple comparisons: one of \code{"none"}, \code{"bonferroni"}, \code{"single-step"}.
@@ -74,7 +73,6 @@
 ##' @rdname anova
 ##' @export
 anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$df), ci = FALSE, 
-                      type.object = "lmm",
                       transform.sigma = NULL, transform.k = NULL, transform.rho = NULL, transform.names = TRUE, ...){
     
     
@@ -92,7 +90,6 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
         out <- .anova_LRT(object1 = object, object2 = effects)
     }else{ ## Wald test
         out <- .anova_Wald(object, effects = effects, rhs = rhs, df = df, ci = ci, 
-                           type.object = type.object,
                            transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = transform.names)
     }
     
@@ -103,7 +100,6 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
 
 ## * .anova_Wald
 .anova_Wald <- function(object, effects, rhs, df, ci, 
-                        type.object,
                         transform.sigma, transform.k, transform.rho, transform.names){
     
     ## ** normalized user input
@@ -282,17 +278,8 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
         ls.null  <- list(all = out.glht$rhs)        
     }
     type.information <- attr(object$information,"type.information")    
-    type.object <- match.arg(type.object, c("lmm","gls"))
 
     ## ** prepare
-    if(type.object=="gls"){
-        if(length(object$gls)==1){
-            return(anova(object$gls))
-        }else{
-            return(lapply(object$gls, anova))
-        }
-    }
-
     param <- coef(object, effects = "all",
                   transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = FALSE)
     newname <- names(coef(object, effects = "all",
@@ -381,7 +368,8 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
                                  lower = NA,
                                  upper = NA,
                                  null = iNull,
-                                 p.value = NA)
+                                 p.value = NA,
+                                 stringsAsFactors = FALSE)
                 CI$statistic <- CI$estimate/CI$se
                 rownames(CI) <- rownames(iC)
                 if(!is.null(names(effects))){
@@ -401,7 +389,8 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
                                "statistic" = iStat/iN.hypo,
                                "df.num" = iN.hypo,
                                "df.denom" = iDf,
-                               "p.value" = 1 - stats::pf(iStat/iN.hypo, df1 = iN.hypo, df2 = iDf))
+                               "p.value" = 1 - stats::pf(iStat/iN.hypo, df1 = iN.hypo, df2 = iDf),
+                               stringsAsFactors = FALSE)
             attr(iRes, "contrast") <- iC
             attr(iRes, "CI") <- CI
             attr(iRes, "glht") <- CI.glht
@@ -464,7 +453,8 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
                       logLikH0 = stats::logLik(objectH0),
                       statistic = NA,
                       df = length(paramTest),
-                      p.value = NA)
+                      p.value = NA,
+                      stringsAsFactors = FALSE)
     out$statistic <- 2*(out$logLikH1 - out$logLikH0)
     out$p.value <- 1 - stats::pchisq(out$statistic, df = out$df)
                

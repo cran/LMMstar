@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:30) 
 ## Version: 
-## Last-Updated: sep 20 2021 (14:42) 
+## Last-Updated: nov  4 2021 (10:31) 
 ##           By: Brice Ozenne
-##     Update #: 213
+##     Update #: 216
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -17,7 +17,7 @@
 
 ## * coef.lmm (documentation)
 ##' @title Extract Coefficients From a Linear Mixed Model
-##' @description Extract coefficients from a multivariate gaussian model.
+##' @description Extract coefficients from a linear mixed model.
 ##' @name coef
 ##'
 ##' @param object a \code{lmm} object.
@@ -25,7 +25,6 @@
 ##' or only coefficients relative to the mean (\code{"mean"} or \code{"fixed"}),
 ##' or only coefficients relative to the variance structure (\code{"variance"}),
 ##' or only coefficients relative to the correlation structure (\code{"correlation"}).
-##' @param type.object [character] Set this argument to \code{"gls"} to obtain the output from the gls object and related methods.
 ##' @param strata [character vector] When not \code{NULL}, only output coefficient relative to specific levels of the variable used to stratify the mean and covariance structure.
 ##' @param transform.sigma [character] Transformation used on the variance coefficient for the reference level. One of \code{"none"}, \code{"log"}, \code{"square"}, \code{"logsquare"} - see details.
 ##' @param transform.k [character] Transformation used on the variance coefficients relative to the other levels. One of \code{"none"}, \code{"log"}, \code{"square"}, \code{"logsquare"}, \code{"sd"}, \code{"logsd"}, \code{"var"}, \code{"logvar"} - see details.
@@ -68,7 +67,7 @@
 ##' set.seed(10)
 ##' dL <- sampleRem(100, n.times = 3, format = "long")
 ##' 
-##' ## fit Multivariate Gaussian Model
+##' ## fit linear mixed model
 ##' eUN.lmm <- lmm(Y ~ X1 + X2 + X5, repetition = ~visit|id, structure = "UN", data = dL, df = FALSE)
 ##'
 ##' ## output coefficients
@@ -79,7 +78,7 @@
 ## * coef.lmm (code)
 ##' @rdname coef
 ##' @export
-coef.lmm <- function(object, effects = NULL, type.object = "lmm", strata = NULL,
+coef.lmm <- function(object, effects = NULL, strata = NULL,
                      transform.sigma = "none", transform.k = "none", transform.rho = "none", transform.names = TRUE, ...){
 
     ## ** normalize user imput
@@ -89,7 +88,6 @@ coef.lmm <- function(object, effects = NULL, type.object = "lmm", strata = NULL,
         stop("Unknown argument(s) \'",paste(names(dots),collapse="\' \'"),"\'. \n")
     }
     
-    type.object <- match.arg(type.object, c("lmm","gls"))
     if(is.null(effects)){
         if(transform.sigma == "none" && transform.k == "none" && transform.rho == "none"){
             effects <- options$effects
@@ -117,12 +115,10 @@ coef.lmm <- function(object, effects = NULL, type.object = "lmm", strata = NULL,
     }
     
     ## ** extract
-    if(type.object=="lmm"){
-
-        out <- NULL
-        if("mean" %in% effects){
-            out <- c(out, object$param$value[object$param$type=="mu"])
-        }
+    out <- NULL
+    if("mean" %in% effects){
+        out <- c(out, object$param$value[object$param$type=="mu"])
+    }
 
         if(any(c("variance","correlation") %in% effects)){
             pVar <- NULL
@@ -172,31 +168,15 @@ coef.lmm <- function(object, effects = NULL, type.object = "lmm", strata = NULL,
             newname <- NULL
         }
 
-        ## post process
-        if(!is.null(strata)){
-            out <- out[object$param$strata[names(out)] %in% strata]
-        }
-        if(length(newname)>0){
-            names(out)[match(names(newname),names(out))] <- as.character(newname)
-        }
-
-        return(out)
-
-    }else if(type.object=="gls"){
-        if(!is.null(transform)){
-            stop("Cannot handle argument \'transform\' when argument \'type.object\' is \"gls\". \n")
-        }
-        if(length(effects)!=1 || "variance" %in% effects){
-            stop("Cannot handle argument \'effects\' when argument \'type.object\' is \"gls\". \n")
-        }
-
-        if(is.null(strata) && is.null(object$variable$strata)){
-            return(coef(object$gls[[1]]))
-        }else{
-            return(lapply(object$gls[which(object$strata$levels %in% strata)], coef))
-        }
-
+    ## post process
+    if(!is.null(strata)){
+        out <- out[object$param$strata[names(out)] %in% strata]
     }
+    if(length(newname)>0){
+        names(out)[match(names(newname),names(out))] <- as.character(newname)
+    }
+
+    return(out)
 }
 ##----------------------------------------------------------------------
 ### coef.R ends here

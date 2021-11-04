@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: May 31 2021 (15:28) 
 ## Version: 
-## Last-Updated: okt  1 2021 (17:08) 
+## Last-Updated: nov  4 2021 (10:10) 
 ##           By: Brice Ozenne
-##     Update #: 293
+##     Update #: 316
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -115,7 +115,11 @@
     var.rhs <- rhs.vars(formula.var)
     if(length(var.rhs)==0){
         var.time <- NULL
-        formula.var <- ~1 ## no need to stratify on anything
+        if(length(var.strata)==0){
+            formula.var <- ~1 
+        }else{
+            formula.var <- stats::as.formula(paste("~0+",var.strata))
+        }
     }else if(length(var.rhs)==1){
         var.time <- var.rhs
         if(length(var.strata)==0){
@@ -164,6 +168,7 @@
 ##' @description Variance-covariance structure where the residuals are independent and identically distribution.
 ##'
 ##' @param formula formula indicating the time and cluster variables.
+##' @param var.cluster [character] used to check the cluster variable in the formula.
 ##' @param var.time [character] name of the time variable.
 ##' @param ... not used.
 ##'
@@ -179,18 +184,33 @@
 ##' ID(gender~time,var.time="time")
 ##' 
 ##' @export
-ID <- function(formula, var.time, ...){
-    out0 <- .formulaStructure(formula, missing.time.ok = TRUE, missing.id.ok = TRUE)
+ID <- function(formula, var.cluster, var.time, ...){
+    if(is.null(formula)){
+        out0 <- list(cluster = NULL, strata = NULL, time = NULL)
+    }else{
+        out0 <- .formulaStructure(formula, missing.time.ok = TRUE, missing.id.ok = TRUE)
+    }
     out <- list(call = match.call(),
-                name = data.frame(cluster = if(length(out0$cluster)==1){out0$cluster}else{NA},
+                name = data.frame(cluster = if(!missing(var.cluster)==1){var.cluster}else if(length(out0$var.cluster)==1){out0$var.cluster}else{NA},
                                   strata = if(!is.null(out0$strata)){out0$strata}else{NA},
                                   time = if(!missing(var.time)){var.time}else if(length(out0$var.time)==1){out0$var.time}else{NA},
                                   var = NA,
-                                  cor = NA),
+                                  cor = NA,
+                                  stringsAsFactors = FALSE),
                 formula = list(var = ~1,
                                cor = NULL),
                 type = "IND")
 
+    ##  add strata to the formula (and possibly remove time effect)
+    if(is.na(out$name$strata)){
+        out$formula$var <- ~1
+        out$formula$cor <- ~1
+    }else{
+        out$name$var <- I(list(out0$strata))
+        out$name$cor <- I(list(out0$strata))
+        out$formula$var <- stats::as.formula(paste0("~0+",out0$strata))
+        out$formula$cor <- stats::as.formula(paste0("~0+",out0$strata))
+    }
 
     ## export
     class(out) <- append("structure",class(out))
@@ -203,6 +223,7 @@ ID <- function(formula, var.time, ...){
 ##' @description Variance-covariance structure where the residuals are independent.
 ##'
 ##' @param formula formula indicating factors influencing the residual variance.
+##' @param var.cluster [character] used to check the cluster variable in the formula.
 ##' @param var.time [character] name of the time variable.
 ##' @param ... not used.
 ##'
@@ -219,18 +240,18 @@ ID <- function(formula, var.time, ...){
 ##' IND(gender~time,var.time="time")
 ##' 
 ##' @export
-IND <- function(formula, var.time, ...){
+IND <- function(formula, var.cluster, var.time, ...){
     out0 <- .formulaStructure(formula, missing.time.ok = TRUE, missing.id.ok = TRUE)
     out <- list(call = match.call(),
-                name = data.frame(cluster = if(length(out0$cluster)==1){out0$cluster}else{NA},
+                name = data.frame(cluster = if(!missing(var.cluster)==1){var.cluster}else if(length(out0$var.cluster)==1){out0$var.cluster}else{NA},
                                   strata = if(!is.null(out0$strata)){out0$strata}else{NA},
                                   time = if(!missing(var.time)){var.time}else if(length(out0$var.time)==1){out0$var.time}else{NA},
                                   var = if(length(out0$X.var)>0){I(list(out0$X.var))}else{NA},
-                                  cor = NA),
+                                  cor = NA,
+                                  stringsAsFactors = FALSE),
                 formula = list(var = out0$formula.var,
                                cor = NULL),
                 type = "IND")
-
 
     ## export
     class(out) <- append("structure",class(out))
@@ -276,7 +297,8 @@ CS <- function(formula, var.cluster, var.time, ...){
                                   strata = if(!is.null(out0$strata)){out0$strata}else{NA},
                                   time = if(!missing(var.time)){var.time}else if(length(out0$var.time)==1){out0$var.time}else{NA},
                                   var = NA,
-                                  cor = NA),
+                                  cor = NA,
+                                  stringsAsFactors = FALSE),
                 formula = list(var = NULL,
                                cor = NULL),
                 type = "CS")
@@ -288,6 +310,7 @@ CS <- function(formula, var.cluster, var.time, ...){
     if(length(setdiff(out$X.cor,c(out$var.time,out$strata)))>1){
         stop("Should be at no covariate in the correlation formula, except thoses indicating time and strata. \n")
     }
+
     ##  add strata to the formula (and possibly remove time effect)
     if(is.na(out$name$strata)){
         out$formula$var <- ~1
@@ -298,7 +321,6 @@ CS <- function(formula, var.cluster, var.time, ...){
         out$formula$var <- stats::as.formula(paste0("~0+",out0$strata))
         out$formula$cor <- stats::as.formula(paste0("~0+",out0$strata))
     }
-    
     
     ## export
     class(out) <- append("structure",class(out))
@@ -342,7 +364,8 @@ UN <- function(formula, var.cluster, var.time, ...){
                                   strata = if(length(out0$strata)==1){out0$strata}else{NA},
                                   time = if(!missing(var.time)){var.time}else if(length(out0$var.time)==1){out0$var.time}else{NA},
                                   var = I(list(out0$X.var)),
-                                  cor = I(list(out0$X.cor))),
+                                  cor = I(list(out0$X.cor)),
+                                  stringsAsFactors = FALSE),
                 formula = list(var = out0$formula.var,
                                cor = out0$formula.cor),
                 type = "UN")

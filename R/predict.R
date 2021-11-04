@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:39) 
 ## Version: 
-## Last-Updated: okt  2 2021 (17:32) 
+## Last-Updated: nov  4 2021 (15:43) 
 ##           By: Brice Ozenne
-##     Update #: 485
+##     Update #: 512
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -17,6 +17,7 @@
 
 ## * predict.lmm (documentation)
 ##' @title Predicted Mean Value With Uncertainty For Linear Mixed Model
+##' @description Predicted mean value conditional on covariates or on covariates and other outcome values.
 ##'
 ##' @param object a \code{lmm} object.
 ##' @param newdata [data.frame] the covariate values for each cluster.
@@ -25,11 +26,16 @@
 ##' Can also be \code{NULL} to not compute standard error, p-values, and confidence intervals.
 ##' @param df [logical] Should a Student's t-distribution be used to model the distribution of the predicted mean. Otherwise a normal distribution is used.
 ##' @param type [character] Should prediction be made conditional on the covariates only (\code{"static"}) or also on outcome values at other timepoints (\code{"dynamic"}).
+##' Can also output the model term (\code{"terms"}, similarly to \code{stats::predict.lm}.
 ##' @param keep.newdata [logical] Should the argument \code{newdata} be output along side the predicted values?
+##' @param se.fit For internal use. When not missing mimic the output of \code{predict.se}. Overwrite argument \code{se}.
 ##' @param ... Not used. For compatibility with the generic method.
 ##'
 ##' @details Static prediction are made using the linear predictor \eqn{X\beta} while dynamic prediction uses the conditional normal distribution of the missing outcome given the observed outcomes. So if outcome 1 is observed but not 2, prediction for outcome 2 is obtain by \eqn{X_2\beta + \sigma_{21}\sigma^{-1}_{22}(Y_1-X_1\beta)}. In that case, the uncertainty is computed as the sum of the conditional variance \eqn{\sigma_{22}-\sigma_{21}\sigma^{-1}_{22}\sigma_{12}} plus the uncertainty about the estimated conditional mean (obtained via delta method using numerical derivatives).
-##'  
+##'
+##' The model terms are computing by centering the design matrix around the mean value of the covariates used to fit the model.
+##' Then the centered design matrix is multiplied by the mean coefficients and columns assigned to the same variable (e.g. three level factor variable) are summed together.
+##' 
 ##' @return A data.frame with 5 columns:\itemize{
 ##' \item \code{estimate}: predicted mean.
 ##' \item \code{se}: uncertainty about the predicted mean.
@@ -37,6 +43,7 @@
 ##' \item \code{lower}: lower bound of the confidence interval of the predicted mean
 ##' \item \code{upper}: upper bound of the confidence interval of the predicted mean
 ##' }
+##' except when the argument \code{se.fit} is specified (see \code{predict.lm} for the output format).
 ##'
 ##' @examples
 ##' ## simulate data in the long format
@@ -65,10 +72,10 @@
 ## * predict.lmm (code)
 ##' @export
 predict.lmm <- function(object, newdata, se = "estimation", df = !is.null(object$df), type = "static",
-                        level = 0.95, keep.newdata = FALSE, ...){
+                        level = 0.95, keep.newdata = FALSE, se.fit, ...){
     
     ## ** normalize user imput
-    dots <- list(...)
+    dots <- list(...)    
     if(length(dots)>0){
         stop("Unknown argument(s) \'",paste(names(dots),collapse="\' \'"),"\'. \n")
     }
@@ -82,7 +89,14 @@ predict.lmm <- function(object, newdata, se = "estimation", df = !is.null(object
     }
     U.time <- object$time$levels
     name.cluster <- object$cluster$var
-    type.prediction <- match.arg(type, c("static","dynamic"))
+    type.prediction <- match.arg(type, c("static0","static","terms","dynamic")) ## static0: no intercept
+    if(type.prediction=="static0"){
+        type.prediction <- "static"
+        keep.intercept <- FALSE
+    }else{
+        keep.intercept <- TRUE
+    }
+    if(!missing(se.fit)){se <- "estimation"}
     if(identical(se,FALSE)){
         se <- NULL
     }else if(!is.null(se)){
@@ -94,6 +108,7 @@ predict.lmm <- function(object, newdata, se = "estimation", df = !is.null(object
         se <- match.arg(se, c("estimation","residual","total"))
     }
     if(is.null(newdata[[name.cluster]])){
+        rm.cluster <- TRUE
         if(type=="static"){
             newdata[[name.cluster]] <- as.character(1:NROW(newdata))
         }else if(type == "dynamic"){
@@ -104,8 +119,11 @@ predict.lmm <- function(object, newdata, se = "estimation", df = !is.null(object
                 newdata[[name.cluster]] <- as.character("1")
             }
         }
-    }else if(is.factor(newdata[[name.cluster]]) || is.numeric(newdata[[name.cluster]])){
-        newdata[[name.cluster]] <- as.character(newdata[[name.cluster]])
+    }else{
+        rm.cluster <- FALSE
+        if(is.factor(newdata[[name.cluster]]) || is.numeric(newdata[[name.cluster]])){
+            newdata[[name.cluster]] <- as.character(newdata[[name.cluster]])
+        }
     }
     if(!is.null(name.strata)){
         if(name.strata %in% names(newdata) == FALSE){
@@ -176,6 +194,10 @@ predict.lmm <- function(object, newdata, se = "estimation", df = !is.null(object
     seq.id <- unique(newdata[[name.cluster]])
     n.id <- length(seq.id)
 
+    ## ** extract coefficients and variance
+    beta <- coef(object, effects = "mean")
+    vcov.beta <- vcov(object, effects = "mean")
+
     ## ** design matrix
     if(type.prediction == "dynamic" || factor.residual){
         newdesign <- model.matrix(object, data = newdata, effects = "all")
@@ -187,6 +209,29 @@ predict.lmm <- function(object, newdata, se = "estimation", df = !is.null(object
         Upattern <- object$design$vcov$X$Upattern
     }else{
         X <- model.matrix(object, data = newdata, effects = "mean")
+        if(type == "terms"){
+            Xmean <- colMeans(object$design$mean)
+            Xc <- sweep(X, FUN = "-", MARGIN = 2, STATS = Xmean)
+            Xbeta <- sweep(Xc, FUN = "*", MARGIN = 2,  STATS = beta)
+
+            index.n0 <- which(attr(object$design$mean,"assign")!=0)
+            if(length(index.n0)==0){
+                Xterm <- matrix(nrow = NROW(newdata), ncol = 0)
+            }else{
+                Xterm <- do.call(cbind,tapply(index.n0,attr(object$design$mean,"assign")[index.n0],function(iCol){
+                    list(rowSums(Xbeta[,iCol,drop=FALSE]))
+                }))
+                colnames(Xterm) <- attr(object$design$mean,"variable")                
+            }
+
+            if(any(attr(object$design$mean,"assign")==0)){
+                attr(Xterm, "constant") <- sum(Xmean*beta)
+            }
+            return(Xterm)
+        }
+    }
+    if(!keep.intercept && "(Intercept)" %in% colnames(X)){
+        X[,"(Intercept)"] <- 0
     }
     n.obs <- NROW(X)
 
@@ -197,11 +242,7 @@ predict.lmm <- function(object, newdata, se = "estimation", df = !is.null(object
             dimnames(Omega[[iO]]) <- list(U.time[attr(Omega[[iO]],"time")],U.time[attr(Omega[[iO]],"time")])
         }
     }
-    
-    ## ** extract coefficients and variance
-    beta <- coef(object, effects = "mean")
-    vcov.beta <- vcov(object, effects = "mean")
-        
+            
     ## ** compute predictions
     if(type.prediction == "static"){
         ## compute predictions
@@ -209,7 +250,7 @@ predict.lmm <- function(object, newdata, se = "estimation", df = !is.null(object
         if(keep.newdata){
             out <- cbind(newdata, estimate = prediction)
         }else{
-            out <- data.frame(estimate = prediction)
+            out <- data.frame(estimate = prediction,stringsAsFactors = FALSE)
         }
         ## compute uncertainty about the predictions
         ## prediction.se <- sqrt(diag(X %*% vcov.beta %*% t(X)))
@@ -222,9 +263,11 @@ predict.lmm <- function(object, newdata, se = "estimation", df = !is.null(object
                 ## find variance corresponding to each observation
                 Omega.diag <- data.frame(value = unlist(lapply(Omega,diag)),
                                          pattern = unlist(lapply(1:length(Omega),function(iO){rep(names(Omega)[[iO]],NCOL(Omega[[iO]]))})),
-                                         time = U.time[unlist(lapply(Omega,attr,"time"))])
+                                         time = U.time[unlist(lapply(Omega,attr,"time"))],
+                                         stringsAsFactors = FALSE)
                 data.Omega <- data.frame(pattern = pattern.cluster[newdata[[name.cluster]]],
-                                         time = newdata[[name.time]])
+                                         time = newdata[[name.time]],
+                                         stringsAsFactors = FALSE)
                 index.value <- match(paste(data.Omega$pattern,data.Omega$time,sep="|"), paste(Omega.diag$pattern,Omega.diag$time,sep="|"))
                 prediction.var <- prediction.var + Omega.diag$value[index.value]
             }
@@ -306,7 +349,7 @@ predict.lmm <- function(object, newdata, se = "estimation", df = !is.null(object
                 out$df <- ifelse(!is.na(prediction),Inf,NA)
             }
         }else{
-            out <- data.frame(estimate = stats::na.omit(prediction))
+            out <- data.frame(estimate = stats::na.omit(prediction),stringsAsFactors = FALSE)
             if(!is.null(se)){
                 out$se <- sqrt(stats::na.omit(prediction.var))
                 out$df <- Inf
@@ -324,6 +367,15 @@ predict.lmm <- function(object, newdata, se = "estimation", df = !is.null(object
     }
 
     ## ** export
+    if(!missing(se.fit)){
+        return(list(fit = out$estimate,
+                 se.fit = out$se,
+                 residual.scale = NA,
+                 df = out$df))
+    }
+    if(rm.cluster){
+        out[[name.cluster]] <- NULL
+    }
     alpha <- 1-level
     if(!is.null(se)){
         out$lower <- out$estimate + stats::qt(alpha/2, df = out$df) * out$se

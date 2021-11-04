@@ -10,7 +10,6 @@
   effects = "mean",
   robust = FALSE,
   df = FALSE,
-  type.object = "lmm",
   strata = NULL,
   data = NULL,
   p = NULL,
@@ -34,8 +33,6 @@ or only for coefficients relative to the correlation structure (\code{"correlati
 
 \item{df}{[logical] Should degree of freedom, computed using Satterthwaite approximation, for the model parameters be output.}
 
-\item{type.object}{[character] Set this argument to \code{"gls"} to obtain the output from the gls object and related methods.}
-
 \item{strata}{[character vector] When not \code{NULL}, only output the variance-covariance matrix for the estimated parameters relative to specific levels of the variable used to stratify the mean and covariance structure.}
 
 \item{data}{[data.frame] dataset relative to which the information should be computed. Only relevant if differs from the dataset used to fit the model.}
@@ -58,7 +55,7 @@ or only for coefficients relative to the correlation structure (\code{"correlati
 A matrix with an attribute \code{"df"} when argument df is set to \code{TRUE}.
 }
 \description{
-Extract the variance-covariance matrix of the model coefficients of a multivariate gaussian model.
+Extract the variance-covariance matrix of the model coefficients of a linear mixed model.
 }
 \details{
 For details about the arguments \bold{transform.sigma}, \bold{transform.k}, \bold{transform.rho}, see the documentation of the \link[LMMstar]{coef} function.

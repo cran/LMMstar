@@ -8,7 +8,6 @@
 \method{coef}{lmm}(
   object,
   effects = NULL,
-  type.object = "lmm",
   strata = NULL,
   transform.sigma = "none",
   transform.k = "none",
@@ -24,8 +23,6 @@
 or only coefficients relative to the mean (\code{"mean"} or \code{"fixed"}),
 or only coefficients relative to the variance structure (\code{"variance"}),
 or only coefficients relative to the correlation structure (\code{"correlation"}).}
-
-\item{type.object}{[character] Set this argument to \code{"gls"} to obtain the output from the gls object and related methods.}
 
 \item{strata}{[character vector] When not \code{NULL}, only output coefficient relative to specific levels of the variable used to stratify the mean and covariance structure.}
 
@@ -43,7 +40,7 @@ or only coefficients relative to the correlation structure (\code{"correlation"}
 A vector with the value of the model coefficients.
 }
 \description{
-Extract coefficients from a multivariate gaussian model.
+Extract coefficients from a linear mixed model.
 }
 \details{
 \bold{transform.sigma}: \cr
@@ -78,7 +75,7 @@ Extract coefficients from a multivariate gaussian model.
 set.seed(10)
 dL <- sampleRem(100, n.times = 3, format = "long")
 
-## fit Multivariate Gaussian Model
+## fit linear mixed model
 eUN.lmm <- lmm(Y ~ X1 + X2 + X5, repetition = ~visit|id, structure = "UN", data = dL, df = FALSE)
 
 ## output coefficients
