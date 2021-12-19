@@ -1,11 +1,11 @@
-### test-ttest.R --- 
+### test-auto-ttest.R --- 
 ##----------------------------------------------------------------------
 ## Author: Brice Ozenne
 ## Created: May 31 2021 (15:20) 
 ## Version: 
-## Last-Updated: okt  6 2021 (08:11) 
+## Last-Updated: nov 13 2021 (18:19) 
 ##           By: Brice Ozenne
-##     Update #: 39
+##     Update #: 42
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -67,7 +67,6 @@ test_that("single t-test",{
 ## confint(anova(e.lmm))
 
 ## * paired t-test
-
 data(armd.wide, package = "nlmeU")
 subjCC <- armd.wide[!is.na(armd.wide$visual0) & !is.na(armd.wide$visual52),"subject"]
 armd.wideCC <- armd.wide[armd.wide$subject %in% subjCC,]
@@ -147,4 +146,4 @@ test_that("multiple t-test",{
 
 
 ##----------------------------------------------------------------------
-### test-ttest.R ends here
+### test-auto-ttest.R ends here

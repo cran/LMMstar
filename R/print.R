@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:39) 
 ## Version: 
-## Last-Updated: sep 30 2021 (15:54) 
+## Last-Updated: Dec 15 2021 (18:54) 
 ##           By: Brice Ozenne
-##     Update #: 85
+##     Update #: 97
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -52,7 +52,7 @@ print.lmm <- function(x, ...){
         txt.var <- c(txt.var,"cluster")
         value.var <- c(value.var,x$cluster$var)
     }
-    if(!is.null(x$time$var)){
+    if(!is.na(x$time$var)){
         txt.var <- c(txt.var,"time")
         value.var <- c(value.var,x$time$var)
     }
@@ -76,11 +76,16 @@ print.lmm <- function(x, ...){
     }
 
     ## ** log-likelihood
-    M.print <- rbind(M.print,
-                     cbind("log-likelihood",": ",as.double(logLik)))
+    if(x$method.fit=="ML"){
+        M.print <- rbind(M.print,
+                         cbind("log-likelihood",": ",as.double(logLik)))
+    }else if(x$method.fit=="REML"){
+        M.print <- rbind(M.print,
+                         cbind("log-restr.likelihood",": ",as.double(logLik)))
+    }
 
     ## ** optimisation
-    if(!is.null(x$opt)){
+    if(x$opt$name!="gls"){
         M.print <- rbind(M.print,
                          cbind("convergence",": ",paste0(x$opt$cv," (",x$opt$n.iter," iterations)")))
     }

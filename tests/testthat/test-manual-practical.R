@@ -1,11 +1,11 @@
-### test-practical.R --- 
+### test-manual-practical.R --- 
 ##----------------------------------------------------------------------
 ## Author: Brice Ozenne
 ## Created: Jun  7 2021 (17:03) 
 ## Version: 
-## Last-Updated: nov  4 2021 (16:49) 
+## Last-Updated: Dec 19 2021 (17:46) 
 ##           By: Brice Ozenne
-##     Update #: 64
+##     Update #: 77
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -36,13 +36,19 @@ test.practical <- FALSE
 
 ## * Practical 1
 test_that("practical 1 - gastricbypass",{
-    if(test.practical){
+    if(test.practical==FALSE){skip('Not run to save time in the check')}
+
+    ## ** data
     data(gastricbypassL, package = "LMMstar")
     gastricbypassL$time <- factor(gastricbypassL$time,
                                   levels = c("3 months before surgery", "1 week before surgery", "1 week after surgery", "3 months after surgery"),
                                   labels = c("m3B","w1B","w1A","m3A"))
     gastricbypassL$visit <- as.numeric(gastricbypassL$visit)
 
+    ## ** summarize
+    summarize(glucagonAUC~time, data=long, na.rm=TRUE)
+    summarize(glucagonAUC~time|id, data=long, na.rm=TRUE)
+    
     ## ** compound symmetry
     eCS.gls <- gls(glucagon~time,
                    data=gastricbypassL,
@@ -57,26 +63,6 @@ test_that("practical 1 - gastricbypass",{
                    structure = "CS")
     
     expect_equal(as.double(logLik(eCS.gls)), as.double(logLik(eCS.lmm)), tol = 1e-6)
-    
-    ## ** unstructured without missing data
-    test.nna <- tapply(is.na(gastricbypassL$glucagon),gastricbypassL$id, sum)==0
-    gastricbypassL.full <- gastricbypassL[gastricbypassL$id %in% names(which(test.nna)),]
-    
-    eUN.gls <- gls(glucagon~time,
-                   data=gastricbypassL.full,
-                   correlation=corSymm(form=~visit|id),
-                   weights=varIdent(form=~1|time),
-                   control=glsControl(opt="optim"),
-                   method = "REML")
-
-    eUN.lmm <- lmm(glucagon~time,
-                   data=gastricbypassL.full,
-                   control=glsControl(opt="optim"),
-                   repetition = ~time|id,
-                   structure = "UN",
-                   method.fit = "REML", trace = 0)
-    
-    expect_equal(as.double(logLik(eUN.gls)), as.double(logLik(eUN.lmm)), tol = 1e-6)
 
     ## ** unstructured with missing data
     eUN.gls <- gls(glucagon~time,
@@ -105,7 +91,9 @@ test_that("practical 1 - gastricbypass",{
 
     ## ** extract information
     confint(eUN.lmm, effects = "all", backtransform = TRUE)[,c("estimate","lower","upper")]
-    coef(eUN.lmm, transform.k = "sd")
+    expect_equal(unname(coef(eUN.lmm, effects = "variance", transform.k = "sd")),
+                 unname(coef(eUN.lmm, effects = "variance")[1]*c(1,coef(eUN.lmm, effects = "variance")[-1])),
+                 tol = 1e-6)
     emmeans(eUN.lmm, specs = ~time)
     emmip(eUN.lmm, ~time)
     autoplot(eUN.lmm)
@@ -115,12 +103,12 @@ test_that("practical 1 - gastricbypass",{
 
     eUN.lmm_anova <- anova(eUN.lmm, effects = c("timew1A-timew1B=0"), ci = TRUE)
     expect_equal(eUN.lmm_anova$all$df.denom, 19.24699, tol = 1e-1) ## Richardson
-    }
 })
 
 ## * Practical 2
 test_that("practical 2 - ncgs",{
-    if(test.practical){
+    if(test.practical==FALSE){skip('Not run to save time in the check')}
+    
     data(ncgsL, package = "LMMstar")
     ncgsL$visit <- as.numeric(ncgsL$visit)
     ncgsL$highdose.time <- ncgsL$time
@@ -170,12 +158,12 @@ test_that("practical 2 - ncgs",{
     e2.lmm_anova <- anova(e2.lmm, effects = c("treatmenthighdose:time6-treatmentplacebo:time6=0","treatmenthighdose:time12-treatmentplacebo:time12=0"), ci = TRUE)
     expect_equal(e2.lmm_anova$all$df.denom, 100.0411, tol = 1e-1) ## Richardson
     autoplot(e2.lmm, color = "group") 
-    autoplot(e2.lmm, color = "group", alpha = 0.25)
-    }
+    autoplot(e2.lmm, color = "group", ci.alpha = 0.25)
 })
 
 test_that("practical 2 - vitamin",{
-    if(test.practical){
+    if(test.practical==FALSE){skip('skip')}
+    
     data(vitaminL, package = "LMMstar")
 
     vitaminL$visit.num <- as.numeric(vitaminL$visit)
@@ -219,13 +207,13 @@ test_that("practical 2 - vitamin",{
     e.lmm_anova <- anova(e.lmm, effects = "treatmentvitamin:visit6 - treatmentcontrol:visit6 = 0", ci = TRUE)
     ## expect_equal(e.lmm_anova$all$df.denom, 0.4972829, tol = 1e-1) ## Richardson
    
-    }
 })
 
 ## * Practical 3
 test_that("practical 3 - swabsL",{
-    if(test.practical){
-    data(swabsL, package = "LMMstar")
+    if(test.practical==FALSE){skip('Not run to save time in the check')}
+    
+   data(swabsL, package = "LMMstar")
 
     ## ** unstructured
     eUN.gls <- gls(swabs ~ crowding + name,
@@ -252,53 +240,72 @@ test_that("practical 3 - swabsL",{
     ## with interaction
     eCSI.lmm <- lmm(swabs ~ crowding * name, data = swabsL, structure = "CS", repetition = ~name|family)
     emmip(eCSI.lmm, crowding~name)
-    }
 })
 
 ## * Practical 4
 test_that("practical 4 - bloodpressureL",{
-    if(test.practical){
-        data(bloodpressureL, package = "LMMstar")
-        bloodpressureL$period.num <- as.numeric(bloodpressureL$period)
-        bloodpressureL$treatment.num <- as.numeric(bloodpressureL$treatment)
-            
-        ## ** compound symmetry
-        eCS.gls <- gls(duration ~ period + treatment,
-                       data = bloodpressureL,
-                       correlation = corCompSymm(form=~ 1 | id))
-        eCS.lmm <- lmm(duration ~ period + treatment,
-                       data = bloodpressureL,
-                       structure = "CS", repetition = ~ period | id)
-        expect_equal(as.double(logLik(eCS.lmm)),as.double(logLik(eCS.gls)), tol = 1e-6)
-        confint(eCS.gls)
-        confint(eCS.lmm)
-        emmip(eCS.lmm, treatment~period)
+    if(test.practical==FALSE){skip('Not run to save time in the check')}
 
-        ## ** unstructured
-        eUNP.gls <- gls(duration ~ period + treatment,
-                        data = bloodpressureL,
-                        correlation = corSymm(form=~ period.num | id),
-                        weights = varIdent(form=~ 1|period),
-                        )
-        eUNP.lmm <- lmm(duration ~ period + treatment,
-                        data = bloodpressureL,
-                        structure = "UN", repetition = ~ period | id)
-        expect_equal(as.double(logLik(eUNP.lmm)),as.double(logLik(eUNP.gls)), tol = 1e-6)
+    data(bloodpressureL, package = "LMMstar")
+    bloodpressureL$period.num <- as.numeric(bloodpressureL$period)
+    bloodpressureL$treatment.num <- as.numeric(bloodpressureL$treatment)
+            
+    ## ** compound symmetry
+    eCS.gls <- gls(duration ~ period + treatment,
+                   data = bloodpressureL,
+                   correlation = corCompSymm(form=~ 1 | id))
+    eCS.lmm <- lmm(duration ~ period + treatment,
+                   data = bloodpressureL,
+                   structure = "CS", repetition = ~ period | id)
+    expect_equal(as.double(logLik(eCS.lmm)),as.double(logLik(eCS.gls)), tol = 1e-6)
+    confint(eCS.gls)
+    confint(eCS.lmm)
+    emmip(eCS.lmm, treatment~period)
+
+    ## ** unstructured
+    eUNP.gls <- gls(duration ~ period + treatment,
+                    data = bloodpressureL,
+                    correlation = corSymm(form=~ period.num | id),
+                    weights = varIdent(form=~ 1|period),
+                    )
+    eUNP.lmm <- lmm(duration ~ period + treatment,
+                    data = bloodpressureL,
+                    structure = "UN", repetition = ~ period | id)
+    expect_equal(as.double(logLik(eUNP.lmm)),as.double(logLik(eUNP.gls)), tol = 1e-6)
         
 
 
-        eUNT.gls <- gls(duration ~ period + treatment,
-                       data = bloodpressureL,
-                       correlation = corSymm(form=~ treatment.num | id),
-                       weights = varIdent(form=~ 1|treatment),
-                       )
-        eUNT.lmm <- lmm(duration ~ period + treatment,
-                         data = bloodpressureL,
-                         structure = "UN", repetition = ~ treatment | id)
-        expect_equal(as.double(logLik(eUNT.lmm)),as.double(logLik(eUNT.gls)), tol = 1e-6)
-    }
+    eUNT.gls <- gls(duration ~ period + treatment,
+                    data = bloodpressureL,
+                    correlation = corSymm(form=~ treatment.num | id),
+                    weights = varIdent(form=~ 1|treatment),
+                    )
+    eUNT.lmm <- lmm(duration ~ period + treatment,
+                    data = bloodpressureL,
+                    structure = "UN", repetition = ~ treatment | id)
+    expect_equal(as.double(logLik(eUNT.lmm)),as.double(logLik(eUNT.gls)), tol = 1e-6)
 })
 
+## * Practical 6
+test_that("practical 6 - vasscoresL",{
+    if(test.practical==FALSE){skip('Not run to save time in the check')}
 
+    data(vasscoresL, package = "LMMstar")
+
+    summarize(vas ~ treatment, data = vasscoresL, na.rm = TRUE)
+    summarize(vas ~ treatment|id, data = vasscoresL, na.rm = TRUE)
+    ## summarize(vas ~ treatment+group|id, data = vasscoresL, na.rm = TRUE) ## output some warnings
+
+    fit.CS <- lmm(vas~-1+treatment, data=vasscoresL,
+                     repetition=~treatment|id, structure="CS")
+    summary(fit.CS)
+    fit.UN <- lmm(vas~-1+treatment, data=vasscoresL,
+                     repetition=~treatment|id, structure="UN")
+    summary(fit.UN)
+
+    gg <- ggplot(fitted(fit.UN, impute = TRUE, keep.newdata = TRUE), aes(x=treatment, y = vas, group = id))
+    gg + geom_point(aes(color = imputed)) + geom_line()
+
+})
 ##----------------------------------------------------------------------
-### test-practical.R ends here
+### test-manual-practical.R ends here

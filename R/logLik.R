@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (17:26) 
 ## Version: 
-## Last-Updated: nov  4 2021 (10:33) 
+## Last-Updated: nov 13 2021 (16:35) 
 ##           By: Brice Ozenne
-##     Update #: 235
+##     Update #: 237
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -60,9 +60,9 @@ logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
                                             structure = object$design$vcov,
                                             data = data,
                                             var.outcome = object$outcome$var,
-                                            var.strata = object$strata$var, U.strata = object$strata$levels,
-                                            var.time = object$time$var, U.time = object$time$levels,
-                                            var.cluster = object$cluster$var,
+                                            U.strata = object$strata$levels,
+                                            U.time = object$time$levels,
+                                            stratify.mean = object$opt$name=="gls",
                                             precompute.moments = test.precompute)
             }else{
                 design <- object$design

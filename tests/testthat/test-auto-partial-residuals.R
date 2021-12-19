@@ -1,11 +1,11 @@
-### test-partial-residuals.R --- 
+### test-auto-partial-residuals.R --- 
 ##----------------------------------------------------------------------
 ## Author: Brice Ozenne
 ## Created: nov  4 2021 (11:49) 
 ## Version: 
-## Last-Updated: nov  4 2021 (16:34) 
+## Last-Updated: Dec 15 2021 (17:16) 
 ##           By: Brice Ozenne
-##     Update #: 11
+##     Update #: 18
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -50,6 +50,7 @@ test_that("linear model",{
     expect_equal(as.double(test3-test1), rep(e.diff,length(test1)), tol = 1e-6)
 
     ## plot(e.lmm, type = "partial", var = "X6")
+    ## plot(e.lmm, type = "partial", var = c("(Intercept)","X6"))
     
     ## ## manual plot
     ## rr <- residuals(e.lmm, type = "partial-ref", var = "X6", keep.data = TRUE)
@@ -96,6 +97,8 @@ test_that("linear model with splines",{
     e.lmm <- lmm(Y~visit+X1+stats::poly(X6, 4), data = dL)
 
     ## compare predictions
+    model.matrix(e.lmm, data = dL[1:2,])
+
     GS <- predict(e.lm, newdata = dL[1:2,])
     test <- predict(e.lmm, newdata = dL[1:2,])
     expect_equal(as.double(test$estimate), as.double(GS), tol = 1e-6)
@@ -133,4 +136,4 @@ test_that("linear model with splines",{
 })
 
 ##----------------------------------------------------------------------
-### test-partial-residuals.R ends here
+### test-auto-partial-residuals.R ends here

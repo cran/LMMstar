@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Apr 21 2021 (18:12) 
 ## Version: 
-## Last-Updated: okt  1 2021 (17:07) 
+## Last-Updated: Dec 15 2021 (17:38) 
 ##           By: Brice Ozenne
-##     Update #: 412
+##     Update #: 420
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -73,7 +73,7 @@
     pattern.cluster <- object$X$pattern.cluster
     X.var <- object$X$var
     X.cor <- object$X$cor
-    
+
     Omega <- stats::setNames(lapply(1:n.Upattern, function(iPattern){ ## iPattern <- 1
         iPattern.var <- Upattern[iPattern,"var"]
         iPattern.cor <- Upattern[iPattern,"cor"]
@@ -82,6 +82,7 @@
 
         Omega.sd <- unname(exp(X.var[[iPattern.var]] %*% log(param[colnames(X.var[[iPattern.var]])])))
         Omega.cor <- diag(0, nrow = iNtime, ncol = iNtime)
+
         if(!is.null(X.cor) && !is.null(X.cor[[iPattern.cor]])){
             Omega.cor[attr(X.cor[[iPattern.cor]],"index.vec2matrix")] <- X.cor[[iPattern.cor]] %*% param[colnames(X.cor[[iPattern.cor]])]
         }

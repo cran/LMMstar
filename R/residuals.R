@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:40) 
 ## Version: 
-## Last-Updated: nov  4 2021 (17:22) 
+## Last-Updated: Dec 19 2021 (00:36) 
 ##           By: Brice Ozenne
-##     Update #: 420
+##     Update #: 447
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -21,8 +21,7 @@
 ##' @name residuals
 ##' 
 ##' @param object a \code{lmm} object.
-##' @param type [character] Should the raw residuals be output (\code{"response"}), the Pearson residuals (\code{"pearson"}), normalized residuals (\code{"normalized"} , \code{"scaled"}),
-##' or partial residuals (\code{"partial"} or \code{"partial-ref"}). See detail section.
+##' @param type [character] type of residual to output: raw residuals (\code{"response"}), Pearson residuals (\code{"pearson"}), normalized residuals (\code{"normalized"}, scaled residual \code{"scaled"}), or partial residuals (\code{"partial"} or \code{"partial-ref"}). Can also be \code{"all"} to output all except partial residuals. See detail section.
 ##' @param format [character] Should the residuals be output relative as a vector (\code{"long"}), or as a matrix with in row the clusters and in columns the outcomes (\code{"wide"}).
 ##' @param data [data.frame] dataset relative to which the residuals should be computed. Only relevant if differs from the dataset used to fit the model.
 ##' @param var [character vector] name of the variable relative to which the partial residuals should be computed.
@@ -38,14 +37,15 @@
 ##'
 ##' @details The argument \code{type} defines how the residuals are computed:
 ##' \itemize{
+##' \item \code{"fitted"}: fitted value \eqn{X_{ij} \hat{\beta}}.
 ##' \item \code{"raw"}: observed outcome minus fitted value \eqn{\varepsilon = Y_{ij} - X_{ij} \hat{\beta}}.
 ##' \item \code{"pearson"}: each raw residual is divided by its modeled standard deviation \eqn{\varepsilon = \frac{Y_{ij} - X_{ij} \hat{\beta}}{\sqrt{\hat{\omega}_{ij}}}}.
 ##' \item \code{"studentized"}: same as \code{"pearson"} but excluding the contribution of the cluster in the modeled standard deviation  \eqn{\varepsilon = \frac{Y_{ij} - X_{ij} \hat{\beta}}{\sqrt{\hat{\omega}_{ij}-\hat{q}_{ij}}}}.
 ##' \item \code{"normalized"}: raw residuals are multiplied, within clusters, by the inverse of the (lower) Cholesky factor of the modeled residual variance covariance matrix \eqn{\varepsilon = ( Y_{i} - X_{i} \hat{\beta} )\hat{C}^{-1}}.
 ##' \item \code{"normalized2"}: same as \code{"normalized"} but excluding the contribution of the cluster in the modeled residual variance covariance matrix \eqn{\varepsilon = ( Y_{i} - X_{i} \hat{\beta} ) \hat{D}_i^{-1}}.
-##' \item \code{"scaled"}: corresponds to the scaled scaled residuals of PROC MIXED in SAS.
+##' \item \code{"scaled"}: corresponds to the scaled residuals of PROC MIXED in SAS.
 ##' \item \code{"partial"} or \code{"partial-ref"}: the partial residual are computed as the raw residuals plus the effect of the covariates in argument \code{var}.
-##' \code{"partial"} uses \eqn{\hat{\beta} X  + \hat{\varepsilon}} where \(X\) is centered while \code{"partial"} uses \eqn{\hat{\beta} X + \hat{\gamma} Z  + \hat{\varepsilon}} where the Z value are the same for all observations, i.e. uses a reference level.
+##' \code{"partial"} uses \eqn{\hat{\beta} X  + \hat{\varepsilon}} where \eqn{X} is centered while \code{"partial-ref"} uses \eqn{\hat{\beta} X + \hat{\gamma} Z  + \hat{\varepsilon}} where the Z value are the same for all observations, i.e. uses a reference level.
 ##' }
 ##' where
 ##' \itemize{
@@ -56,7 +56,7 @@
 ##' \item \eqn{\hat{\gamma}} the estimated mean coefficients relative to \eqn{Z}
 ##' \item \eqn{\hat{\Omega}} the modeled variance-covariance of the residuals and \eqn{\hat{\omega}} its diagonal elements
 ##' \item \eqn{\hat{C}} the lower Cholesky factor of \eqn{\hat{\Omega}}, i.e. \eqn{\hat{C} \hat{C}^{t} = \hat{\Omega}}
-##' \item \eqn{\hat{Q}_i= X_i (X^{t}\hat{\Omega}X)^{-1}X_i^{t}} a cluster specific correction factor, approximating the contribution of cluster i to \eqn{\hat{Omega}}. Its diagonal elements are denoted \eqn{\hat{q}_i}.
+##' \item \eqn{\hat{Q}_i= X_i (X^{t}\hat{\Omega}X)^{-1}X_i^{t}} a cluster specific correction factor, approximating the contribution of cluster i to \eqn{\hat{\Omega}}. Its diagonal elements are denoted \eqn{\hat{q}_i}.
 ##' \item \eqn{\hat{D}_i} the lower Cholesky factor of \eqn{\hat{\Omega}-\hat{Q}_i}
 ##' }
 ##'
@@ -81,13 +81,13 @@
 ##'
 ##' ## residuals
 ##' residuals(eUN.lmm, format = "long", type = c("normalized","pearson"))
-##' residuals(eUN.lmm, format = "long", type = "all", keep.data = TRUE)
 ##' residuals(eUN.lmm, format = "wide", plot = "correlation")
 ##' residuals(eUN.lmm, format = "wide", type = "normalized")
 ##' residuals(eUN.lmm, format = "wide", type = "scaled")
 ##'
 ##' ## residuals and predicted values
-##' residuals(eUN.lmm, data = fitted(eUN.lmm,keep.newdata=TRUE),keep.data=TRUE)
+##' residuals(eUN.lmm, type = "all")
+##' residuals(eUN.lmm, type = "all", keep.data = TRUE)
 
 
 ## * residuals.lmm (code)
@@ -112,15 +112,18 @@ residuals.lmm <- function(object, type = "response", format = "long",
     }
     ## check type.residuals
     if(identical("all",tolower(type.residual))){
-        type.residual <- c("response","studentized","pearson","normalized","normalized2","scaled")
+        type.residual <- c("fitted","response","studentized","pearson","normalized","normalized2","scaled")
     }
-    type.residual <- match.arg(type.residual, c("response","studentized","pearson","normalized","normalized2","scaled","partial","partial-ref"), several.ok = (format=="long"))
+    type.residual <- match.arg(type.residual, c("fitted","response","studentized","pearson","normalized","normalized2","scaled","partial","partial-ref"), several.ok = (format=="long"))
     if(any(type.residual %in% c("studentized","pearson","normalized","normalized2","scaled"))){
         effects <- c("mean","variance")
     }else{
         effects <- "mean"
-    }
+    }    
     name.residual <- paste0("r.",gsub("-ref","",type.residual,fixed = TRUE))
+    if("fitted" %in% type.residual){
+        name.residual[type.residual=="fitted"] <- "fitted"
+    }
     ## special checks for partial residuals
     if("partial" %in% type.residual || "partial-ref" %in% type.residual){
         if((length(type.residual)>2) || (length(type.residual) == 2 && "response" %in% type.residual == FALSE)){
@@ -149,11 +152,18 @@ residuals.lmm <- function(object, type = "response", format = "long",
     }
     ## check plot
     plot <- match.arg(plot, c("none","qqplot","correlation","scatterplot","scatterplot2"))
+    if(plot == "correlation" && object$time$n == 1){
+        stop("Cannot display the residual correlation over time when there is only a single timepoint. \n")
+    }
     if(length(add.smooth)==1){
         add.smooth <- rep(add.smooth,2)
     }
+    if(length(type.residual)>1 && plot != "none"){
+        stop("Argument \'plot\' must be \"none\" when exporting several types of residuals. \n")
+    }
     if(plot!="none"){
         label.residual <- switch(type.residual,
+                                 "fitted" = "Fitted values",
                                  "response" = "Raw residuals",
                                  "studentized" = "Studentized residuals",
                                  "pearson" = "Pearson residuals",
@@ -164,9 +174,6 @@ residuals.lmm <- function(object, type = "response", format = "long",
                                  "partial-ref" = paste("Partial residuals for ",paste(var,collapse=", ")))
     }
     ## check agreement plot, format, type.residual
-    if(length(type.residual)>1 && plot != "none"){
-        stop("Argument \'plot\' must be \"none\" when exporting several types of residuals. \n")
-    }
     if(length(type.residual)>1 && format == "wide"){
         stop("Argument \'format\' must be \"long\" when exporting several types of residuals. \n")
     }
@@ -181,14 +188,14 @@ residuals.lmm <- function(object, type = "response", format = "long",
 
     ## ** update design
     if(any(c("partial","partial-ref") %in% type.residual)){
-        ## extract data
+        ## extract data and design matrix
         if(is.null(data)){
             data <- stats::model.frame(object)
             data <- data[,setdiff(colnames(data),c("XXindexXX", "XXstrata.indexXX", "XXvisit.indexXX")),drop=FALSE]
+            design <- model.matrix(object, effects = effects, simplifies = FALSE)
+        }else{
+            design <- model.matrix(object, data = data, effects = effects, simplifies = FALSE)
         }
-
-        ## design matrix relative to the data
-        design <- model.matrix(object, data = data, effects = effects, simplifies = FALSE)
 
         ## design matrix relative to the data where the effect of variables no in var has been removed
         reference <- NULL
@@ -196,10 +203,10 @@ residuals.lmm <- function(object, type = "response", format = "long",
         if("partial-ref" %in% type.residual){ 
             ## set the dataset at the reference value for all variables not in var
             if(is.null(attr(type.residual,"reference"))){
-                name.Xfac <- names(object$xfactor)
+                name.Xfac <- names(object$xfactor$mean)
                 name.Xnum <- setdiff(name.X,name.Xfac)
                 if(length(name.Xfac)>0){
-                    reference <- c(reference, lapply(object$xfactor,function(iX){factor(iX[1], levels = iX)}))
+                    reference <- c(reference, lapply(object$xfactor$mean,function(iX){factor(iX[1], levels = iX)}))
                 }
                 if(length(name.Xnum)>0){
                     reference <- c(reference, as.list(stats::setNames(rep(0, length(name.Xnum)), name.Xnum)))
@@ -314,12 +321,15 @@ residuals.lmm <- function(object, type = "response", format = "long",
         res <-  as.vector(Y - fitted)
         M.res <- matrix(NA, nrow = NROW(X), ncol = length(type.residual), dimnames = list(NULL, name.residual))
     }else{
-        fitted <- fitted(object)
+        fitted <- stats::fitted(object)
         res <- as.vector(object$residuals)
         M.res <- matrix(NA, nrow = NROW(object$residuals), ncol = length(type.residual), dimnames = list(NULL, name.residual))
     }
 
     ## ** normalization
+    if ("fitted" %in% type.residual) {
+        M.res[,"fitted"] <- fitted
+    }
     if ("response" %in% type.residual) {
         M.res[,"r.response"] <- res
     }
@@ -398,8 +408,8 @@ residuals.lmm <- function(object, type = "response", format = "long",
     ## plot
     ##
     if(format=="wide"){
-            
-        dfL.res <- data.frame(residuals = as.vector(M.res), cluster = level.cluster, time = level.time,stringsAsFactors = FALSE)
+
+        dfL.res <- data.frame(residuals = as.vector(M.res), cluster = level.cluster, time = level.time, stringsAsFactors = FALSE)
         MW.res <- reshape2::dcast(data = dfL.res,
                                   formula = cluster~time, value.var = "residuals")
         attr(MW.res,"reference") <- attr(M.res,"reference")
