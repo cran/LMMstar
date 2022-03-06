@@ -1,11 +1,11 @@
-### confint.R --- 
+### confint.lmm.R --- 
 ##----------------------------------------------------------------------
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:39) 
 ## Version: 
-## Last-Updated: nov  4 2021 (10:34) 
+## Last-Updated: feb 10 2022 (11:05) 
 ##           By: Brice Ozenne
-##     Update #: 323
+##     Update #: 331
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -27,7 +27,7 @@
 ##' or only for mean coefficients (\code{"mean"} or \code{"fixed"}),
 ##' or only for variance coefficients (\code{"variance"}),
 ##' or only for correlation coefficients (\code{"correlation"}).
-##' @param robust [logical] Should robust standard error (aka sandwich estimator) be output instead of the model-based standard errors. Not feasible for variance or correlation coefficients estimated by REML.
+##' @param robust [logical] Should robust standard errors (aka sandwich estimator) be output instead of the model-based standard errors. Not feasible for variance or correlation coefficients estimated by REML.
 ##' @param null [numeric vector] the value of the null hypothesis relative to each coefficient.
 ##' @param df [logical] Should a Student's t-distribution be used to model the distribution of the coefficient. Otherwise a normal distribution is used.
 ##' @param strata [character vector] When not \code{NULL}, only output coefficient relative to specific levels of the variable used to stratify the mean and covariance structure.
@@ -137,11 +137,10 @@ confint.lmm <- function (object, parm = NULL, level = 0.95, effects = NULL, robu
     ## ** get uncertainty
     vcov.beta <- vcov(object, effects = effects, df = df, strata = strata, robust = robust,
                       type.information = type.information, transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = transform.names)
-
     if(df){
         df <- pmax(attr(vcov.beta,"df"), options$min.df)
         attr(vcov.beta,"df") <- NULL
-        if((type.information != "observed") && ("mean" %in% effects)){
+        if((object$method.fit=="REML") && (type.information != "observed") && ("mean" %in% effects)){
             warning("when using REML with expected information, the degree of freedom of the mean parameters may depend on the parametrisation of the variance parameters. \n")
         }
     }else{
@@ -207,7 +206,7 @@ confint.lmm <- function (object, parm = NULL, level = 0.95, effects = NULL, robu
     if(is.function(backtransform)){
         out.save <- out
         out$estimate <- do.call(backtransform, list(out.save$estimate))
-        out$se  <- numDeriv::grad(func = exp, x = out.save$estimate) * out.save$se
+        out$se  <- numDeriv::grad(func = backtransform, x = out.save$estimate) * out.save$se
         out$lower <- do.call(backtransform, list(out.save$lower))
         out$upper <- do.call(backtransform, list(out.save$upper))
         attr(out, "backtransform") <-  2    
@@ -250,7 +249,7 @@ print.confint_lmm <- function(x, digit = 3, ...){
         txt <- unique(c("estimates","standard errors","confidence intervals","confidence intervals")[c("estimate","se","lower","upper") %in% names(x)])
         cat("Note: ",paste(txt,collapse = ", ")," have been back-transformed. \n", sep ="")
     }
-    return(NULL)
+    return(invisible(NULL))
 }
 
 ## * backtransform
@@ -312,4 +311,4 @@ print.confint_lmm <- function(x, digit = 3, ...){
     return(object)
 }
 ##----------------------------------------------------------------------
-### confint.R ends here
+### confint.lmm.R ends here

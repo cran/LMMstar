@@ -9,6 +9,8 @@ lmm(
   repetition,
   structure,
   data,
+  weights = NULL,
+  scale.Omega = NULL,
   method.fit = NULL,
   df = NULL,
   type.information = NULL,
@@ -28,6 +30,10 @@ On the left hand side, a possible stratification variable, e.g. group ~ time|id.
 \item{structure}{[character] type of covariance structure, either \code{"CS"} (compound symmetry) or \code{"UN"} (unstructured).}
 
 \item{data}{[data.frame] dataset (in the long format) containing the observations.}
+
+\item{weights}{[formula or character] variable in the dataset used to weight the log-likelihood and its derivative. Should be constant within cluster.}
+
+\item{scale.Omega}{[formula or character] variable in the dataset used to rescale the residual variance-covariance matrix. Should be constant within cluster.}
 
 \item{method.fit}{[character] Should Restricted Maximum Likelihoood (\code{"REML"}) or Maximum Likelihoood (\code{"ML"}) be used to estimate the model parameters?}
 
@@ -107,7 +113,7 @@ if(require(ggplot2)){
 anova(eCS.lmm) ## effect of each variable
 anova(eCS.lmm, effects = "X11-X21=0") ## test specific coefficient
 ## test several hypothese with adjustment for multiple comparisons
-anova(eCS.lmm, effects = c("X11=0","X21=0"), ci = TRUE)
+summary(anova(eCS.lmm, effects = c("X11=0","X21=0")))
 
 #### 6- prediction ####
 ## conditional on covariates
@@ -117,6 +123,23 @@ predict(eCS.lmm, newdata = newd, keep.newdata = TRUE)
 newd <- dL[1:3,]
 newd$Y[3] <- NA
 predict(eCS.lmm, newdata = newd, type = "dynamic", keep.newdata = TRUE)
+
+#### EXTRA ####
+if(require(mvtnorm)){
+## model for the average over m replicates
+## (only works with independent replicates)
+Sigma1 <- diag(1,1,1); Sigma5 <- diag(1,5,5)
+n <- 100
+dfW <- rbind(data.frame(id = 1:n, rep = 5, Y = rowMeans(rmvnorm(n, sigma = Sigma5))),
+             data.frame(id = (n+1):(2*n), rep = 1, Y = rmvnorm(n, sigma = Sigma1)))
+
+e.lmmW <- lmm(Y~1, data = dfW, scale.Omega=~rep, control = list(optimizer = "FS"))
+e.lmm0 <- lmm(Y~1, data = dfW)
+model.tables(e.lmmW, effects = "all")
+model.tables(e.lmm0, effects = "all")
+## TRUE standard error is 1
+
+}
 
 }
 \seealso{

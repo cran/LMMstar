@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: May 31 2021 (15:28) 
 ## Version: 
-## Last-Updated: nov 12 2021 (15:12) 
+## Last-Updated: feb 16 2022 (16:26) 
 ##           By: Brice Ozenne
-##     Update #: 399
+##     Update #: 428
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -29,27 +29,35 @@
 ##' .formulaStructure( ~ time)
 ##' .formulaStructure(list( ~ gender+time,  ~ time))
 ##' .formulaStructure(strata ~ 1)
-.formulaStructure <- function(formula, add.X = NULL){
+.formulaStructure <- function(formula, add.X = NULL, collapse.formula = TRUE){
 
-    if(is.list(formula) && length(formula)==2 && all(sapply(formula,inherits,"formula"))){
-        init.formula.var <- .formulaStructure(formula[[1]])
-        init.formula.cor <- .formulaStructure(formula[[2]])
+    ## ** normalize to formula format
+    if(!is.list(formula)){
+        formula <- list(variance = formula,
+                        correlation = formula)
+    }else if(is.list(formula) && length(formula)==2 && all(sapply(formula,inherits,"formula"))){
 
-        if(!identical(init.formula.var$strata,init.formula.cor$strata)){
-            stop("Incorrect argument \'formula\': strata variable differ between the correlation and variance structure. \n")
+        if(is.null(names(formula))){
+            names(formula) <- c("variance","correlation")
+        }else if(all(names(formula) %in% c("var","cor"))){
+            names(formula)[names(formula)=="var"] <- "variance"
+            names(formula)[names(formula)=="cor"] <- "correlation"
+        }else if(all(names(formula) %in% c("variance","correlation"))){
+            formula <- formula[c("variance","correlation")]
+        }else{
+            stop("Incorrect names associated to the formula for the residual variance-covariance structure. \n",
+                 "Should be \"variance\" and \"correlation\" (or \"var\" and \"cor\"). \n")
         }
-        out <- list(strata = init.formula.var$strata,
-                    X.var = init.formula.var$X.var,
-                    X.cor = init.formula.cor$X.var,
-                    formula.var = init.formula.var$formula.var,
-                    formula.cor = init.formula.cor$formula.var) ## note: this is not a mistake that $formula.var (and not $formula.cor)
-        return(out)
     }else if(!inherits(formula,"formula")){
         stop("Incorrect argument \'formula\': should be a formula or a list of 2 formula (var, cor).\n")
     }
 
     ## ** left hand side
-    var.strata <- lhs.vars(formula)
+    ls.var.strata <- lapply(formula,lhs.vars)
+    if(!identical(ls.var.strata[[1]],ls.var.strata[[2]])){
+        stop("Incorrect argument \'formula\': strata variable differ between the correlation and variance structure. \n")
+    }
+    var.strata <- ls.var.strata[[1]]
     if(length(var.strata)==0){
         var.strata <- NULL
     }else if(length(var.strata)>1){
@@ -57,33 +65,45 @@
     }
 
     ## ** right hand side
-    var.X <- unique(c(rhs.vars(formula),add.X))
-    if(length(var.strata)==0){
-        var.strata <- NULL
-    }    
-    terms.var <- stats::delete.response(stats::terms(formula))
-    if(any(attr(terms.var,"order")>1)){
+    ls.var.X <- lapply(formula, function(iF){unique(c(rhs.vars(iF),add.X))})
+
+    test.interaction <- sapply(formula, function(iF){
+        any(attr(stats::delete.response(stats::terms(iF)),"order")>1)
+    })
+    if(any(test.interaction)){
         stop("Does not handle interactions in the formula. \n")
     }
 
     ## ** combine left and right hand side
-    if(length(var.X)==0){
+    ## *** variance
+    if(length(ls.var.X$variance)==0){
         if(length(var.strata)==0){
             formula.var <- ~1 
         }else{
             formula.var <- stats::as.formula(paste("~0+",var.strata))
         }
-    }else if(length(var.X)==1){
+    }else{
         if(length(var.strata)==0){
-            formula.var <- stats::as.formula(paste("~",var.X))
+            formula.var <- stats::as.formula(paste("~",paste(ls.var.X$variance,collapse=":")))
         }else{
-            formula.var <- stats::as.formula(paste("~0+",var.strata,"+",var.X,":",var.strata))
+            formula.var <- stats::as.formula(paste("~0+",var.strata,"+",paste(paste(ls.var.X$variance,collapse=":"),var.strata,sep=":")))
+            ## stats::update(terms.var, paste0("~0+",out$name$strata,"+",out$name$strata,":."))
+            ## using ".:var.strata" does not work (it gives the same formula - does not invert . var.strata around the : symbol)
+        }
+    }
+
+    ## *** correlation
+    if(length(ls.var.X$correlation)==0){
+        if(length(var.strata)==0){
+            formula.cor <- ~1 
+        }else{
+            formula.cor <- stats::as.formula(paste("~0+",var.strata))
         }
     }else{
         if(length(var.strata)==0){
-            formula.var <- stats::as.formula(paste("~",paste(var.X,collapse=":")))
+            formula.cor <- stats::as.formula(paste("~",paste(ls.var.X$correlation,collapse="+")))
         }else{
-            formula.var <- stats::as.formula(paste("~0+",var.strata,"+",paste(paste(var.X,collapse=":"),var.strata,sep=":")))
+            formula.cor <- stats::as.formula(paste("~0+",paste(paste(ls.var.X$correlation,var.strata,sep=":"),collapse="+")))
             ## stats::update(terms.var, paste0("~0+",out$name$strata,"+",out$name$strata,":."))
             ## using ".:var.strata" does not work (it gives the same formula - does not invert . var.strata around the : symbol)
         }
@@ -91,10 +111,10 @@
     
     ## ** export
     out <- list(strata = var.strata,
-                X.var = unname(var.X),
-                X.cor = unname(var.X),
+                X.var = unname(ls.var.X$variance),
+                X.cor = unname(ls.var.X$correlation),
                 formula.var = formula.var,
-                formula.cor = formula.var
+                formula.cor = formula.cor
                 )
     return(out)
 }
@@ -110,7 +130,6 @@
 ##' @param formula formula indicating on which variable to stratify the residual variance (left hand side).
 ##' @param var.cluster [character] cluster variable.
 ##' @param var.time [character] time variable.
-##' @param ... Not used. For compatibility with other structures.
 ##'
 ##' @details A typical formula would be \code{~1}.
 ##'
@@ -121,7 +140,7 @@
 ##' ID(~1, var.cluster = "id", var.time = "time")
 ##' ID(gender~1, var.cluster = "id", var.time = "time")
 ##' @export
-ID <- function(formula, var.cluster, var.time, ...){
+ID <- function(formula, var.cluster, var.time){
 
     if(is.null(formula)){
         outCov <- .formulaStructure(~1)
@@ -207,7 +226,8 @@ IND <- function(formula, var.cluster, var.time, add.time){
 ##' and variables influencing the residual variance (right hand side).
 ##' @param var.cluster [character] cluster variable.
 ##' @param var.time [character] time variable.
-##' @param ... Not used. For compatibility with other structures.
+##' @param heterogeneous [logical] when covariates are used for the correlation structure,
+##' should correlation parameters should be specific to each level of the covariate?
 ##'
 ##' @details A typical formula would be \code{~1}, indicating a variance constant over time and the same correlation between all pairs of times.
 ##'
@@ -220,26 +240,23 @@ IND <- function(formula, var.cluster, var.time, add.time){
 ##' CS(list(gender~time,gender~1), var.cluster = "id", var.time = "time")
 ##' 
 ##' @export
-CS <- function(formula, var.cluster, var.time, ...){
+CS <- function(formula, var.cluster, var.time, heterogeneous = TRUE){
     if(is.null(formula)){
         outCov <- .formulaStructure(~1)
     }else{
         outCov <- .formulaStructure(formula)
     }
-
-    if(length(outCov$X.cor)>0){
-        stop("Structure \"CS\" cannot handle covariates in the correlation structure. \n")
-    }
-
+    
     out <- list(call = match.call(),
                 name = data.frame(cluster = if(!missing(var.cluster)){var.cluster}else{NA},
                                   strata = if(!is.null(outCov$strata)){outCov$strata}else{NA},
                                   time = if(!missing(var.time)){var.time}else{NA},
-                                  var = if(length(outCov$X.var)>0){I(list(outCov$X.var))}else{NA},
-                                  cor = NA,
+                                  var = if(heterogeneous && length(outCov$X.var)>0){I(list(outCov$X.var))}else{NA},
+                                  cor = if(length(outCov$X.cor)>0){I(list(outCov$X.cor))}else{NA},
                                   stringsAsFactors = FALSE),
-                formula = list(var = outCov$formula.var,
+                formula = list(var = if(heterogeneous){outCov$formula.var}else{~1},
                                cor = outCov$formula.cor),
+                heterogeneous = heterogeneous,
                 type = "CS")
 
     ## export

@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt 23 2020 (12:33) 
 ## Version: 
-## Last-Updated: Dec 15 2021 (16:49) 
+## Last-Updated: feb 22 2022 (17:36) 
 ##           By: Brice Ozenne
-##     Update #: 94
+##     Update #: 100
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -399,6 +399,54 @@ test_that("mixing continuous and discrete time",{
     ## the bug was that lmm was converting Days as factor for the covariance structure but that also affect the mean structure
     ## so 10 instead of 2 parameters were output
 
+})
+
+## * from: Malene fredag 22-02-18 at 17:20
+df <- data.frame("ID2" = c("I1", "I1", "I1", "I10", "I10", "I10", "I11", "I11", "I11", "I12", "I12", "I13", "I13", "I13", "I13", "I14", "I14", "I14", "I14", "I15", "I15", "I15", "I15", "I16", "I16", "I16", "I17", "I17", "I17", "I17", "I18", "I18", "I18", "I19", "I19", "I19", "I2", "I2", "I2", "I2", "I20", "I20", "I20", "I20", "I21", "I21", "I21", "I22", "I22", "I22", "I22", "I23", "I23", "I23", "I23", "I24", "I24", "I24", "I24", "I25", "I25", "I25", "I26", "I26", "I26", "I27", "I27", "I27", "I28", "I28", "I28", "I28", "I29", "I29", "I3", "I3", "I3", "I3", "I30", "I30", "I31", "I31", "I32", "I32", "I32", "I32", "I4", "I4", "I5", "I5", "I5", "I6", "I7", "I7", "I7", "I7", "I8", "I8", "I8", "I8", "I9", "I9", "I9"), 
+           "ID" = c(28, 28, 28, 27, 27, 27, 21, 21, 21, 20, 20, 19, 19, 19, 19,  1,  1,  1,  1, 12, 12, 12, 12, 25, 25, 25,  9,  9,  9,  9, 18, 18, 18, 26, 26, 26, 22, 22, 22, 22,  6,  6,  6,  6, 30, 30, 30, 10, 10, 10, 10,  8,  8,  8,  8,  4,  4,  4,  4, 15, 15, 15, 16, 16, 16, 29, 29, 29,  5,  5,  5,  5,  3,  3, 24, 24, 24, 24, 11, 11, 32, 32,  2,  2,  2,  2, 31, 31, 23, 23, 23, 17, 14, 14, 14, 14,  7,  7,  7,  7, 13, 13, 13), 
+           "log_IL10" = c(5.24, 5.21, 5.45, 4.17, 4.74, 5.49, 5.12, 5.26, 4.73, 5.67, 4.92, 5.78, 5.31, 5.06, 5.29, 4.99, 4.29, 4.72, 5.07, 4.77, 5.73, 5.30, 4.88, 5.02, 4.85, 5.04, 4.90, 4.97, 4.99, 4.79, 4.96, 5.13, 5.35, 5.40, 5.31, 5.25, 4.62, 5.11, 4.51, 5.26, 5.27, 5.35, 5.23, 5.39, 4.77, 4.92, 5.12, 5.25, 5.16, 4.83, 5.02, 4.98, 4.94, 5.12, 4.55, 5.07, 5.11, 5.12, 5.52, 4.89, 4.89, 4.38, 5.88, 5.55, 5.46, 4.74, 4.60, 5.07, 5.36, 4.85, 5.19, 4.84, 5.11, 4.36, 5.32, 5.04, 5.53, 4.96, 5.36, 5.30, 5.60, 5.10, 4.57, 4.74, 4.59, 4.69, 5.26, 4.92, 4.79, 5.08, 5.47, 5.56, 4.80, 5.34, 5.14, 5.56, 5.53, 6.04, NA, 5.22, 5.73, 5.11, 4.65), 
+           "Time" = c("Baseline", "4 weeks", "12 months", "Baseline", "4 weeks", "12 months", "Baseline", "4 weeks", "6 months", "Baseline", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "12 months", "Baseline", "4 weeks", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "6 months", "Baseline", "4 weeks", "6 months", "Baseline", "4 weeks", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "Baseline", "4 weeks", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "Baseline", "4 weeks", "12 months", "Baseline", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "6 months"), 
+           "Visit" = c(1, 2, 4, 1, 2, 4, 1, 2, 3, 1, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 4, 1, 2, 3, 4, 1, 2, 4, 1, 2, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 1, 2, 3, 1, 2, 4, 1, 2, 3, 4, 1, 2, 1, 2, 3, 4, 1, 2, 1, 2, 1, 2, 3, 4, 1, 2, 1, 2, 4, 1, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3))
+
+test_that("gls optimizer - error ordering variance parameters",{
+    ## Depending of the ordering of the cluster variable, gls was not ordering the same the variance parameters
+    ## and that was not properly handled by lmm
+    test <- lmm(log_IL10~1, repetition = ~Visit|ID2, structure="UN", df=FALSE,
+                data=df)
+
+    GS <- lmm(log_IL10~1, repetition = ~Visit|ID, structure="UN", df=FALSE,
+              data=df)
+
+    expect_equal(logLik(test),logLik(GS), tol = 1e-6) ## -32.3097
+
+    test <- lmm(log_IL10~Time, repetition = ~Visit|ID2, structure="UN", df=FALSE,
+                data=df)
+
+    GS <- lmm(log_IL10~Time, repetition = ~Visit|ID, structure="UN", df=FALSE,
+              data=df)
+
+})
+
+## * from: Malene tirsdag 22-02-22 at 17:34
+df <- data.frame("log_IFNa" = c( 1.1136746,  1.0979168,  1.0745213, -3.0030119,  0.9195400,  1.0816337,  1.4536404,  0.4530283,  0.9987007,  1.3941097,  1.6380655,  1.3419980,  1.4379752,  0.7561828,  0.6982147,  1.5206042,  1.6218099,  1.1070709,  1.5043738,  0.9522556,  1.3215201, NA, NA, NA,  1.0144907, NA,  1.4610340,  1.0398889,  1.3813941,  0.9113367,  0.7513407,  1.1575091,  1.1068172,  1.3658617,  0.9008641,  1.4357748,  1.6262030,  0.7771742,  1.2950271,  1.2599487, NA, NA, NA,  1.6344580, NA, NA,  0.7543576,  1.3104026,  0.7917371,  1.1973980,  1.5714896, NA, NA,  1.6890410,  0.7307361,  1.7447027,  1.0303527,  1.7552029,  1.2171710,  1.3890859,  1.5453714, NA, NA, NA,  1.2413246,  1.2562996,  1.6185791,  1.1264622, NA, NA,  1.4776775,  0.5709515, NA, NA,  1.0534947,  1.0281084, NA, NA,  1.4854105,  1.1183065,  1.6004625,  1.7128854,  0.7852837,  1.7102292,  1.4144262,  0.9393343,  1.4653732,  1.3641911,  0.9447136, NA, NA,  1.3546462,  0.7566908, NA, NA, NA, NA,  1.8578419,  1.6445525, NA, NA, NA,  1.2770124), 
+                 "Time" = c("Baseline", "4 weeks", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "Baseline", "4 weeks", "12 months", "Baseline", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "6 months", "Baseline", "4 weeks", "12 months", "Baseline", "4 weeks", "6 months", "Baseline", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "12 months", "Baseline", "4 weeks", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "6 months", "Baseline", "4 weeks", "6 months", "Baseline", "4 weeks", "12 months", "Baseline", "4 weeks", "6 months", "12 months", "Baseline", "4 weeks", "Baseline", "4 weeks", "Baseline", "4 weeks", "Baseline", "4 weeks", "6 months", "12 months"), 
+                 "ID1" = c(28, 28, 28, 22, 22, 22, 22, 24, 24, 24, 24, 31, 31, 23, 23, 23, 17, 14, 14, 14, 14,  7,  7,  7,  7, 13, 13, 13, 27, 27, 27, 21, 21, 21, 20, 20, 19, 19, 19, 19,  1,  1,  1,  1, 12, 12, 12, 12, 25, 25, 25,  9,  9,  9,  9, 18, 18, 18, 26, 26, 26,  6,  6,  6,  6, 30, 30, 30, 10, 10, 10, 10,  8,  8,  8,  8,  4,  4,  4,  4, 15, 15, 15, 16, 16, 16, 29, 29, 29,  5,  5,  5,  5,  3,  3, 11, 11, 32, 32,  2,  2,  2,  2), 
+                 "visit" = c(1, 2, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 1, 2, 4, 1, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 1, 2, 4, 1, 2, 3, 1, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 4, 1, 2, 3, 4, 1, 2, 4, 1, 2, 4, 1, 2, 3, 4, 1, 2, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 1, 2, 3, 1, 2, 4, 1, 2, 3, 4, 1, 2, 1, 2, 1, 2, 1, 2, 3, 4))
+
+df$Time <- factor(df$Time, levels = c("Baseline","4 weeks","6 months","12 months"))
+df$visit <- as.numeric(df$Time)
+
+test_that("", {
+
+e.fit <- lmm(log_IFNa~Time, repetition = ~Time|ID1, structure="UN", df=TRUE, data=df) 
+
+e.gls <- gls(log_IFNa~Time,
+             correlation = corSymm(form=~visit|ID1),
+             weights = varIdent(form=~1|Time),
+             data = df,
+             na.action = na.omit)
+
+expect_equal(logLik(e.fit),as.double(logLik(e.gls)), tol = 1e-3)
 })
 ######################################################################
 ### test-auto-previous-bug.R ends here

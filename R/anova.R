@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:38) 
 ## Version: 
-## Last-Updated: Dec 15 2021 (18:50) 
+## Last-Updated: feb 11 2022 (11:21) 
 ##           By: Brice Ozenne
-##     Update #: 678
+##     Update #: 785
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -21,22 +21,16 @@
 ##' @name anova
 ##' 
 ##' @param object a \code{lmm} object. Only relevant for the anova function.
-##' @param x an \code{anova_lmm} object. Only relevant for print and confint functions.
 ##' @param effects [character] Should the Wald test be computed for all variables (\code{"all"}),
 ##' or only variables relative to the mean (\code{"mean"} or \code{"fixed"}),
 ##' or only variables relative to the variance structure (\code{"variance"}),
 ##' or only variables relative to the correlation structure (\code{"correlation"}).
 ##' Can also be use to specify linear combinations of coefficients, similarly to the \code{linfct} argument of the \code{multcomp::glht} function.
+##' @param robust [logical] Should robust standard errors (aka sandwich estimator) be output instead of the model-based standard errors. 
 ##' @param rhs [numeric vector] the right hand side of the hypothesis. Only used when the argument effects is a matrix.
-##' @param ci [logical] Should a confidence interval be output for each hypothesis?
-##' @param level [numeric, 0-1] nominal coverage of the confidence intervals.
-##' @param print.null [logical] should the null hypotheses be printed in the console?
 ##' @param df [logical] Should a F-distribution be used to model the distribution of the Wald statistic. Otherwise a chi-squared distribution is used.
-##' @param method [character] type of adjustment for multiple comparisons: one of \code{"none"}, \code{"bonferroni"}, \code{"single-step"}.
-##' Not relevant for the global test (F-test or Chi-square test) - only relevant when testing each hypothesis and adjusting for multiplicity.
+##' @param ci [logical] Should a confidence interval be output for each hypothesis?
 ##' @param transform.sigma,transform.k,transform.rho,transform.names are passed to the \code{vcov} method. See details section in \code{\link{coef.lmm}}.
-##' @param columns [character vector] Columns to be output. Can be any of \code{"estimate"}, \code{"se"}, \code{"df"}, \code{"lower"}, \code{"upper"}, \code{"p.value"}.
-##' @param parm Not used. For compatibility with the generic method.
 ##' @param ... Not used. For compatibility with the generic method.
 ##'
 ##' @return A list of matrices containing the following columns:\itemize{
@@ -62,11 +56,11 @@
 ##' eUN.lmm <- lmm(Y ~ X1 + X2 + X5, repetition = ~visit|id, structure = "UN", data = dL)
 ##' 
 ##' ## chi-2 test
-##' anova(eUN.lmm, df = FALSE)
+##' summary(anova(eUN.lmm, df = FALSE))
 ##' 
 ##' ## F-test
 ##' anova(eUN.lmm)
-##' anova(eUN.lmm, effects = "all")
+##' summary(anova(eUN.lmm, effects = "all"))
 ##' anova(eUN.lmm, effects = c("X1=0","X2+X5=10"), ci = TRUE)
 ##' 
 ##' if(require(multcomp)){
@@ -74,7 +68,9 @@
 ##' e.glht <- glht(amod, linfct = mcp(tension = "Tukey"))
 ##' summary(e.glht, test = Chisqtest()) ## 0.000742
 ##'
-##' print(anova(amod, effect = mcp(tension = "Tukey"), df = FALSE), print.null = TRUE)
+##' e.amod <- anova(amod, effect = mcp(tension = "Tukey"))
+##' summary(e.amod)
+##'
 ##' 
 ##' anova(amod, effect = mcp(tension = "Tukey"), ci = TRUE)
 ##' }
@@ -82,7 +78,7 @@
 ## * anova.lmm (code)
 ##' @rdname anova
 ##' @export
-anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$df), ci = FALSE, 
+anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !is.null(object$df), ci = TRUE, 
                       transform.sigma = NULL, transform.k = NULL, transform.rho = NULL, transform.names = TRUE, ...){
     
     
@@ -99,17 +95,18 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
     if(inherits(effects,"lmm")){ ## likelihood ratio test
         out <- .anova_LRT(object1 = object, object2 = effects)
     }else{ ## Wald test
-        out <- .anova_Wald(object, effects = effects, rhs = rhs, df = df, ci = ci, 
+        out <- .anova_Wald(object, effects = effects, robust = robust, rhs = rhs, df = df, ci = ci, 
                            transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = transform.names)
     }
     
     ## ** export
+    out$call <- match.call()
     class(out) <- append("anova_lmm",class(out))
     return(out)
 }
 
 ## * .anova_Wald
-.anova_Wald <- function(object, effects, rhs, df, ci, 
+.anova_Wald <- function(object, effects, robust, rhs, df, ci, 
                         transform.sigma, transform.k, transform.rho, transform.names){
     
     ## ** normalized user input
@@ -148,7 +145,7 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
 
     name.coef <- names(stats::coef(object, effects = "all"))
     if(inherits(effects,"mcp")){        
-        out.glht <- try(multcomp::glht(object, linfct = effects),
+        out.glht <- try(multcomp::glht(object, linfct = effects), ## only used for generating contrast matrix
                         silent = TRUE)
         if(inherits(out.glht,"try-error")){
             stop("Possible mispecification of the argument \'effects\' as running mulcomp::glht lead to the following error: \n",
@@ -159,7 +156,9 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
         ls.nameTerms.num <- list(all = 1)
         ls.contrast <- list(all = matrix(0, nrow = NROW(out.glht$linfct), ncol = length(name.coef), dimnames = list(rownames(out.glht$linfct),name.coef)))
         ls.contrast$all[,colnames(out.glht$linfct)] <- out.glht$linfct
-        ls.null  <- list(all = out.glht$rhs)        
+        ls.null  <- list(all = out.glht$rhs)
+        name.effects <- NULL
+       
     }else if(is.matrix(effects)){
         ## try to re-size the matrix if necessary
         if(NCOL(effects)!=length(name.coef)){
@@ -180,9 +179,9 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
             rhs <- rep(0, NROW(effects))
         }
         ## run glht
-        out.glht <- try(multcomp::glht(object, linfct = effects, rhs = rhs,
+        out.glht <- try(multcomp::glht(object, linfct = effects, rhs = rhs,  ## only used for generating contrast matrix
                                        coef. = function(iX){coef.lmm(iX, effects = "all")},
-                                       vcov. = function(iX){vcov.lmm(iX, effects = "all")}),
+                                       vcov. = function(iX){vcov.lmm(iX, robust = FALSE, effects = "all")}),
                         silent = TRUE)
         if(inherits(out.glht,"try-error")){
             stop("Possible mispecification of the argument \'effects\' as running mulcomp::glht lead to the following error: \n",
@@ -193,6 +192,7 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
         ls.nameTerms.num <- list(all = 1)
         ls.contrast <- list(all = out.glht$linfct)
         ls.null  <- list(all = out.glht$rhs)        
+        name.effects <- rownames(effects)
 
     }else if(all(tolower(effects) %in% c("mean","fixed","variance","correlation"))){
         
@@ -207,6 +207,7 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
         
         effects <- match.arg(effects, c("mean","fixed","variance","correlation"), several.ok = TRUE)
         effects[effects=="fixed"] <- "mean"
+        name.effects <- NULL
         
         out <- list()
         ls.assign <- list()
@@ -253,11 +254,11 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
         stop("Incorrect argument \'effects\': can be \"mean\", \"variance\", \"correlation\", \"all\", \n",
              "or something compatible with the argument \'linfct\' of multcomp::glht. \n ")
     }else{ ## symbolic definition of effects using equations (characters)
-        
+
         ## run glht
-        out.glht <- try(multcomp::glht(object, linfct = effects,
+        out.glht <- try(multcomp::glht(object, linfct = effects,  ## only used for generating contrast matrix
                                        coef. = function(iX){coef.lmm(iX, effects = "all")},
-                                       vcov. = function(iX){vcov.lmm(iX, effects = "all")}),
+                                       vcov. = function(iX){vcov.lmm(iX, robust = FALSE, effects = "all")}),
                         silent = TRUE)
         newname.coef <- names(stats::coef(object, effects = "all"))
         
@@ -277,9 +278,9 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
                                                         transform.k = "none",
                                                         transform.rho = "none",
                                                         transform.names = TRUE)
-                out.glht <- try(multcomp::glht(object2, linfct = effects,
+                out.glht <- try(multcomp::glht(object2, linfct = effects,  ## only used for generating contrast matrix
                                                coef. = function(iX){coef.lmm(iX, effects = "all")},
-                                               vcov. = function(iX){vcov.lmm(iX, effects = "all")}), silent = TRUE)
+                                               vcov. = function(iX){vcov.lmm(iX, robust = robust, effects = "all")}), silent = TRUE)
                 if(inherits(out.glht,"try-error")){
                     stop("Possible mispecification of the argument \'effects\' as running mulcomp::glht lead to the following error: \n",
                          out.glht)
@@ -300,22 +301,39 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
         ls.nameTerms <- list(all = NULL)
         ls.nameTerms.num <- list(all = 1)
         ls.contrast <- list(all = out.glht$linfct)
-        ls.null  <- list(all = out.glht$rhs)        
+        ls.null  <- list(all = out.glht$rhs)
+        name.effects <- names(effects)
+        if(!is.null(name.effects)){
+            rownames(ls.contrast$all) <- name.effects
+        }
     }
     type.information <- attr(object$information,"type.information")    
 
     ## ** prepare
-    param <- coef(object, effects = "all",
+    if(robust && object$method.fit=="REML"){
+        name.mean <- names(coef(object, effects = "mean"))
+        if(any(names(which(colSums(abs(do.call(rbind,ls.contrast)))>0)) %in% name.mean == FALSE)){
+            stop("Cannot test variance, covariance, or correlation parameters using robust standard errors with REML. \n")
+        }
+        effects <- "mean"
+        ls.contrast <- lapply(ls.contrast, function(iC){iC[,name.mean,drop=FALSE]})
+    }else{
+        effects <- "all"
+    }
+    param <- coef(object, effects = effects,
                   transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = FALSE)
-    newname <- names(coef(object, effects = "all",
+    newname <- names(coef(object, effects = effects,
                           transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = transform.names))
     name.param <- names(param)
     n.param <- length(param)
-    vcov.param <- vcov(object, df = df*2, effects = "all",
+    vcov.param <- vcov(object, df = df*2, effects = effects, robust = robust,
                        transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = FALSE)
     dVcov.param <- attr(vcov.param,"dVcov")
-    if(type.information != "observed"){
+    if(df>0 && object$method.fit=="REML" && type.information == "expected"){
         warning("when using REML with expected information, the degree of freedom of the F-statistic may depend on the parametrisation of the variance parameters. \n")
+    }
+    if(any(sapply(ls.contrast, function(iC){is.null(iC) || identical(colnames(iC), names(param))}) == FALSE)){
+        warning("Names of the columns of the contrast matrix do not match the names of the model coefficients. \n")
     }
 
     ## ** F-tests
@@ -329,6 +347,7 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
         name.iParam <- names(iParam)
 
         iLs <- lapply(ls.nameTerms.num[[iType]], function(iTerm){ ## iTerm <- 1
+
             ## *** contrast matrix
             if(is.null(ls.contrast[[iType]])){
                 if(all(ls.assign[[iType]]!=iTerm)){return(NULL)}
@@ -337,6 +356,7 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
                 iN.hypo <- length(iIndex.param)
                 iNull <- rep(ls.null[[iType]][iTerm],iN.hypo)
                 iName.hypo <- paste(paste0(name.iParam[iIndex.param],"==",iNull), collapse = ", ")
+
                 iC <- matrix(0, nrow = iN.hypo, ncol = n.param, dimnames = list(name.iParam[iIndex.param], newname))
                 if(length(iIndex.param)==1){
                     iC[name.iParam[iIndex.param],name.iParam[iIndex.param]] <- 1
@@ -358,7 +378,7 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
             iC.vcov.C_M1 <- try(solve(outSimp$C %*% vcov.param %*% t(outSimp$C)), silent = TRUE)
             if(inherits(iC.vcov.C_M1,"try-error")){
                 iStat <- NA
-                iDf <- c(iN.hypo,Inf)
+                iDf <- c(outSimp$dim,Inf)
                 attr(iStat,"error") <- "\n  Could not invert the covariance matrix for the proposed contrast."
             }else{
                 iStat <- as.double(t(outSimp$C %*% param - outSimp$rhs) %*% iC.vcov.C_M1 %*% (outSimp$C %*% param - outSimp$rhs))/outSimp$dim 
@@ -369,7 +389,7 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
             }
 
             ## *** degree of freedom
-            if(df && !inherits(iC.vcov.C_M1,"try-error")){
+            if(df>0 && !inherits(iC.vcov.C_M1,"try-error")){
 
                 svd.tempo <- eigen(iC.vcov.C_M1)
                 D.svd <- diag(svd.tempo$values, nrow = outSimp$dim, ncol = outSimp$dim)
@@ -388,7 +408,7 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
 
             ## *** confidence interval
             if(ci){
-                if(df){
+                if(df>0){
                     ci.df <-  .dfX(X.beta = iC.uni, vcov.param = vcov.param, dVcov.param = dVcov.param)
                 }else{
                     ci.df <- Inf
@@ -402,28 +422,29 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
                                  null = iNull,
                                  p.value = NA,
                                  stringsAsFactors = FALSE)
-                CI$statistic <- CI$estimate/CI$se
+                CI$statistic <- (CI$estimate-iNull)/CI$se
                 rownames(CI) <- rownames(iC)
                 if(!is.null(names(effects)) && !inherits(effects,"mcp")){
                     indexName <- intersect(which(names(effects)!=""),which(!is.na(names(effects))))
                     rownames(CI)[indexName] <- names(effects)[indexName]
                 }
-                CI.glht <- multcomp::glht(object, linfct = iC, rhs = iNull, df = ceiling(max(ci.df)),
-                                          coef. = function(iX){coef.lmm(iX, effects = "all")},
-                                          vcov. = function(iX){vcov.lmm(iX, effects = "all")})
+                CI.glht <- multcomp::glht(object, linfct = iC, rhs = iNull, df = ceiling(stats::median(ci.df)),
+                                          coef. = function(iX){coef.lmm(iX, effects = effects)},
+                                          vcov. = function(iX){vcov.lmm(iX, robust = robust, effects = effects)})
+                attr(CI.glht$vcov,"robust") <- robust
             }else{
                 CI <- NULL
                 CI.glht <- NULL
             }
 
             ## *** test
-            iRes <- data.frame("null" = iName.hypo,
+            iRes <- data.frame("null" = if(!is.null(name.effects)){paste(name.effects,collapse=", ")}else{iName.hypo},
                                "statistic" = iStat,
                                "df.num" = iDf[1],
                                "df.denom" = iDf[2],
                                "p.value" = 1 - stats::pf(iStat, df1 = iDf[1], df2 = iDf[2]),
                                stringsAsFactors = FALSE)
-            attr(iRes, "contrast") <- iC
+
             attr(iRes, "CI") <- CI
             attr(iRes, "glht") <- CI.glht
             return(iRes)
@@ -437,7 +458,6 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
         }
 
         out[[iType]] <- do.call(rbind, iLs)
-        attr(out[[iType]], "contrast") <- lapply(iLs,attr,"contrast")
         attr(out[[iType]], "CI") <- lapply(iLs,attr,"CI")
         attr(out[[iType]], "glht") <- lapply(iLs,attr,"glht")
         
@@ -445,6 +465,7 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
 
     ## ** export
     attr(out, "test") <- "Wald"
+    attr(out, "robust") <- robust
     return(out)
 }
 
@@ -504,114 +525,8 @@ anova.lmm <- function(object, effects = NULL, rhs = NULL, df = !is.null(object$d
     return(out)
 }
 
-## * confint.anova_lmm
-##' @rdname anova
-##' @export
-confint.anova_lmm <- function(object, parm, level = 0.95, method = "single-step", ...){
 
-    ## ** normalize user input
-    if(attr(object,"test") == "LRT"){
-        message("No confidence interval available for likelihood ratio tests.")
-        return(NULL)
-    }
-    if(!missing(parm)){
-        stop("Argument \'parm\' is not used - only there for compatibility with the generic method. \n")
-    }
-    dots <- list(...)
-    options <- LMMstar.options()
-    if(length(dots)>0){
-        stop("Unknown argument(s) \'",paste(names(dots),collapse="\' \'"),"\'. \n")
-    }
-    alpha <- 1-level
-    method <- match.arg(method, c("none","bonferroni","single-step"))
 
-    ## ** extract info and compute CI
-    out <- lapply(object, function(iO){ ## iO <- object[[1]]
-        iTable <- attr(iO,"CI")
-        if(is.null(iTable) || all(sapply(iTable,is.null))){return(NULL)}
-        iOut <- stats::setNames(vector(mode = "list", length = length(iTable)),names(iTable))
-
-        for(iTest in 1:length(iTable)){ ## iTest <- 1
-            iOut[[iTest]] <- iTable[[iTest]]
-            iOut[[iTest]]$df <- pmax(iOut[[iTest]]$df, options$min.df)
-            if(method == "none" || NROW(iOut[[iTest]])==1){
-                iOut[[iTest]]$lower <- iOut[[iTest]]$estimate + iOut[[iTest]]$se * stats::qt(alpha/2, df = iOut[[iTest]]$df)
-                iOut[[iTest]]$upper <- iOut[[iTest]]$estimate + iOut[[iTest]]$se * stats::qt(1-alpha/2, df = iOut[[iTest]]$df)
-                iOut[[iTest]]$p.value <- 2*(1-stats::pt( abs((iOut[[iTest]]$estimate-iOut[[iTest]]$null) / iOut[[iTest]]$se), df = iOut[[iTest]]$df))
-            }else if(method == "single-step"){
-                iGlht <- attr(iO,"glht")[[iTest]]
-                iCi <- confint(iGlht)
-                iOut[[iTest]]$lower <- iCi$confint[,"lwr"]
-                iOut[[iTest]]$upper <- iCi$confint[,"upr"]
-                iOut[[iTest]]$p.value <- summary(iGlht, test = multcomp::adjusted("single-step"))$test$pvalues
-                iOut[[iTest]]$df <- iGlht$df
-            }else if(method == "bonferroni"){
-                p <- NROW(iOut[[iTest]])
-                iOut[[iTest]]$lower <- iOut[[iTest]]$estimate + iOut[[iTest]]$se * stats::qt(alpha/(2*p), df = iOut[[iTest]]$df)
-                iOut[[iTest]]$upper <- iOut[[iTest]]$estimate + iOut[[iTest]]$se * stats::qt(1-alpha/(2*p), df = iOut[[iTest]]$df)
-                iOut[[iTest]]$p.value <- pmin(1,2*p*(1-stats::pt( abs((iOut[[iTest]]$estimate-iOut[[iTest]]$null) / iOut[[iTest]]$se), df = iOut[[iTest]]$df)))
-            }
-        }
-        return(iOut)
-    })
-    return(out)
-}
-
-## * print.anova_lmm
-##' @rdname anova
-##' @export
-print.anova_lmm <- function(x, level = 0.95, method = "single-step", print.null = FALSE, columns = NULL, ...){
-
-    
-    if(attr(x,"test")=="Wald"){
-        type <- names(x)
-        ci <- stats::confint(x, level = level, method = method)
-        for(iType in type){
-
-            if(is.null(x[[iType]])){next}
-
-            if(!print.null){
-                x[[iType]][["null"]] <- NULL
-            }
-            iNoDf <- is.infinite(x[[iType]]$df.denom)
-            if(iType == "all"){
-                cat("                     ** User-specified hypotheses ** \n", sep="")
-                if(is.na(x[[iType]]$statistic) && !is.null(attr(x[[iType]]$statistic,"error"))){
-                    cat(" - F-test: ",attr(x[[iType]]$statistic,"error"),"\n", sep="")
-                }else{
-                    cat(" - F-test:\n", sep="")
-                    print(x[[iType]], row.names = FALSE)
-                }
-            }else{
-                cat("                     ** ",iType," coefficients ** \n", sep="")
-                cat(" - F-test:\n",sep="")
-                print(x[[iType]])
-            }
-            if(!is.null(ci[[iType]])){
-                options <- LMMstar.options()
-                if(is.null(columns)){
-                    columns <- options$columns.anova
-                }
-                if(all(sapply(ci[[iType]],NROW)==1) || method == "none"){ ## always only one hypothesis in each global test
-                    cat("\n - P-values and confidence interval \n", sep="")
-                }else if(length(ci[[iType]])==1){ ## only one global test
-                    cat("\n - P-values and confidence interval (adjusted for multiplicity) \n", sep="")
-                }else{
-                    cat("\n - P-values and confidence interval (adjusted for multiplicity within each global test) \n", sep="")
-                }
-                print(do.call(rbind,unname(ci[[iType]]))[,columns,drop=FALSE])
-            }
-            cat("\n")
-        }
-    }else if(attr(x,"test")=="LRT"){
-        cat(" - Likelihood ratio test \n")
-        x.print <- as.data.frame(x)
-        if(print.null==FALSE){x.print[["null"]] <- NULL}
-        print(x.print)
-    }
-
-    return(invisible(NULL))
-}
 ## * dfSigma
 ##' @title Degree of Freedom for the Chi-Square Test
 ##' @description Computation of the degrees of freedom of the chi-squared distribution

@@ -1,11 +1,11 @@
-### print.R --- 
+### print.lmm.R --- 
 ##----------------------------------------------------------------------
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:39) 
 ## Version: 
-## Last-Updated: Dec 15 2021 (18:54) 
+## Last-Updated: feb 16 2022 (18:53) 
 ##           By: Brice Ozenne
-##     Update #: 97
+##     Update #: 98
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -39,9 +39,25 @@ print.lmm <- function(x, ...){
         }
     }else{
         if(structure$type=="UN"){
-            cat("     Linear Mixed Model with an unstructured covariance matrix \n")
+            if(is.na(structure$name$strata)){
+                txt.strata <- "an"
+            }else{
+                txt.strata <- "a stratified"
+            }
+            cat("     Linear Mixed Model with ",txt.strata," unstructured covariance matrix \n", sep = "")
         }else if(structure$type=="CS"){
-            cat("     Linear Mixed Model with a compound symmetry covariance matrix \n")
+            if(is.na(structure$name$strata)){
+                txt.strata <- "a"
+            }else{
+                txt.strata <- "a stratified"
+            }
+            if(all(is.na(structure$name$cor[[1]]))){
+                cat("     Linear Mixed Model with ",txt.strata," compound symmetry covariance matrix \n", sep = "")
+            }else if(structure$heterogeneous){
+                cat("     Linear Mixed Model with ",txt.strata," block unstructured covariance matrix \n", sep = "")
+            }else{
+                cat("     Linear Mixed Model with ",txt.strata," block compound symmetry covariance matrix \n", sep = "")
+            }
         }
     }
 
@@ -102,4 +118,4 @@ print.lmm <- function(x, ...){
 
 
 ##----------------------------------------------------------------------
-### print.R ends here
+### print.lmm.R ends here

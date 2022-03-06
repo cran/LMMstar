@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:40) 
 ## Version: 
-## Last-Updated: Dec 19 2021 (00:36) 
+## Last-Updated: feb 15 2022 (16:50) 
 ##           By: Brice Ozenne
-##     Update #: 447
+##     Update #: 506
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -76,7 +76,7 @@
 ##' residuals(e.lm, type = "partial", var = "X1", keep.data = TRUE)
 ##' 
 ##' ## fit Linear Mixed Model
-##' eUN.lmm <- lmm(Y ~ visit + X1 + X2 + X5,
+##' eUN.lmm <- lmm(Y ~ visit + X1 + X2 + X5 + X6,
 ##'                repetition = ~visit|id, structure = "UN", data = dL)
 ##'
 ##' ## residuals
@@ -88,6 +88,12 @@
 ##' ## residuals and predicted values
 ##' residuals(eUN.lmm, type = "all")
 ##' residuals(eUN.lmm, type = "all", keep.data = TRUE)
+##' 
+##' ## partial residuals
+##' residuals(eUN.lmm, type = "partial-ref", var = c("(Intercept)","X6"), plot = "scatterplot")
+##' residuals(eUN.lmm, type = "partial-ref", var = c("X6"), plot = "scatterplot")
+##' ## plot.lmm(eUN.lmm, type = "partial", var = c("(Intercept)","X6"))
+##' ## plot.lmm(eUN.lmm, type = "partial", var = c("X6"))
 
 
 ## * residuals.lmm (code)
@@ -114,6 +120,7 @@ residuals.lmm <- function(object, type = "response", format = "long",
     if(identical("all",tolower(type.residual))){
         type.residual <- c("fitted","response","studentized","pearson","normalized","normalized2","scaled")
     }
+    attr.ref <- attr(type.residual,"reference")
     type.residual <- match.arg(type.residual, c("fitted","response","studentized","pearson","normalized","normalized2","scaled","partial","partial-ref"), several.ok = (format=="long"))
     if(any(type.residual %in% c("studentized","pearson","normalized","normalized2","scaled"))){
         effects <- c("mean","variance")
@@ -192,9 +199,9 @@ residuals.lmm <- function(object, type = "response", format = "long",
         if(is.null(data)){
             data <- stats::model.frame(object)
             data <- data[,setdiff(colnames(data),c("XXindexXX", "XXstrata.indexXX", "XXvisit.indexXX")),drop=FALSE]
-            design <- model.matrix(object, effects = effects, simplifies = FALSE)
+            design <- stats::model.matrix(object, effects = effects, simplifies = FALSE)
         }else{
-            design <- model.matrix(object, data = data, effects = effects, simplifies = FALSE)
+            design <- stats::model.matrix(object, data = data, effects = effects, simplifies = FALSE)
         }
 
         ## design matrix relative to the data where the effect of variables no in var has been removed
@@ -202,7 +209,7 @@ residuals.lmm <- function(object, type = "response", format = "long",
         centering <- NULL
         if("partial-ref" %in% type.residual){ 
             ## set the dataset at the reference value for all variables not in var
-            if(is.null(attr(type.residual,"reference"))){
+            if(is.null(attr.ref)){
                 name.Xfac <- names(object$xfactor$mean)
                 name.Xnum <- setdiff(name.X,name.Xfac)
                 if(length(name.Xfac)>0){
@@ -212,8 +219,10 @@ residuals.lmm <- function(object, type = "response", format = "long",
                     reference <- c(reference, as.list(stats::setNames(rep(0, length(name.Xnum)), name.Xnum)))
                 }
                 reference <- data.frame(reference, stringsAsFactors = FALSE)
+            }else if(!is.data.frame(attr.ref)){
+                stop("Attribute \'reference\' must inherit from data.frame. \n")
             }else{
-                reference <- attr(type.residual,"reference")
+                reference <- attr.ref
             }
             resdata <- data
             if(length(setdiff(name.X,var))>0){
@@ -223,8 +232,10 @@ residuals.lmm <- function(object, type = "response", format = "long",
             }
 
             ## build design matrix
-            design2 <- model.matrix(object, data = data, effects = effects, simplifies = FALSE)
-
+            design2 <- stats::model.matrix(object, data = data, effects = effects, simplifies = FALSE)
+            if(!is.null(object$index.na)){ 
+                design2$mean <- design2$mean[-object$index.na,,drop=FALSE]
+            }
             ## handle intercept term
             if(keep.intercept==FALSE && "(Intercept)" %in% colnames(design2$mean)){
                 design2$mean[,"(Intercept)"] <- 0
@@ -236,7 +247,7 @@ residuals.lmm <- function(object, type = "response", format = "long",
         }
         
     }else{
-        design <- model.matrix(object, data = data, effects = effects, simplifies = FALSE)
+        design <- stats::model.matrix(object, data = data, effects = effects, simplifies = FALSE)
         if(keep.data){
             data <- stats::model.frame(object)
             data <- data[,setdiff(colnames(data),c("XXindexXX", "XXstrata.indexXX", "XXvisit.indexXX")),drop=FALSE]
@@ -317,11 +328,14 @@ residuals.lmm <- function(object, type = "response", format = "long",
 
     ## ** raw residuals
     if(!is.null(data) || !is.null(p) || "partial" %in% type.residual || "partial-ref" %in% type.residual){
-        fitted <- X %*% beta
+        fitted <- (X %*% beta)[,1]
         res <-  as.vector(Y - fitted)
         M.res <- matrix(NA, nrow = NROW(X), ncol = length(type.residual), dimnames = list(NULL, name.residual))
     }else{
         fitted <- stats::fitted(object)
+        if(!is.null(object$index.na)){ ## make sure to be consistent with X %*% beta
+            fitted <- fitted[-object$index.na]
+        }
         res <- as.vector(object$residuals)
         M.res <- matrix(NA, nrow = NROW(object$residuals), ncol = length(type.residual), dimnames = list(NULL, name.residual))
     }
@@ -397,7 +411,13 @@ residuals.lmm <- function(object, type = "response", format = "long",
         Msave.res <- M.res
         M.res <- matrix(NA, nrow = inflateNA$n.allobs, ncol = length(type.residual), dimnames = list(NULL, name.residual))
         M.res[-object$index.na,] <- Msave.res
+        attr(M.res,"centering") <- attr(Msave.res,"centering")
+        attr(M.res,"reference") <- attr(Msave.res,"reference")
 
+        Msave.fit <- fitted
+        fitted <- matrix(NA, nrow = inflateNA$n.allobs, ncol = 1)
+        fitted[-object$index.na,] <- Msave.fit
+        
         level.cluster <- factor(inflateNA$level.cluster, levels = cluster.level)
         level.time <- factor(inflateNA$level.time, object$time$levels)
     }else{
@@ -429,28 +449,34 @@ residuals.lmm <- function(object, type = "response", format = "long",
                     on.exit(graphics::par(oldpar))            
                     graphics::par(mfrow = c(sqrtm.round,sqrtm.round2))
 
-                    lapply(1:m,function(iCol){qqtest::qqtest(stats::na.omit(MW.res[,iCol+1]), main = paste0(object$time$var,": ",colnames(MW.res)[iCol+1]," (",label.residual,")"))})
-                }
-            }else if(plot %in% c("scatterplot","scatterplot2")){
-                dfL.res$time <- paste0(object$time$var,": ", dfL.res$time)
+                lapply(1:m,function(iCol){qqtest::qqtest(stats::na.omit(MW.res[,iCol+1]), main = paste0(object$time$var,": ",colnames(MW.res)[iCol+1]," (",label.residual,")"))})
+            }
+        }else if(plot %in% c("scatterplot","scatterplot2")){
+            dfL.res$time <- paste0(object$time$var,": ", dfL.res$time)
+            if(type.residual %in% c("partial","partial-ref")){
+                dfL.res$fitted <- data[[var]]
+                xlab.gg <- var
+            }else{
                 dfL.res$fitted <- fitted
-                attr(MW.res,"plot") <- ggplot2::ggplot(dfL.res) + ggplot2::xlab("Fitted values") + ggplot2::theme(text = ggplot2::element_text(size=size.text))
-                if(plot=="scatterplot"){
-                    attr(MW.res,"plot") <- attr(MW.res,"plot") + ggplot2::geom_abline(slope=0,intercept=0,color ="red") + ggplot2::geom_point(ggplot2::aes(x = fitted, y = residuals)) + ggplot2::ylab(label.residual)
-                    if(add.smooth[1]){
-                        attr(MW.res,"plot") <- attr(MW.res,"plot") + ggplot2::geom_smooth(ggplot2::aes(x = fitted, y = residuals), se = add.smooth[2])
-                    }
-                }else if(plot=="scatterplot2"){
-                    label.residual2 <- paste0("|",label.residual,"|")
-                    attr(MW.res,"plot") <- attr(MW.res,"plot") + ggplot2::geom_point(ggplot2::aes(x = fitted, y = sqrt(abs(residuals)))) + ggplot2::ylab(bquote(sqrt(.(label.residual2))))
-                    if(add.smooth[1]){
-                        attr(MW.res,"plot") <- attr(MW.res,"plot") + ggplot2::geom_smooth(ggplot2::aes(x = fitted, y = sqrt(abs(residuals))), se = add.smooth[2])
-                    }
+                xlab.gg <- "Fitted values"
+            }
+            attr(MW.res,"plot") <- ggplot2::ggplot(dfL.res) + ggplot2::xlab(xlab.gg) + ggplot2::theme(text = ggplot2::element_text(size=size.text))
+            if(plot=="scatterplot"){
+                attr(MW.res,"plot") <- attr(MW.res,"plot") + ggplot2::geom_abline(slope=0,intercept=0,color ="red") + ggplot2::geom_point(ggplot2::aes(x = fitted, y = residuals)) + ggplot2::ylab(label.residual)
+                if(add.smooth[1]){
+                    attr(MW.res,"plot") <- attr(MW.res,"plot") + ggplot2::geom_smooth(ggplot2::aes(x = fitted, y = residuals), se = add.smooth[2])
                 }
-                attr(MW.res,"plot") <- attr(MW.res,"plot") + ggplot2::facet_wrap(~time, scales = scales)
-                print(attr(MW.res,"plot"))
-            }else if(plot == "correlation"){
-                name.time <- colnames(MW.res[,-1])
+            }else if(plot=="scatterplot2"){
+                label.residual2 <- paste0("|",label.residual,"|")
+                attr(MW.res,"plot") <- attr(MW.res,"plot") + ggplot2::geom_point(ggplot2::aes(x = fitted, y = sqrt(abs(residuals)))) + ggplot2::ylab(bquote(sqrt(.(label.residual2))))
+                if(add.smooth[1]){
+                    attr(MW.res,"plot") <- attr(MW.res,"plot") + ggplot2::geom_smooth(ggplot2::aes(x = fitted, y = sqrt(abs(residuals))), se = add.smooth[2])
+                }
+            }
+            attr(MW.res,"plot") <- attr(MW.res,"plot") + ggplot2::facet_wrap(~time, scales = scales)
+            print(attr(MW.res,"plot"))
+        }else if(plot == "correlation"){
+            name.time <- colnames(MW.res[,-1])
                 
                 M.cor  <- stats::cor(MW.res[,-1], use = "pairwise")
                 ind.cor <- !is.na(M.cor)
@@ -491,9 +517,14 @@ residuals.lmm <- function(object, type = "response", format = "long",
                     qqtest::qqtest(stats::na.omit(M.res[,1]))
                 }
             }else if(plot %in% c("scatterplot","scatterplot2")){
-                df.gg <- data.frame(fitted = fitted, residuals = M.res[,1],stringsAsFactors = FALSE)
-
-                attr(M.res,"plot") <- ggplot2::ggplot(df.gg) + ggplot2::xlab("Fitted values") + ggplot2::theme(text = ggplot2::element_text(size=size.text))
+                if(type.residual %in% c("partial","partial-ref")){
+                    df.gg <- data.frame(fitted = data[[var]], residuals = M.res[,1],stringsAsFactors = FALSE)
+                    xlab.gg <- var
+                }else{
+                    df.gg <- data.frame(fitted = fitted, residuals = M.res[,1],stringsAsFactors = FALSE)
+                    xlab.gg <- "Fitted values"
+                }
+                attr(M.res,"plot") <- ggplot2::ggplot(df.gg) + ggplot2::xlab(xlab.gg) + ggplot2::theme(text = ggplot2::element_text(size=size.text))
                 if(plot=="scatterplot"){
                     attr(M.res,"plot") <- attr(M.res,"plot") + ggplot2::geom_abline(slope=0,intercept=0,color ="red") + ggplot2::geom_point(ggplot2::aes(x = fitted, y = residuals)) + ggplot2::ylab(label.residual) 
                     if(add.smooth[1]){

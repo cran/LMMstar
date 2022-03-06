@@ -1,8 +1,8 @@
 Package: LMMstar
 Type: Package
 Title: Repeated Measurement Models for Discrete Times
-Version: 0.4.4
-Date: 2022-01-03
+Version: 0.5.2
+Date: 2022-03-06
 Authors@R: c(
     person("Brice", "Ozenne", role = c("aut", "cre"), email = "brice.mh.ozenne@gmail.com", comment = c(ORCID = "0000-0001-9694-2956")),
     person("Julie", "Forman", role = "aut", email = "jufo@sund.ku.dk", comment = c(ORCID = "0000-0001-7368-0869"))
@@ -21,26 +21,29 @@ BugReports: https://github.com/bozenne/LMMstar/issues
 Depends: R (>= 3.5.0), nlme
 Imports: emmeans, ggplot2, lava, Matrix, multcomp, numDeriv, reshape2,
         sandwich
-Suggests: AICcmodavg, data.table, ggpubr, lattice, nlmeU, optimx,
-        psych, Publish, qqtest, R.rsp, testthat
+Suggests: AICcmodavg, data.table, ggpubr, lattice, mvtnorm, nlmeU,
+        optimx, psych, Publish, qqtest, R.rsp, testthat
 VignetteBuilder: R.rsp
 RoxygenNote: 7.1.2
 Collate: '0-onload.R' 'LMMstar-package.R' 'LMMstar.options.R' 'anova.R'
-        'autoplot.R' 'baselineAdjustment.R' 'coef.R' 'confint.R' 'df.R'
-        'doc-data.R' 'dummy.coef.R' 'emmeans.R' 'estimate.R' 'fitted.R'
-        'formula.R' 'getCoef.R' 'getVarCov.R' 'iid.R' 'information.R'
-        'levels.R' 'lmm.R' 'logLik.R' 'model.frame.R' 'model.matrix.R'
+        'autoplot.R' 'baselineAdjustment.R' 'coef.R'
+        'confint.anova_lmm.R' 'confint.lmm.R' 'df.R' 'doc-data.R'
+        'dummy.coef.R' 'emmeans.R' 'estimate.R' 'fitted.R' 'formula.R'
+        'getCoef.R' 'getVarCov.R' 'iid.R' 'information.R' 'levels.R'
+        'lmm.R' 'logLik.R' 'model.frame.R' 'model.matrix.R'
         'model.tables.R' 'moments.R' 'multcomp.R' 'nobs.R' 'plot.R'
-        'precompute.R' 'predict.R' 'print.R' 'reparametrize.R'
-        'residuals.R' 'sampleRem.R' 'score.R' 'structure-calc_Omega.R'
+        'precompute.R' 'predict.R' 'print.anova_lmm.R' 'print.lmm.R'
+        'rbind.anova_lmm.R' 'reparametrize.R' 'residuals.R'
+        'sampleRem.R' 'score.R' 'structure-calc_Omega.R'
         'structure-calc_d2Omega.R' 'structure-calc_dOmega.R'
         'structure-initialization.R' 'structure-skeleton.R'
-        'structure.R' 'summarize.R' 'summary.R' 'terms.R' 'utils.R'
+        'structure.R' 'summarize.R' 'summary.anova_lmm.R'
+        'summary.lmm.R' 'terms.R' 'transformSummaryTable.R' 'utils.R'
         'vcov.R'
 NeedsCompilation: no
-Packaged: 2022-01-03 08:28:14 UTC; bozenne
+Packaged: 2022-03-05 23:10:54 UTC; bozenne
 Author: Brice Ozenne [aut, cre] (<https://orcid.org/0000-0001-9694-2956>),
   Julie Forman [aut] (<https://orcid.org/0000-0001-7368-0869>)
 Maintainer: Brice Ozenne <brice.mh.ozenne@gmail.com>
 Repository: CRAN
-Date/Publication: 2022-01-03 11:10:05 UTC
+Date/Publication: 2022-03-06 10:50:06 UTC

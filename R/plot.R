@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt 20 2021 (11:00) 
 ## Version: 
-## Last-Updated: nov 13 2021 (17:59) 
+## Last-Updated: feb 15 2022 (16:49) 
 ##           By: Brice Ozenne
-##     Update #: 64
+##     Update #: 77
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -34,7 +34,7 @@
 ##' @param size.text [numeric, >0] size of the font used to displayed text when using ggplot2.
 ##' @param ... additional argument passed to \code{residuals.lmm} or \code{autoplot.lmm}.
 ##'
-##' @details Call \code{\link{autoplot.lmm}} when code{type=="fit"} and \code{link(residuals.lmm)} for the other types.
+##' @details Call \code{\link{autoplot.lmm}} when code{type=="fit"} and \code{\link{residuals.lmm}} for the other types.
 ##'
 ##' @return A list with two elements \itemize{
 ##' \item \code{data}: data used to create the graphical display.
@@ -46,6 +46,8 @@
 ##' @export
 plot.lmm <- function(x, type = "fit", type.residual = "normalized", by.time = TRUE, ci = TRUE,
                      plot = TRUE, ci.alpha = 0.2, mean.size = c(3, 1), size.text = 16, ...){
+
+    attr.ref <- attr(type,"reference")
     type <- match.arg(type, c("qqplot","correlation","scatterplot","scatterplot2","fit","partial"))
     if(by.time){
         format <- "wide"
@@ -77,7 +79,9 @@ plot.lmm <- function(x, type = "fit", type.residual = "normalized", by.time = TR
         }
 
         ## extract partial residuals
-        rr <- stats::residuals(x, type = "partial-ref", var = type.residual, keep.data = TRUE)
+        ttt <- "partial-ref"
+        attr(ttt,"reference") <- attr.ref
+        rr <- stats::residuals(x, type = ttt, var = type.residual, keep.data = TRUE)
         ## extract predictions
         gg.data <- stats::predict(x, newdata = rr, keep.newdata = TRUE, type = type.predict)
         ## normalize covariates

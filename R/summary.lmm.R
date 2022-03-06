@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt  7 2020 (11:13) 
 ## Version: 
-## Last-Updated: Dec 15 2021 (18:54) 
+## Last-Updated: feb 16 2022 (18:53) 
 ##           By: Brice Ozenne
-##     Update #: 395
+##     Update #: 422
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -26,7 +26,7 @@
 ##' @param level [numeric,0-1] confidence level for the confidence intervals.
 ##' @param print [logical] should the output be printed in the console.
 ##' @param columns [character vector] Columns to be output for the fixed effects. Can be any of \code{"estimate"}, \code{"se"}, \code{"statistic"}, \code{"df"}, \code{"null"}, \code{"lower"}, \code{"upper"}, \code{"p.value"}.
-##' @param robust [logical] Should robust standard error (aka sandwich estimator) be output instead of the model-based standard errors. 
+##' @param robust [logical] Should robust standard errors (aka sandwich estimator) be output instead of the model-based standard errors. 
 ##' @param hide.fit [logical] should information about the model fit not be printed.
 ##' @param hide.data [logical] should information about the dataset not be printed.
 ##' @param hide.cor [logical] should information about the correlation structure not be printed.
@@ -126,15 +126,21 @@ summary.lmm <- function(object, digit = 3, level = 0.95, robust = FALSE, print =
         cat("Estimation procedure \n\n")
         if(method.fit == "REML"){
             cat("  - Restricted Maximum Likelihood (REML) \n")
-            cat("  - log-restricted likelihood :", as.double(logLik), "\n",sep="")
         }else{
             cat("  - Maximum Likelihood (ML) \n")
-            cat("  - log-likelihood :", as.double(logLik), "\n",sep="")
         }
+        cat("  - log-likelihood :", as.double(logLik), "\n",sep="")
         cat("  - parameters: mean = ",length(param.mu),", variance = ",length(c(param.sigma,param.k)),", correlation = ",length(param.rho),"\n", sep = "")
         if(object$opt$name!="gls"){
-            index.score <- which.max(abs(object$score))
-            cat("  - convergence: ",object$opt$cv," (",object$opt$n.iter," iterations, largest |score|=",object$score[index.score]," is for ",names(index.score),")\n", sep = "")
+            abs.score <- abs(object$score)
+            abs.diff <- abs(object$opt$previous.estimate-object$param$value)
+            name.score <- names(which.max(abs.score))[1]
+            name.diff <- names(which.max(abs.diff))[1]
+            
+            cat("  - convergence: ",object$opt$cv," (",object$opt$n.iter," iterations) \n",
+                "    largest |score| = ",max(abs.score)," for ",name.score,"\n",
+                if(!is.null(name.diff)){paste0("            |change|= ",max(abs.diff)," for ",name.diff,"\n")},
+                sep = "")
         }
         cat(" \n")
     }
@@ -142,16 +148,28 @@ summary.lmm <- function(object, digit = 3, level = 0.95, robust = FALSE, print =
     ## ** vcov structure
     if(print && (!hide.cor || !hide.var || !hide.sd)){
         cat("Residual variance-covariance: ")
+        if(is.na(structure$name$strata)){
+            txt.strata <- ""
+        }else{
+            txt.strata <- "stratified "
+        }
+        
         if(length(param.rho)==0){
             if(length(c(param.sigma,param.k))==1){
-                cat("identity \n\n")
+                cat(txt.strata,"identity \n\n",sep="")
             }else{
-                cat("diagonal \n\n")
+                cat(txt.strata,"diagonal \n\n",sep="")
             }
         }else if(structure$type == "UN"){
-            cat("unstructured \n\n")
+            cat(txt.strata,"unstructured \n\n",sep="")
         }else if(structure$type == "CS"){
-            cat("compound symmetry \n\n")
+            if(all(is.na(structure$name$cor[[1]]))){
+                cat(txt.strata,"compound symmetry \n\n",sep="")
+            }else if(structure$heterogeneous){
+                cat(txt.strata,"block unstructured \n\n",sep="")
+            }else{
+                cat(txt.strata,"block compound symmetry \n\n",sep="")
+            }
         }
     }
     ## *** correlation
@@ -160,7 +178,7 @@ summary.lmm <- function(object, digit = 3, level = 0.95, robust = FALSE, print =
             cat("  - correlation structure:",deparse(formula$cor),"\n")
         }
         ## find unique correlation patterns
-        Omega <- nlme::getVarCov(object, simplifies = FALSE)
+        Omega <- nlme::getVarCov(object, simplifies = FALSE)        
         table.cor <- stats::setNames(vector(mode = "list", length = length(Omega)),names(Omega))
         for(iStrata in 1:length(Omega)){ ## iStrata <- 1
             iOmega <- Omega[[iStrata]]
@@ -201,7 +219,11 @@ summary.lmm <- function(object, digit = 3, level = 0.95, robust = FALSE, print =
             }else{
                 rownames(table.cor) <- paste0("    ",rownames(table.cor))
             }
-            print(table.cor, digit = digit)
+            if(object$time$n>10 || hide.cor==-1){
+                print(coef(object,effect="correlation"))
+            }else{
+                print(table.cor, digit = digit)
+            }
             cat("\n")
         }
     }else{

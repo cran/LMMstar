@@ -3,31 +3,19 @@
 \name{anova}
 \alias{anova}
 \alias{anova.lmm}
-\alias{confint.anova_lmm}
-\alias{print.anova_lmm}
 \title{Multivariate Wald Tests For Linear Mixed Model}
 \usage{
 \method{anova}{lmm}(
   object,
   effects = NULL,
+  robust = FALSE,
   rhs = NULL,
   df = !is.null(object$df),
-  ci = FALSE,
+  ci = TRUE,
   transform.sigma = NULL,
   transform.k = NULL,
   transform.rho = NULL,
   transform.names = TRUE,
-  ...
-)
-
-\method{confint}{anova_lmm}(object, parm, level = 0.95, method = "single-step", ...)
-
-\method{print}{anova_lmm}(
-  x,
-  level = 0.95,
-  method = "single-step",
-  print.null = FALSE,
-  columns = NULL,
   ...
 )
 }
@@ -40,6 +28,8 @@ or only variables relative to the variance structure (\code{"variance"}),
 or only variables relative to the correlation structure (\code{"correlation"}).
 Can also be use to specify linear combinations of coefficients, similarly to the \code{linfct} argument of the \code{multcomp::glht} function.}
 
+\item{robust}{[logical] Should robust standard errors (aka sandwich estimator) be output instead of the model-based standard errors.}
+
 \item{rhs}{[numeric vector] the right hand side of the hypothesis. Only used when the argument effects is a matrix.}
 
 \item{df}{[logical] Should a F-distribution be used to model the distribution of the Wald statistic. Otherwise a chi-squared distribution is used.}
@@ -49,19 +39,6 @@ Can also be use to specify linear combinations of coefficients, similarly to the
 \item{transform.sigma, transform.k, transform.rho, transform.names}{are passed to the \code{vcov} method. See details section in \code{\link{coef.lmm}}.}
 
 \item{...}{Not used. For compatibility with the generic method.}
-
-\item{parm}{Not used. For compatibility with the generic method.}
-
-\item{level}{[numeric, 0-1] nominal coverage of the confidence intervals.}
-
-\item{method}{[character] type of adjustment for multiple comparisons: one of \code{"none"}, \code{"bonferroni"}, \code{"single-step"}.
-Not relevant for the global test (F-test or Chi-square test) - only relevant when testing each hypothesis and adjusting for multiplicity.}
-
-\item{x}{an \code{anova_lmm} object. Only relevant for print and confint functions.}
-
-\item{print.null}{[logical] should the null hypotheses be printed in the console?}
-
-\item{columns}{[character vector] Columns to be output. Can be any of \code{"estimate"}, \code{"se"}, \code{"df"}, \code{"lower"}, \code{"upper"}, \code{"p.value"}.}
 }
 \value{
 A list of matrices containing the following columns:\itemize{
@@ -89,11 +66,11 @@ dL <- sampleRem(100, n.times = 3, format = "long")
 eUN.lmm <- lmm(Y ~ X1 + X2 + X5, repetition = ~visit|id, structure = "UN", data = dL)
 
 ## chi-2 test
-anova(eUN.lmm, df = FALSE)
+summary(anova(eUN.lmm, df = FALSE))
 
 ## F-test
 anova(eUN.lmm)
-anova(eUN.lmm, effects = "all")
+summary(anova(eUN.lmm, effects = "all"))
 anova(eUN.lmm, effects = c("X1=0","X2+X5=10"), ci = TRUE)
 
 if(require(multcomp)){
@@ -101,7 +78,9 @@ amod <- lmm(breaks ~ tension, data = warpbreaks)
 e.glht <- glht(amod, linfct = mcp(tension = "Tukey"))
 summary(e.glht, test = Chisqtest()) ## 0.000742
 
-print(anova(amod, effect = mcp(tension = "Tukey"), df = FALSE), print.null = TRUE)
+e.amod <- anova(amod, effect = mcp(tension = "Tukey"))
+summary(e.amod)
+
 
 anova(amod, effect = mcp(tension = "Tukey"), ci = TRUE)
 }

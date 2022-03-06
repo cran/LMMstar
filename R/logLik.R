@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (17:26) 
 ## Version: 
-## Last-Updated: nov 13 2021 (16:35) 
+## Last-Updated: feb 18 2022 (17:07) 
 ##           By: Brice Ozenne
-##     Update #: 237
+##     Update #: 261
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -50,40 +50,28 @@ logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
     }else{
         test.precompute <- !is.null(object$design$precompute.XX) && !indiv
             
-            if(!is.null(data)){
-                ff.allvars <- c(all.vars(object$formula$mean), all.vars(object$formula$var))
-                if(any(ff.allvars %in% names(data) == FALSE)){
-                    stop("Incorrect argument \'data\': missing variable(s) \"",paste(ff.allvars[ff.allvars %in% names(data) == FALSE], collapse = "\" \""),"\".\n")
-                }
-
-                design <- .model.matrix.lmm(formula.mean = object$formula$mean.design,
-                                            structure = object$design$vcov,
-                                            data = data,
-                                            var.outcome = object$outcome$var,
-                                            U.strata = object$strata$levels,
-                                            U.time = object$time$levels,
-                                            stratify.mean = object$opt$name=="gls",
-                                            precompute.moments = test.precompute)
-            }else{
-                design <- object$design
-            }
+        if(!is.null(data)){
+            design <- stats::model.matrix(object, data = data, effects = "all", simplifies = FALSE)
+        }else{
+            design <- object$design
+        }
           
-            if(!is.null(p)){
-                if(any(duplicated(names(p)))){
-                    stop("Incorrect argument \'p\': contain duplicated names \"",paste(unique(names(p)[duplicated(names(p))]), collapse = "\" \""),"\".\n")
-                }
-                if(any(names(object$param$type) %in% names(p) == FALSE)){
-                    stop("Incorrect argument \'p\': missing parameter(s) \"",paste(names(object$param$type)[names(object$param$type) %in% names(p) == FALSE], collapse = "\" \""),"\".\n")
-                }
-                p <- p[names(object$param$value)]
-            }else{
-                p <- object$param$value
+        if(!is.null(p)){
+            if(any(duplicated(names(p)))){
+                stop("Incorrect argument \'p\': contain duplicated names \"",paste(unique(names(p)[duplicated(names(p))]), collapse = "\" \""),"\".\n")
             }
-            out <- .moments.lmm(value = p, design = design, time = object$time, method.fit = object$method.fit,
-                                transform.sigma = "none", transform.k = "none", transform.rho = "none",
-                                logLik = TRUE, score = FALSE, information = FALSE, vcov = FALSE, df = FALSE, indiv = indiv, 
-                                trace = FALSE, precompute.moments = test.precompute)$logLik
-        } 
+            if(any(names(object$param$type) %in% names(p) == FALSE)){
+                stop("Incorrect argument \'p\': missing parameter(s) \"",paste(names(object$param$type)[names(object$param$type) %in% names(p) == FALSE], collapse = "\" \""),"\".\n")
+            }
+            p <- p[names(object$param$value)]
+        }else{
+            p <- object$param$value
+        }
+        out <- .moments.lmm(value = p, design = design, time = object$time, method.fit = object$method.fit,
+                            transform.sigma = "none", transform.k = "none", transform.rho = "none",
+                            logLik = TRUE, score = FALSE, information = FALSE, vcov = FALSE, df = FALSE, indiv = indiv, 
+                            trace = FALSE, precompute.moments = test.precompute)$logLik
+    } 
 
     ## ** restaure NAs
     if(length(object$index.na)>0 && indiv){ 
@@ -100,7 +88,7 @@ logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
 }
 
 ## * .logLik
-.logLik <- function(X, residuals, precision, Upattern.ncluster,
+.logLik <- function(X, residuals, precision, Upattern.ncluster, weights, scale.Omega,
                     index.variance, time.variance, index.cluster,
                     indiv, REML, precompute){
 
@@ -116,7 +104,7 @@ logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
     name.mucoef <- colnames(X)
     log2pi <- log(2*pi)
     REML.det <- matrix(0, nrow = n.mucoef, ncol = n.mucoef, dimnames = list(name.mucoef, name.mucoef))
-    
+
     ## ** prepare output
     if(test.loopIndiv){
         ll <- rep(NA, n.cluster)
@@ -124,23 +112,25 @@ logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
         ll <- 0
     }
     
-
     ## ** compute log-likelihood
     ## *** looping over individuals
     if(test.loopIndiv){
         ## precompute
         logidet.precision <- lapply(precision, function(iM) {-log(base::det(iM))})
-
+        
         ## loop
-        for (iId in 1:n.cluster) {
+        for (iId in 1:n.cluster) { ## iId <- 1
             iIndex <- attr(index.cluster, "sorted")[[iId]]
             iResidual <- residuals[iIndex, , drop = FALSE]
             iX <- X[iIndex, , drop = FALSE]
-            iOmega <- precision[[index.variance[iId]]]
-            ll[iId] <- -(NCOL(iOmega) * log2pi + logidet.precision[[index.variance[iId]]] + t(iResidual) %*% iOmega %*% iResidual)/2
+            iOmegaM1 <- precision[[index.variance[iId]]] * scale.Omega[iId]
+            iWeight <- weights[iId]
+
+            ll[iId] <- - iWeight * (NCOL(iOmegaM1) * (log2pi-log(scale.Omega[iId])) + logidet.precision[[index.variance[iId]]] + t(iResidual) %*% iOmegaM1 %*% iResidual)/2
             if (REML) {
-                REML.det <- REML.det + t(iX) %*% iOmega %*% iX
+                REML.det <- REML.det + iWeight * (t(iX) %*% iOmegaM1 %*% iX)
             }
+            ## log(det(iOmegaM1)) - NCOL(iOmegaM1)*log(scale.Omega[iId])+logidet.precision[[index.variance[iId]]]
         }
         if(!indiv){
             ll <- sum(ll)
@@ -154,13 +144,13 @@ logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
 
         ## loop
         for (iPattern in 1:n.pattern) { ## iPattern <- 1
-            iOmega <- precision[[iPattern]]
-            iLogDet.Omega <- log(base::det(iOmega))
-            ll <- ll - 0.5 * unname(Upattern.ncluster[iPattern]) * (NCOL(iOmega) * log2pi - iLogDet.Omega) - 0.5 * sum(precompute$RR[[iPattern]] * iOmega)
+            iOmegaM1 <- precision[[iPattern]]
+            iLogDet.Omega <- log(base::det(iOmegaM1))
+            ll <- ll - 0.5 * unname(Upattern.ncluster[iPattern]) * (NCOL(iOmegaM1) * log2pi - iLogDet.Omega) - 0.5 * sum(precompute$RR[[iPattern]] * iOmegaM1)
             if (REML) {
                 ## compute (unique contribution, i.e. only lower part of the matrix)
-                ## iContribution <- apply(precompute$XX$pattern[[iPattern]], MARGIN = 3, FUN = function(iM){sum(iM * iOmega)})
-                iContribution <- as.double(iOmega) %*% matrix(precompute$XX$pattern[[iPattern]], nrow = length(iOmega), ncol = dim(precompute$XX$pattern[[iPattern]])[3], byrow = FALSE)
+                ## iContribution <- apply(precompute$XX$pattern[[iPattern]], MARGIN = 3, FUN = function(iM){sum(iM * iOmegaM1)})
+                iContribution <- as.double(iOmegaM1) %*% matrix(precompute$XX$pattern[[iPattern]], nrow = length(iOmegaM1), ncol = dim(precompute$XX$pattern[[iPattern]])[3], byrow = FALSE)
                 ## fill the matrix
                 REML.det <- REML.det + iContribution[as.vector(precompute$XX$key)]
             }

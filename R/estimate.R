@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Jun 20 2021 (23:25) 
 ## Version: 
-## Last-Updated: nov 12 2021 (13:47) 
+## Last-Updated: feb 16 2022 (15:37) 
 ##           By: Brice Ozenne
-##     Update #: 318
+##     Update #: 428
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -15,7 +15,106 @@
 ## 
 ### Code:
 
-## * estimate (documentation)
+## * estimate.lmm
+##' @title Delta Method for Mixed Models
+##' @description Perform a first order delta method
+##'
+##' @param x  a \code{lmm} object.
+##' @param f [function] function of the model coefficient computing the parameter(s) of interest. Can accept extra-arguments.
+##' @param robust [logical] Should robust standard errors (aka sandwich estimator) be output instead of the model-based standard errors. 
+##' @param df [logical] Should degree of freedom, computed using Satterthwaite approximation, for the parameter of interest be output.
+##' @param type.information [character] Should the expected information be used  (i.e. minus the expected second derivative) or the observed inforamtion (i.e. minus the second derivative).
+##' @param level [numeric,0-1] the confidence level of the confidence intervals.
+##' @param transform.sigma [character] Transformation used on the variance coefficient for the reference level. One of \code{"none"}, \code{"log"}, \code{"square"}, \code{"logsquare"} - see details.
+##' @param transform.k [character] Transformation used on the variance coefficients relative to the other levels. One of \code{"none"}, \code{"log"}, \code{"square"}, \code{"logsquare"}, \code{"sd"}, \code{"logsd"}, \code{"var"}, \code{"logvar"} - see details.
+##' @param transform.rho [character] Transformation used on the correlation coefficients. One of \code{"none"}, \code{"atanh"}, \code{"cov"} - see details.
+##' @param ... extra arguments passed to \code{f}.
+##'
+##' @examples
+##' set.seed(10)
+##' d <- sampleRem(1e2, n.time = 2)
+##' e.ANCOVA1 <- lm(Y2~Y1+X1, data = d)
+##'
+##' if(require(reshape2) && require(lava)){
+##'    dL2 <- melt(d, id.vars = c("id","Y1","X1"),  measure.vars = c("Y1","Y2"))
+##'    e.lmm <- lmm(value ~ variable + variable:X1, data = dL2, repetition = ~variable|id)
+##' 
+##'    e.delta <- estimate(e.lmm, function(p){
+##'        c(Y1 = p["rho(Y1,Y2)"]*p["k.Y2"],
+##'          X1 = p["variableY2:X1"]-p["k.Y2"]*p["rho(Y1,Y2)"]*p["variableY1:X1"])
+##' })
+##'    ## same estimate and similar standard errors. 
+##'    e.delta
+##'    summary(e.ANCOVA1)$coef
+##'    ## Degrees of freedom are a bit off though
+##' }
+##' @export
+estimate.lmm <- function(x, f, df = TRUE, robust = FALSE, type.information = NULL, level = 0.95,
+                         transform.sigma = "none", transform.k = "none", transform.rho = "none", ...){
+
+    
+    ## estimate
+    beta <- coef(x, effects = "all", transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho)
+
+    ## partial derivative
+    f.formals <- names(formals(f))
+    if(length(f.formals)==1){
+        fbeta <- f(beta)
+        grad <- numDeriv::jacobian(func = f, x = beta)
+    }else{
+        fbeta <- f(beta, ...)
+        grad <- numDeriv::jacobian(func = f, x = beta, ...)
+    }
+
+    ## extract variance-covariance
+    Sigma <- vcov(x, df = 2*(df>0), effects = "all", robust = robust, type.information = type.information, ## 2*df is needed to return dVcov
+                  transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho)
+
+    ## ** delta-method
+    C.Sigma.C <- grad %*% Sigma %*% t(grad)
+    C.sigma.C <- sqrt(diag(C.Sigma.C))
+
+    ## second order?
+    ## g(\thetahat) = g(\theta) + (\thetahat-\theta)grad + 0.5(\thetahat-\theta)lap(\thetahat-\theta) + ...
+    ## Var[g(\thetahat)] = grad\Var[\thetahat-\theta]grad + 0.25\Var[(\thetahat-\theta)lap(\thetahat-\theta)] + \Cov((\thetahat-\theta)grad,(\thetahat-\theta)lap(\thetahat-\theta)) + ...
+    ## https://stats.stackexchange.com/questions/427332/variance-of-quadratic-form-for-multivariate-normal-distribution
+    ## Var[g(\thetahat)] = grad\Var[\thetahat-\theta]grad + 0.25*2*tr((lap\Var[\thetahat-\theta])^2) + 0 + ...
+    
+    ## lap <- numDeriv::hessian(func = f, x = beta) ## laplacian
+    ## 2 * sum(diag(Sigma %*% lap %*% Sigma %*% lap))
+    
+    ## df 
+    if(!is.null(attr(Sigma, "dVcov"))){
+        keep.param <- dimnames(attr(Sigma, "dVcov"))[[3]]
+        C.dVcov.C <- sapply(keep.param, function(iM){ ##  iName  <- dimnames(attr(Sigma, "dVcov"))[[3]][1]
+            rowSums(grad %*% attr(Sigma, "dVcov")[,,iM] * grad)
+        })
+        numerator <- 2 *diag(C.Sigma.C)^2
+        denom <- rowSums(C.dVcov.C %*% Sigma[keep.param,keep.param,drop=FALSE] * C.dVcov.C)
+        df <- numerator/denom
+    }else{
+        df <- rep(Inf, NROW(grad))
+    }
+
+    ## ** export
+    alpha <- 1-level
+    out <- data.frame(estimate = as.double(fbeta),
+                      se = as.double(C.sigma.C),
+                      df = as.double(df),
+                      lower = as.double(fbeta + stats::qt(alpha/2, df = df) * C.sigma.C),
+                      upper = as.double(fbeta + stats::qt(1-alpha/2, df = df) * C.sigma.C),
+                      p.value = as.double(2*(1-stats::pt(abs(fbeta/C.sigma.C), df = df))))
+    attr(out,"gradient") <- grad
+    if(!is.null(names(fbeta))){
+        rownames(out) <- names(fbeta)
+        rownames(attr(out,"gradient")) <- names(fbeta)
+    }
+    colnames(attr(out,"gradient")) <- names(beta)
+    return(out)
+}
+
+
+## * .estimate (documentation)
 ##' @title Optimizer for mixed models
 ##' @description Optimization procedure for mixed model (REML or ML).
 ##' Alternate between one step of gradient descent to update the variance parameters
@@ -48,15 +147,12 @@
 ##'
 ##' @keywords internal
 
-## * estimate (code)
+## * .estimate (code)
 .estimate <- function(design, time, method.fit, type.information,
                       transform.sigma, transform.k, transform.rho,
                       precompute.moments, optimizer, init, n.iter, tol.score, tol.param, trace){
 
    
-    if(!precompute.moments){
-        stop("Only implemented when option \'precompute.moments\' is TRUE")
-    }
     options <- LMMstar.options()
     if(is.null(n.iter)){
         n.iter <- options$param.optimizer["n.iter"]
@@ -85,7 +181,6 @@
     precompute.XX <- design$precompute.XX$pattern
     key.XX <- design$precompute.XX$key
     wolfe <- FALSE
-
     effects <- c("variance","correlation")
     
     ## ** intialization
@@ -95,16 +190,16 @@
         if(trace>1){
             cat("\nInitialization:\n")
         }
-
         ## mean value
         start.OmegaM1 <- stats::setNames(lapply(1:n.Upattern, function(iPattern){ ## iPattern <- 2
             diag(1, nrow = length(Upattern[iPattern,"time"][[1]]), ncol = length(Upattern[iPattern,"time"][[1]]))
         }), Upattern$name)
-        param.value[param.mu] <- .estimateGLS(OmegaM1 = start.OmegaM1, pattern = Upattern$name, precompute.XY = precompute.XY, precompute.XX = precompute.XX, key.XX = key.XX)
-        
+        param.value[param.mu] <- .estimateGLS(OmegaM1 = start.OmegaM1, pattern = Upattern$name, precompute.XY = precompute.XY, precompute.XX = precompute.XX, key.XX = key.XX,
+                                              design = design)
+
         ## vcov values
         iResiduals.long <- design$Y - design$mean %*% param.value[param.mu]
-        outInit <- .initialize(design$vcov, residuals = iResiduals.long)
+        outInit <- .initialize(design$vcov, residuals = iResiduals.long, Xmean = design$mean)
         param.value[names(outInit)] <- outInit
 
         if(trace>1){
@@ -149,12 +244,13 @@
             outMoments <- .moments.lmm(value = param.value, design = design, time = time, method.fit = method.fit, type.information = type.information,
                                        transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho,
                                        logLik = TRUE, score = TRUE, information = TRUE, vcov = FALSE, df = FALSE, indiv = FALSE, effects = effects, robust = FALSE,
-                                       trace = FALSE, precompute.moments = TRUE, transform.names = FALSE)
+                                       trace = FALSE, precompute.moments = precompute.moments, transform.names = FALSE)
             logLik.value <- outMoments$logLik    
             score.value <- outMoments$score    
             information.value <- outMoments$information
 
             if(all(abs(outMoments$score)<tol.score) && (iIter==1 || all(abs(param.valueM1 - param.value)<tol.param))){
+                if(iIter==1){param.valueM1 <- param.value * NA}
                 cv <- TRUE
                 break
             }else if(is.na(logLik.value) || (logLik.value < logLik.valueM1)){ ## decrease in likelihood - try observed information matrix
@@ -164,7 +260,7 @@
                     outMoments <- .moments.lmm(value = param.valueM1, design = design, time = time, method.fit = method.fit, type.information = type.information,
                                                transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho,
                                                logLik = TRUE, score = TRUE, information = TRUE, vcov = FALSE, df = FALSE, indiv = FALSE, effects = effects, robust = FALSE,
-                                               trace = FALSE, precompute.moments = TRUE, transform.names = FALSE)
+                                               trace = FALSE, precompute.moments = precompute.moments, transform.names = FALSE)
                     logLik.value <- outMoments$logLik                    
                 }else{
                     cv <- -1
@@ -179,7 +275,7 @@
             if(wolfe){
                 attr(param.value,"trans") <- outMoments$reparametrize$p
                 param.value[param.Omega] <- .wolfe(param.value = param.value, update.value = update.value, score.value = score.value, logLik.value = logLik.value, 
-                                                   design = design, effects = effects, time = time, method.fit = method.fit, transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho)
+                                                   design = design, effects = effects, time = time, method.fit = method.fit, transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, precompute.moments = precompute.moments)
                 attr(param.value,"trans") <- NULL
             }else{
                 param.newvalue.trans <- outMoments$reparametrize$p + update.value
@@ -197,8 +293,8 @@
             ## eigen(iOmega[[1]])
             param.value[param.mu] <- .estimateGLS(OmegaM1 = stats::setNames(lapply(iOmega, solve), names(iOmega)),
                                                   pattern = Upattern$name, precompute.XY = precompute.XY, precompute.XX = precompute.XX,
-                                                  key.XX = key.XX)
-
+                                                  key.XX = key.XX,
+                                                  design = design)
         
             if(trace > 0 && trace < 3){
                 cat("*")
@@ -233,7 +329,7 @@
             }else if(cv==0){
                 if(iIter==1){
                     cat("No convergence after ",iIter," iteration: max score=",max(abs(outMoments$score)),"\n")
-                }else{
+                }else if(iIter==n.iter){
                     cat("No convergence after ",iIter," iterations: max score=",max(abs(outMoments$score))," | max change in coefficient= ",max(abs(param.valueM1 - param.value)),"\n", sep = "")
                 }
             }else if(cv==-1){
@@ -254,19 +350,19 @@
             .moments.lmm(value = p, design = design, time = time, method.fit = method.fit, 
                          transform.sigma = "none", transform.k = "none", transform.rho = "none",
                          logLik = TRUE, score = FALSE, information = FALSE, vcov = FALSE, df = FALSE, indiv = FALSE, effects = c("mean","variance","correlation"), robust = FALSE,
-                         trace = FALSE, precompute.moments = TRUE, transform.names = FALSE)$logLik
+                         trace = FALSE, precompute.moments = precompute.moments, transform.names = FALSE)$logLik
         }
         warper_grad <- function(p){
             .moments.lmm(value = p, design = design, time = time, method.fit = method.fit, 
                          transform.sigma = "none", transform.k = "none", transform.rho = "none",
                          logLik = FALSE, score = TRUE, information = FALSE, vcov = FALSE, df = FALSE, indiv = FALSE, effects = c("mean","variance","correlation"), robust = FALSE,
-                         trace = FALSE, precompute.moments = TRUE, transform.names = FALSE)$score
+                         trace = FALSE, precompute.moments = precompute.moments, transform.names = FALSE)$score
         }
         warper_hess <- function(p){
             -.moments.lmm(value = p, design = design, time = time, method.fit = method.fit,
                           transform.sigma = "none", transform.k = "none", transform.rho = "none", type.information = "observed",
                           logLik = FALSE, score = FALSE, information = TRUE, vcov = FALSE, df = FALSE, indiv = FALSE, effects = c("mean","variance","correlation"), robust = FALSE,
-                          trace = FALSE, precompute.moments = TRUE, transform.names = FALSE)$information
+                          trace = FALSE, precompute.moments = precompute.moments, transform.names = FALSE)$information
         }
         ## numDeriv::jacobian(x = param.value, func = warper_obj)-warper_grad(param.value)
         res.optim <- optimx::optimx(par = param.value, fn = warper_obj, gr = warper_grad, hess = warper_hess,
@@ -287,28 +383,46 @@
 }
 
 ## * .estimateGLS
-.estimateGLS <- function(OmegaM1, pattern, precompute.XY, precompute.XX, key.XX){
-
-    name.param <- colnames(key.XX)
+.estimateGLS <- function(OmegaM1, pattern, precompute.XY, precompute.XX, key.XX, design = design){
+ 
+    name.param <- design$param$mu ## colnames(key.XX)
     n.param <- length(name.param)
-    max.key <- key.XX[n.param,n.param]
     numerator <- matrix(0, nrow = n.param, ncol = 1)
     denominator <- matrix(0, nrow = n.param, ncol = n.param)
+    if(!is.null(key.XX)){
+        max.key <- key.XX[n.param,n.param]
+    }
     
     for(iPattern in pattern){ ## iPattern <- pattern[1]
-        iVec.Omega <- as.double(OmegaM1[[iPattern]])
-        iTime2 <- length(iVec.Omega)
-        numerator  <- numerator + t(iVec.Omega %*%  matrix(precompute.XY[[iPattern]], nrow = iTime2, ncol = n.param))
-        denominator  <- denominator + as.double(iVec.Omega %*%  matrix(precompute.XX[[iPattern]], nrow = iTime2, ncol = max.key))[key.XX]
-    }
+        if(!is.null(precompute.XX) && !is.null(precompute.XY)){
+            iVec.Omega <- as.double(OmegaM1[[iPattern]])
+            iTime2 <- length(iVec.Omega)
+            numerator  <- numerator + t(iVec.Omega %*%  matrix(precompute.XY[[iPattern]], nrow = iTime2, ncol = n.param))
+            denominator  <- denominator + as.double(iVec.Omega %*%  matrix(precompute.XX[[iPattern]], nrow = iTime2, ncol = max.key))[key.XX]
+        }else{
+            iOmegaM1 <- OmegaM1[[iPattern]]
+            iIndexCluster <- attr(design$index.cluster,"sorted")[which(design$vcov$X$pattern.cluster==iPattern)]
+            for(iId in 1:length(iIndexCluster)){ ## iId <- 1
+                iX <- design$mean[iIndexCluster[[iId]],,drop=FALSE]
+                if(is.null(design$weight)){
+                    iWeight <- 1
+                }else{
+                    iWeight <- design$weights[attr(design$index.cluster, "sorted")[[iId]][1]]
+                }
+                numerator  <- numerator + iWeight * (t(iX) %*% iOmegaM1 %*% design$Y[iIndexCluster[[iId]]]) * design$scale.Omega[iId]
+                denominator  <- denominator + iWeight * (t(iX) %*% iOmegaM1 %*% iX) * design$scale.Omega[iId]
+            }
 
-    out <- solve(denominator) %*% numerator
+        }
+
+    }
+    out <- solve(denominator, numerator)    
     return(stats::setNames(as.double(out), name.param))
 }
 
 ## * .wolfe
 .wolfe <- function(param.value, update.value, score.value, logLik.value, c1 = 1e-4, c2 = 0.9,
-                   design, effects, time, method.fit, transform.sigma, transform.k, transform.rho){
+                   design, effects, time, method.fit, transform.sigma, transform.k, transform.rho, precompute.moments){
     alpha <- 1
     test.i <- FALSE
     test.ii <- FALSE
@@ -330,7 +444,7 @@
         outMoments <- .moments.lmm(value = param.newvalue, design = design, time = time, method.fit = method.fit, 
                                    transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho,
                                    logLik = TRUE, score = TRUE, information = FALSE, vcov = FALSE, df = FALSE, indiv = FALSE, effects = effects, robust = FALSE,
-                                   trace = FALSE, precompute.moments = TRUE, transform.names = FALSE)    
+                                   trace = FALSE, precompute.moments = precompute.moments, transform.names = FALSE)    
         logLik.newvalue <- outMoments$logLik
         score.newvalue <- outMoments$score
 

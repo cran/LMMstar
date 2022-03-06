@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:50) 
 ## Version: 
-## Last-Updated: Dec 26 2021 (18:39) 
+## Last-Updated: feb 16 2022 (09:39) 
 ##           By: Brice Ozenne
-##     Update #: 1631
+##     Update #: 1716
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -115,11 +115,10 @@ model.matrix.lmm <- function(object, data = NULL, effects = "mean", simplifies =
 
         ## *** mean
         if("mean" %in% effects){
-
             ## use stats::model.frame to handle spline
             design$mean  <- .mean.matrix.lmm(formula = object$formula$mean.design, colnames = colnames(object$design$mean),
-                                            data = stats::model.frame(attr(object$design$mean,"terms"), data = data.mean, na.action = stats::na.pass), 
-                                            U.strata = if(object$opt$name=="gls"){object$strata$levels}else{NA}) ## only stratify mean if gls optimizer
+                                             data = stats::model.frame(attr(object$design$mean,"terms"), data = data.mean , na.action = stats::na.pass), 
+                                             U.strata = if(object$opt$name=="gls"){object$strata$levels}else{NA}) ## only stratify mean if gls optimizer
         }
     
         ## *** variance
@@ -131,6 +130,12 @@ model.matrix.lmm <- function(object, data = NULL, effects = "mean", simplifies =
             if(!is.na(object$cluster$var) && object$cluster$var %in% names(data.var) == FALSE){
                 stop("Missing cluster column (variable \"",object$cluster$var,"\") in argument \'data\'. \n")
             }
+            if(!is.na(object$weight$var[1]) && object$weight$var[1] %in% names(data.var) == FALSE){
+                stop("Missing weight column (variable \"",object$weight$var[1],"\") in argument \'data\'. \n")
+            }
+            if(!is.na(object$weight$var[2]) && object$weight$var[2] %in% names(data.var) == FALSE){
+                stop("Missing scale.Omega column (variable \"",object$weight$var[2],"\") in argument \'data\'. \n")
+            }
             indexData <- .extractIndexData(data = data.var, structure = object$design$vcov)
 
             design$index.cluster <- match(data.var$XXclusterXX, indexData$U.cluster) 
@@ -140,6 +145,13 @@ model.matrix.lmm <- function(object, data = NULL, effects = "mean", simplifies =
             design$index.time <- data$XXtime.indexXX
 
             design$vcov <- .skeleton(object$design$vcov, data = data.var)
+            
+            if(!is.na(object$weight$var[1])){
+                design$weight <- data.var[[object$weight$var[1]]]
+            }
+            if(!is.na(object$weight$var[2])){
+                design$scale.Omega <- data.var[[object$weight$var[2]]]
+            }
             
         }
     }else{
@@ -220,7 +232,7 @@ model.matrix.lmm <- function(object, data = NULL, effects = "mean", simplifies =
 
 ## * .vcov.matrix.lmm
 ## output observation specific design matrix (but no covariance pattern)
-.vcov.matrix.lmm <- function(structure, data, 
+.vcov.matrix.lmm <- function(structure, data, heterogeneous,
                              strata.var, U.strata,
                              time.var, U.time,
                              cluster.var, order.clusterTime){
@@ -261,17 +273,27 @@ model.matrix.lmm <- function(object, data = NULL, effects = "mean", simplifies =
     if(is.null(structure$param)){ ## structure
         out$var <- .colnameOrder(.model.matrix_regularize(formula.var, data = data, augmodel = TRUE), strata.var = strata.var, n.strata = n.strata)
         if(!is.null(formula.cor) && n.time>1 && any(sapply(order.clusterTime,length)>1)){  ## at least one individual with more than timepoint
+            if(heterogeneous==FALSE){
+                for(iVar in all.vars(formula.cor)){
+                    data[[iVar]] <- as.numeric(as.factor(data[[iVar]]))
+                }
+            }
             out$cor <- .colnameOrder(.model.matrix_regularize(formula.cor, data = data, augmodel = TRUE), strata.var = strata.var, n.strata = n.strata)
         }
     }else{ ## newdata
-        out$var <- model.matrix(formula.var, data = data)[,attr(structure$X$var,"original.colnames"),drop=FALSE]
+        out$var <- stats::model.matrix(formula.var, data = data)[,attr(structure$X$var,"original.colnames"),drop=FALSE]
         ## colnames(out$var) <- colnames(structure$X$var[[1]])
         attr(out$var,"assign") <- attr(structure$X$var,"assign")
         attr(out$var,"M.level") <- attr(structure$X$var,"M.level")
         attr(out$var,"original.colnames") <- attr(structure$X$var,"original.colnames")
 
         if(!is.null(formula.cor) && n.time>1 && any(sapply(order.clusterTime,length)>1)){  ## at least one individual with more than timepoint
-            out$cor <- model.matrix(formula.cor, data = data)[,attr(structure$X$cor,"original.colnames"),drop=FALSE]
+            if(heterogeneous==FALSE){
+                for(iVar in all.vars(formula.cor)){
+                    data[[iVar]] <- as.numeric(as.factor(data[[iVar]]))
+                }
+            }
+            out$cor <- stats::model.matrix(formula.cor, data = data)[,attr(structure$X$cor,"original.colnames"),drop=FALSE]
             attr(out$cor,"M.level") <- attr(structure$X$cor,"M.level")
             attr(out$cor,"assign") <- attr(structure$X$cor,"assign")
             attr(out$cor,"original.colnames") <- attr(structure$X$cor,"original.colnames")
@@ -284,7 +306,7 @@ model.matrix.lmm <- function(object, data = NULL, effects = "mean", simplifies =
 
 ## * .model.matrix.lmm
 .model.matrix.lmm <- function(formula.mean, structure,
-                              data, var.outcome,
+                              data, var.outcome, var.weights,
                               U.strata, U.time,
                               stratify.mean,
                               precompute.moments){
@@ -297,7 +319,7 @@ model.matrix.lmm <- function(object, data = NULL, effects = "mean", simplifies =
     attr(X.mean,"strata.mu") <- NULL
     attr(X.mean,"terms") <- attr(data.mf,"terms")
 
-    ## ** variance (update structure)    
+    ## ** variance (update structure)
     structure <- .skeleton(structure = structure, data = data)
 
     ## ** cluster
@@ -315,9 +337,16 @@ model.matrix.lmm <- function(object, data = NULL, effects = "mean", simplifies =
 
     ## ** prepare calculation of the score
     if(precompute.moments){
-        precompute.XX <-  .precomputeXX(X = X.mean, pattern = structure$X$Upattern$name,
+        if(is.na(var.weights[1])){
+            wX.mean <- X.mean
+            wY <- cbind(data[[var.outcome]])
+        }else{
+            wX.mean <- sweep(X.mean, FUN = "*", MARGIN = 1, STATS = sqrt(data[[var.weights[1]]]))
+            wY <- cbind(data[[var.outcome]]*sqrt(data[[var.weights[1]]]))
+        }
+        precompute.XX <-  .precomputeXX(X = wX.mean, pattern = structure$X$Upattern$name, 
                                         pattern.time = structure$X$Upattern$time, pattern.cluster = structure$X$cluster.pattern, index.cluster = attr(index.cluster,"sorted"))
-        precompute.XY <-  .precomputeXR(X = precompute.XX$Xpattern, residuals = cbind(data[[var.outcome]]), pattern = structure$X$Upattern$name,
+        precompute.XY <-  .precomputeXR(X = precompute.XX$Xpattern, residuals = wY, pattern = structure$X$Upattern$name,
                                         pattern.time = structure$X$Upattern$time, pattern.cluster = structure$X$cluster.pattern, index.cluster = attr(index.cluster,"sorted"))
     }else{
         precompute.XX <- NULL
@@ -360,8 +389,7 @@ model.matrix.lmm <- function(object, data = NULL, effects = "mean", simplifies =
                                                skeleton.param$strata.k,
                                                skeleton.param$strata.rho), name.param)
 
-
-    ## ** gather and export
+    ## ** gather and export    
     out <- list(mean = X.mean,
                 vcov = structure,
                 Y = data[[var.outcome]],
@@ -372,6 +400,13 @@ model.matrix.lmm <- function(object, data = NULL, effects = "mean", simplifies =
                 cluster = list(n = n.cluster, levels = U.cluster, nobs = table(index.cluster)),
                 param = skeleton.param
                 )
+
+    if(!is.na(var.weights[1])){
+        out$weights <- data[[var.weights[1]]]
+    }
+    if(!is.na(var.weights[2])){
+        out$scale.Omega <- data[[var.weights[2]]]
+    }
     return(out)
 }
 
