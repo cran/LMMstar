@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: nov 13 2021 (16:47) 
 ## Version: 
-## Last-Updated: feb 22 2022 (12:13) 
+## Last-Updated: Jun  2 2022 (11:36) 
 ##           By: Brice Ozenne
-##     Update #: 22
+##     Update #: 25
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -203,7 +203,6 @@ test_that("Extactors for lmm", {
     if(test.practical==FALSE){skip('Not run to save time in the check')}
 
     ## ** section 7.1
-
     fit.main <- lmm(weight~time,
                     repetition=~visit|id,
                     structure="UN",
@@ -229,7 +228,7 @@ test_that("Extactors for lmm", {
                       GS, tol = 1e-5)
     
     ## Extract covariance matrix:
-    getVarCov(fit.main)
+    sigma(fit.main)
 
     ## F-test:
     fitAnova.main <- anova(fit.main, ci = TRUE)

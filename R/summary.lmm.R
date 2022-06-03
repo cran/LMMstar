@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt  7 2020 (11:13) 
 ## Version: 
-## Last-Updated: feb 16 2022 (18:53) 
+## Last-Updated: May 30 2022 (01:07) 
 ##           By: Brice Ozenne
-##     Update #: 422
+##     Update #: 499
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -24,6 +24,7 @@
 ##' @param object [lmm] output of the \code{lmm} function.
 ##' @param digit [integer,>0] number of digit used to display numeric values.
 ##' @param level [numeric,0-1] confidence level for the confidence intervals.
+##' @param type.cor [character] should the correlation matrix be display (\code{"matrix"}) or the parameter values (\code{"param"}).
 ##' @param print [logical] should the output be printed in the console.
 ##' @param columns [character vector] Columns to be output for the fixed effects. Can be any of \code{"estimate"}, \code{"se"}, \code{"statistic"}, \code{"df"}, \code{"null"}, \code{"lower"}, \code{"upper"}, \code{"p.value"}.
 ##' @param robust [logical] Should robust standard errors (aka sandwich estimator) be output instead of the model-based standard errors. 
@@ -45,17 +46,21 @@
 ## * summary.lmm (code)
 ##' @rdname summary
 ##' @export
-summary.lmm <- function(object, digit = 3, level = 0.95, robust = FALSE, print = TRUE, columns = NULL,
-                        hide.fit = FALSE, hide.data = FALSE, hide.cor = FALSE, hide.var = TRUE, hide.sd = FALSE, hide.mean = FALSE, ...){
+summary.lmm <- function(object, digit = 3, level = 0.95, type.cor = NULL, robust = FALSE, print = TRUE, columns = NULL,
+                        hide.fit = FALSE, hide.data = FALSE, hide.cor = is.null(object$formula$cor), hide.var = TRUE, hide.sd = FALSE, hide.mean = FALSE, ...){
 
-    ## ** normalize user input
-    param.mu <- object$param$value[object$param$type=="mu"]
-    param.sigma <- object$param$value[object$param$type=="sigma"]
-    param.k <- object$param$value[object$param$type=="k"]
-    param.rho <- object$param$value[object$param$type=="rho"]
+    ## ** extract from object
+    param.value <- object$param
+    param.type <- stats::setNames(object$design$param$type, object$design$param$name)
+    
+    param.mu <- param.value[names(which(param.type=="mu"))]
+    param.sigma <- param.value[names(which(param.type=="sigma"))]
+    param.k <- param.value[names(which(param.type=="k"))]
+    param.rho <- param.value[names(which(param.type=="rho"))]
     data <- object$data
     call <- object$call
     structure <- object$design$vcov
+
     logLik <- stats::logLik(object)
     nobs <- stats::nobs(object)
     method.fit <- object$method
@@ -63,6 +68,11 @@ summary.lmm <- function(object, digit = 3, level = 0.95, robust = FALSE, print =
     formula <- object$formula
     df <- !is.null(object$df)
     options <- LMMstar.options()
+
+    n.cluster.original <- object$cluster$n
+    n.cluster.design <- object$design$cluster$n
+    
+    ## ** normalize user input
     dots <- list(...)
     if(length(dots)>0){
         stop("Unknown argument(s) \'",paste(names(dots),collapse="\' \'"),"\'. \n")
@@ -74,7 +84,10 @@ summary.lmm <- function(object, digit = 3, level = 0.95, robust = FALSE, print =
         columns <- options$columns.summary
     }
 
-
+    if(!is.null(type.cor)){
+        type.cor <- match.arg(type.cor, c("matrix","param"))
+    }
+    
     ## ** welcome message
     if(print){
         if(length(param.rho) == 0){
@@ -91,9 +104,8 @@ summary.lmm <- function(object, digit = 3, level = 0.95, robust = FALSE, print =
         cat("Dataset:", deparse(call$data), "\n\n")
 
         if(nobs["missing"]>0){
-            missing.cluster <- .addNA(object$index.na, design = object$design, time = object$time)$missing.cluster
-            if(length(missing.cluster)>0){
-                cat("  - ", nobs["cluster"], " clusters were analyzed, ",length(missing.cluster)," were excluded because of missing values \n" , sep = "")
+            if(n.cluster.original-n.cluster.design>0){
+                cat("  - ", nobs["cluster"], " clusters were analyzed, ",n.cluster.original-n.cluster.design," were excluded because of missing values \n" , sep = "")
             }else{
                 cat("  - ", nobs["cluster"], " clusters \n" , sep = "")
             }
@@ -133,7 +145,7 @@ summary.lmm <- function(object, digit = 3, level = 0.95, robust = FALSE, print =
         cat("  - parameters: mean = ",length(param.mu),", variance = ",length(c(param.sigma,param.k)),", correlation = ",length(param.rho),"\n", sep = "")
         if(object$opt$name!="gls"){
             abs.score <- abs(object$score)
-            abs.diff <- abs(object$opt$previous.estimate-object$param$value)
+            abs.diff <- abs(object$opt$previous.estimate-object$param)
             name.score <- names(which.max(abs.score))[1]
             name.diff <- names(which.max(abs.diff))[1]
             
@@ -177,71 +189,56 @@ summary.lmm <- function(object, digit = 3, level = 0.95, robust = FALSE, print =
         if(print){
             cat("  - correlation structure:",deparse(formula$cor),"\n")
         }
-        ## find unique correlation patterns
-        Omega <- nlme::getVarCov(object, simplifies = FALSE)        
-        table.cor <- stats::setNames(vector(mode = "list", length = length(Omega)),names(Omega))
-        for(iStrata in 1:length(Omega)){ ## iStrata <- 1
-            iOmega <- Omega[[iStrata]]
-            iPattern <- attr(iOmega,"pattern")
-            attr(iOmega,"pattern") <- NULL
-            if(is.matrix(iOmega)){
-                table.cor[[iStrata]] <- stats::cov2cor(iOmega)
-            }else{
-                iUpattern <- structure$X$Upattern[match(iPattern,structure$X$Upattern$name),,drop=FALSE]
-                index.keep <- which(!duplicated(iUpattern$cor))
-                if(length(index.keep)==1){
-                    table.cor[[iStrata]] <- stats::cov2cor(iOmega[[index.keep]])
-                }else if(length(index.keep)!=length(Omega)){
-                    table.cor[[iStrata]] <- lapply(iOmega[index.keep],stats::cov2cor)
-                    names(table.cor[[iStrata]]) <- tapply(1:length(iUpattern$cor),iUpattern$cor,function(iIndex){paste(names(iOmega[iIndex]),collapse=", ")})
-                }else{
-                    table.cor[[iStrata]] <- lapply(iOmega,stats::cov2cor)
-                }                
-            }
-        }
-        if(length(table.cor)==1){ ## only one strata
-            table.cor <- table.cor[[1]]
-        }
 
+        ## find unique correlation patterns
+        if(identical(type.cor,"param") || (is.null(type.cor) && object$time$n>10)){
+            table.cor <- rbind(coef(object,effect="correlation"))
+        }else{
+            table.cor <- lapply(stats::sigma(object, simplifies = FALSE), stats::cov2cor)
+        }
         if(print){
-            if(is.list(table.cor)){
-                table.cor  <- lapply(table.cor, function(iCor){
-                    if(is.matrix(iCor)){
+            if(identical(type.cor,"param") || (is.null(type.cor) && object$time$n>10)){
+                table.cor.print <- table.cor
+                rownames(table.cor.print) <- "    "
+                print(table.cor.print)
+                cat("\n")
+            }else{
+                table.cor.print  <- lapply(table.cor, function(iCor){ ## iCor <- table.cor[[1]]
+                    if(is.matrix(iCor) && !is.null(rownames(iCor))){
                         rownames(iCor) <- paste0("    ",rownames(iCor))
                     }else{
                         iCor <- lapply(iCor, function(iiCor){
-                            rownames(iiCor) <- paste0("    ",rownames(iiCor))
+                            if(!is.null(rownames(iiCor))){
+                                rownames(iiCor) <- paste0("    ",rownames(iiCor))
+                            }
                             return(iiCor)
                         })
                     }
                     return(iCor)
                 })
-            }else{
-                rownames(table.cor) <- paste0("    ",rownames(table.cor))
+                if(length(table.cor)==1){ ## only one (unique) pattern
+                    print(table.cor.print[[1]], digit = digit)
+                    cat("\n")
+                }else{
+                    print(table.cor.print, digit = digit)
+                }                        
             }
-            if(object$time$n>10 || hide.cor==-1){
-                print(coef(object,effect="correlation"))
-            }else{
-                print(table.cor, digit = digit)
-            }
-            cat("\n")
         }
     }else{
         table.cor <- NULL
     }
     
 
-    ## *** variance
-
+    ## *** variance    
     if(!hide.var || !hide.sd){
-        name.sigma <- gsub("sigma:","",names(coef(object, transform.sigma = "none", transform.k = "sd", effects = "variance")))
+        name.sigma <- names(coef(object, transform.k = "sd", effects = "variance"))
         index.ref <- which(names(coef(object, effects = "variance", transform.names = FALSE)) %in% names(param.sigma))
         if(print){
             cat("  - variance structure:",deparse(formula$var.design),"\n")
         }
     }
     if(!hide.var){
-        table.var <- cbind(estimate = coef(object, transform.sigma = "none", transform.k = "var", effects = "variance"),
+        table.var <- cbind(estimate = coef(object, transform.k = "var", effects = "variance"),
                            estimate.ratio = coef(object, transform.sigma = "none", transform.k = "square", effects = "variance", transform.names = FALSE))
         table.var[index.ref,"estimate.ratio"] <- 1
         test.k <- NROW(table.var) > length(index.ref)
@@ -250,7 +247,7 @@ summary.lmm <- function(object, digit = 3, level = 0.95, robust = FALSE, print =
         table.var <- NULL
     }
     if(!hide.sd){
-        table.sd <- cbind(estimate = coef(object, transform.sigma = "none", transform.k = "sd", effects = "variance"),
+        table.sd <- cbind(estimate = coef(object, transform.k = "sd", effects = "variance"),
                           estimate.ratio = coef(object, transform.sigma = "none", transform.k = "none", effects = "variance", transform.names = FALSE))
         table.sd[index.ref,"estimate.ratio"] <- 1
         test.k <- NROW(table.sd) > length(index.ref)
@@ -259,7 +256,6 @@ summary.lmm <- function(object, digit = 3, level = 0.95, robust = FALSE, print =
         table.sd <- NULL
     }
     if(print && (!hide.var || !hide.sd)){
-
         printtable <- matrix(NA, ncol = 0, nrow = length(name.sigma))
         if(!hide.var){
             printtable <- cbind(printtable, data.frame(variance = unname(table.var[,"estimate"]),stringsAsFactors = FALSE))
@@ -273,7 +269,6 @@ summary.lmm <- function(object, digit = 3, level = 0.95, robust = FALSE, print =
                 printtable <- cbind(printtable, data.frame(ratio = unname(table.sd[,"estimate.ratio"]),stringsAsFactors = FALSE))
             }
         }
-
         rownames(printtable) <- paste0("    ",name.sigma)
         print(printtable, digit = digit)
     }
@@ -302,13 +297,18 @@ summary.lmm <- function(object, digit = 3, level = 0.95, robust = FALSE, print =
         if(any(names(printtable.mean) %in% columns == FALSE)){
             printtable.mean <- printtable.mean[,-which(names(printtable.mean) %in% columns == FALSE),drop=FALSE]
         }
+        if(length(object$df)>0){
+            names(printtable.mean) <- gsub("^statistic","t-statistic",names(printtable.mean))
+        }else{
+            names(printtable.mean) <- gsub("^statistic","z-statistic",names(printtable.mean))
+        }
     
         if(print){
             print(printtable.mean)
             cat("\n")
-            if(robust){
+            if(robust && "se" %in% columns){
                 cat("Uncertainty was quantified using robust standard errors (column se). \n", sep = "")
-            }else{
+            }else if("se" %in% columns){
                 cat("Uncertainty was quantified using model-based standard errors (column se). \n", sep = "")
             }
             if(!is.null(object$df)){
@@ -321,7 +321,10 @@ summary.lmm <- function(object, digit = 3, level = 0.95, robust = FALSE, print =
             }else if("upper" %in% columns){
                 cat("The column upper indicate a ",100*level,"% confidence interval for each coefficient.\n", sep = "")
             }
-            cat("\n")
+
+            if(("lower" %in% columns) || ("upper" %in% columns) || (!is.null(object$df)) || (robust && "se" %in% columns)){
+                cat("\n")
+            }
         }
     }else{
         table.mean <- NULL

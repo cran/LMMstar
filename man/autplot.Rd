@@ -10,6 +10,7 @@
   obs.alpha = 0,
   obs.size = c(2, 0.5),
   at = NULL,
+  time.var = NULL,
   color = TRUE,
   ci = TRUE,
   ci.alpha = NA,
@@ -28,6 +29,8 @@
 \item{obs.size}{[numeric vector of length 2] size of the point and line for the original data.}
 
 \item{at}{[data.frame] values for the covariates at which to evaluate the fitted values.}
+
+\item{time.var}{[character] x-axis variable for the plot.}
 
 \item{color}{[character] name of the variable in the dataset used to color the curve.}
 

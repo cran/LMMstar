@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Apr 21 2021 (18:12) 
 ## Version: 
-## Last-Updated: Dec 15 2021 (17:38) 
+## Last-Updated: May 30 2022 (23:35) 
 ##           By: Brice Ozenne
-##     Update #: 420
+##     Update #: 487
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -66,45 +66,94 @@
     function(object, param, keep.interim) UseMethod(".calc_Omega")
 
 
+## * calc_Omega.ID
+.calc_Omega.ID <- function(object, param, keep.interim = FALSE){
+
+    Upattern <- object$X$Upattern
+    n.Upattern <- NROW(Upattern)
+    pattern.cluster <- object$X$pattern.cluster
+    X.var <- object$X$Xpattern.var
+    X.cor <- object$X$Xpattern.cor
+
+    Omega <- stats::setNames(lapply(1:n.Upattern, function(iPattern){ ## iPattern <- 1
+        iPattern.var <- Upattern[iPattern,"var"]
+        iPattern.cor <- Upattern[iPattern,"cor"]
+        iNtime <- Upattern[iPattern,"n.time"]
+        Omega.sd <- unname(exp(X.var[[iPattern.var]] %*% log(param[colnames(X.var[[iPattern.var]])])))
+        Omega.cor <- diag(0, nrow = iNtime, ncol = iNtime)
+        if(!is.null(X.cor) && !is.null(X.cor[[iPattern.cor]])){
+            iParam.cor <- attr(X.cor[[iPattern.cor]],"param")
+            for(iiP in 1:length(iParam.cor)){
+                iiParam <- iParam.cor[iiP]
+                if(is.na(iiParam)){
+                    iiParam <- which(is.na(names(attr(X.cor[[iPattern.cor]],"indicator.param")))) 
+                    Omega.cor[attr(X.cor[[iPattern.cor]],"indicator.param")[[iiParam]]] <- NA
+                }else{
+                    Omega.cor[attr(X.cor[[iPattern.cor]],"indicator.param")[[iiParam]]] <- param[iiParam]
+                }
+            }
+        }
+        Omega <- diag(as.double(Omega.sd)^2, nrow = iNtime, ncol = iNtime) + Omega.cor * tcrossprod(Omega.sd)
+        
+        if(keep.interim){
+            attr(Omega,"sd") <- Omega.sd
+            attr(Omega,"cor") <- Omega.cor
+            attr(Omega,"time") <- attr(X.var[[iPattern.var]], "index.time")
+        }
+        return(Omega)
+    }), Upattern$name)
+    ## print(Omega)
+    return(Omega)
+}
+
+## * calc_Omega.IND
+.calc_Omega.IND <- .calc_Omega.ID
+
+## * calc_Omega.CS
+.calc_Omega.CS <- .calc_Omega.ID
+
 ## * calc_Omega.UN
-.calc_Omega.UN <- function(object, param, keep.interim = FALSE){
+.calc_Omega.UN <- .calc_Omega.ID
+
+## * calc_Omega.CS
+.calc_Omega.CUSTOM <- function(object, param, keep.interim = FALSE){
+
     Upattern <- object$X$Upattern
     n.Upattern <- NROW(Upattern)
     pattern.cluster <- object$X$pattern.cluster
     X.var <- object$X$var
     X.cor <- object$X$cor
+    FCT.sigma <- object$FCT.sigma
+    FCT.rho <- object$FCT.rho
+    name.sigma <- names(object$init.sigma)
+    name.rho <- names(object$init.rho)
 
     Omega <- stats::setNames(lapply(1:n.Upattern, function(iPattern){ ## iPattern <- 1
-        iPattern.var <- Upattern[iPattern,"var"]
-        iPattern.cor <- Upattern[iPattern,"cor"]
-        iTime <- Upattern[iPattern,"time"][[1]]
-        iNtime <- length(iTime)
 
-        Omega.sd <- unname(exp(X.var[[iPattern.var]] %*% log(param[colnames(X.var[[iPattern.var]])])))
-        Omega.cor <- diag(0, nrow = iNtime, ncol = iNtime)
-
-        if(!is.null(X.cor) && !is.null(X.cor[[iPattern.cor]])){
-            Omega.cor[attr(X.cor[[iPattern.cor]],"index.vec2matrix")] <- X.cor[[iPattern.cor]] %*% param[colnames(X.cor[[iPattern.cor]])]
+        iPattern.var <- object$X$Upattern$var[iPattern]
+        iNtime <- object$X$Upattern$n.time[iPattern]
+        iX.var <- object$X$Xpattern.var[[iPattern.var]]
+        iTime <- attr(iX.var, "index.time")
+        iOmega.sd <- FCT.sigma(p = param[name.sigma], time = iTime, X = iX.var)
+        
+        if(iNtime > 1 && !is.null(X.cor)){
+            iPattern.cor <- object$X$Upattern$cor[iPattern]
+            iX.cor <- object$X$Xpattern[[iPattern.cor]]
+            iOmega.cor <- FCT.rho(p = param[name.rho], time = iTime, X = iX.var)
+            diag(iOmega.cor) <- 0
         }
-        Omega <- diag(as.double(Omega.sd)^2, nrow = iNtime, ncol = iNtime) + Omega.cor * tcrossprod(Omega.sd)
+        iOmega <- diag(as.double(iOmega.sd)^2, nrow = iNtime, ncol = iNtime) + iOmega.cor * tcrossprod(iOmega.sd)
         
         if(keep.interim){
-            attr(Omega,"time") <- iTime
-            attr(Omega,"sd") <- Omega.sd
-            attr(Omega,"cor") <- Omega.cor
+            attr(iOmega,"sd") <- iOmega.sd
+            attr(iOmega,"cor") <- iOmega.cor
+            attr(iOmega,"time") <- iTime
         }
-        return(Omega)
+        return(iOmega)
     }), Upattern$name)
 
     return(Omega)
 }
-
-## * calc_Omega.IND
-.calc_Omega.IND <- .calc_Omega.UN
-
-## * calc_Omega.CS
-.calc_Omega.CS <- .calc_Omega.UN
-
 
 
 ##----------------------------------------------------------------------

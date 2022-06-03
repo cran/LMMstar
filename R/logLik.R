@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (17:26) 
 ## Version: 
-## Last-Updated: feb 18 2022 (17:07) 
+## Last-Updated: May 29 2022 (23:37) 
 ##           By: Brice Ozenne
-##     Update #: 261
+##     Update #: 287
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -60,12 +60,12 @@ logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
             if(any(duplicated(names(p)))){
                 stop("Incorrect argument \'p\': contain duplicated names \"",paste(unique(names(p)[duplicated(names(p))]), collapse = "\" \""),"\".\n")
             }
-            if(any(names(object$param$type) %in% names(p) == FALSE)){
-                stop("Incorrect argument \'p\': missing parameter(s) \"",paste(names(object$param$type)[names(object$param$type) %in% names(p) == FALSE], collapse = "\" \""),"\".\n")
+            if(any(names(object$param) %in% names(p) == FALSE)){
+                stop("Incorrect argument \'p\': missing parameter(s) \"",paste(names(object$param)[names(object$param) %in% names(p) == FALSE], collapse = "\" \""),"\".\n")
             }
-            p <- p[names(object$param$value)]
+            p <- p[names(object$param)]
         }else{
-            p <- object$param$value
+            p <- object$param
         }
         out <- .moments.lmm(value = p, design = design, time = object$time, method.fit = object$method.fit,
                             transform.sigma = "none", transform.k = "none", transform.rho = "none",
@@ -73,13 +73,19 @@ logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
                             trace = FALSE, precompute.moments = test.precompute)$logLik
     } 
 
-    ## ** restaure NAs
-    if(length(object$index.na)>0 && indiv){ 
-        iAdd <- .addNA(index.na = object$index.na, design = design, time = object$time)
-        if(length(iAdd$missing.cluster)>0){
+    ## ** restaure NAs and name
+    if(indiv){
+        if(is.null(data) && length(object$index.na)>0 && any(is.na(attr(object$index.na,"cluster.index")))){
+            names(out) <- object$design$cluster$levels
             out.save <- out
-            out <- rep(NA, length = iAdd$n.allcluster)
-            out[match(design$cluster$levels, iAdd$allcluster)] <- out.save
+            out <- stats::setNames(rep(NA, times = object$cluster$n), object$cluster$levels)
+            out[rownames(out.save)] <- out.save
+
+            if(is.numeric(design$cluster$levels.original)){
+                names(out) <- NULL
+            }
+        }else if(!is.numeric(design$cluster$levels.original)){
+            names(out) <- design$cluster$levels.original
         }
     }
 
@@ -111,7 +117,7 @@ logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
     }else{
         ll <- 0
     }
-    
+
     ## ** compute log-likelihood
     ## *** looping over individuals
     if(test.loopIndiv){
@@ -120,7 +126,7 @@ logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
         
         ## loop
         for (iId in 1:n.cluster) { ## iId <- 1
-            iIndex <- attr(index.cluster, "sorted")[[iId]]
+            iIndex <- index.cluster[[iId]]
             iResidual <- residuals[iIndex, , drop = FALSE]
             iX <- X[iIndex, , drop = FALSE]
             iOmegaM1 <- precision[[index.variance[iId]]] * scale.Omega[iId]

@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:39) 
 ## Version: 
-## Last-Updated: feb 16 2022 (18:53) 
+## Last-Updated: jun  1 2022 (14:46) 
 ##           By: Brice Ozenne
-##     Update #: 98
+##     Update #: 108
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -19,10 +19,14 @@
 ##' @export
 print.lmm <- function(x, ...){
 
-    param.mu <- x$param$value[x$param$type=="mu"]
-    param.sigma <- x$param$value[x$param$type=="sigma"]
-    param.k <- x$param$value[x$param$type=="k"]
-    param.rho <- x$param$value[x$param$type=="rho"]
+    ## ** extract from object
+    param.value <- x$param
+    param.type <- stats::setNames(x$design$param$type, x$design$param$name)
+    
+    param.mu <- param.value[names(which(param.type=="mu"))]
+    param.sigma <- param.value[names(which(param.type=="sigma"))]
+    param.k <- param.value[names(which(param.type=="k"))]
+    param.rho <- param.value[names(which(param.type=="rho"))]
     structure <- x$design$vcov
     logLik <- stats::logLik(x)
     nobs <- stats::nobs(x)
@@ -68,9 +72,9 @@ print.lmm <- function(x, ...){
         txt.var <- c(txt.var,"cluster")
         value.var <- c(value.var,x$cluster$var)
     }
-    if(!is.na(x$time$var)){
+    if(!all(is.na(x$time$var))){
         txt.var <- c(txt.var,"time")
-        value.var <- c(value.var,x$time$var)
+        value.var <- c(value.var,paste(x$time$var, collapse = ", "))
     }
     Ctxt.var <- paste(txt.var,collapse="/")
 
@@ -102,8 +106,16 @@ print.lmm <- function(x, ...){
 
     ## ** optimisation
     if(x$opt$name!="gls"){
-        M.print <- rbind(M.print,
-                         cbind("convergence",": ",paste0(x$opt$cv," (",x$opt$n.iter," iterations)")))
+        if(!is.na(x$opt$n.iter)){
+            M.print <- rbind(M.print,
+                             cbind("convergence",": ",paste0(x$opt$cv," (",x$opt$n.iter," iterations)")))
+        }else if(!is.null(attr(x$opt$n.iter,"eval"))){
+            M.print <- rbind(M.print,
+                             cbind("convergence",": ",paste0(x$opt$cv," (evaluations: ",attr(x$opt$n.iter,"eval")["logLik"]," likelihood, ",attr(x$opt$n.iter,"eval")["score"]," score)")))
+        }else{
+            M.print <- rbind(M.print,
+                             cbind("convergence",": ",x$opt$cv))
+        }
     }
 
     ## ** print

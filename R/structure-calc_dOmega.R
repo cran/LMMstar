@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: sep 16 2021 (13:18) 
 ## Version: 
-## Last-Updated: okt  1 2021 (17:07) 
+## Last-Updated: May 28 2022 (17:35) 
 ##           By: Brice Ozenne
-##     Update #: 53
+##     Update #: 156
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -21,10 +21,11 @@
 ##' @noRd
 ##'
 ##' @param structure [structure]
-##' @param param [named numeric vector] values of the parameters.
+##' @param param [named numeric vector] values of the parameters (untransformed).
 ##' @param Omega [list of matrices] Residual Variance-Covariance Matrix for each pattern.
 ##' @param Jacobian [matrix] Jacobian of the reparametrisation.
-##'
+##' @param transform.sigma,transform.k,transform.rho [character] Transformation used on the variance/correlation coefficients.
+##' Only active if \code{"log"}, \code{"log"}, \code{"atanh"}: then the derivative is directly computed on the transformation scale instead of using the Jacobian.
 ##' @keywords internal
 ##' 
 ##' @examples
@@ -63,10 +64,11 @@
 ##' .calc_dOmega(Sun4, param = param4)
 ##' .calc_dOmega(Sun24, param = param24)
 `.calc_dOmega` <-
-    function(object, param, Omega, Jacobian) UseMethod(".calc_dOmega")
+    function(object, param, Omega, Jacobian, transform.sigma, transform.k, transform.rho) UseMethod(".calc_dOmega")
 
-## * calc_Omega.UN
-.calc_dOmega.UN <- function(object, param, Omega, Jacobian = NULL){
+## * calc_dOmega.ID
+.calc_dOmega.ID <- function(object, param, Omega, Jacobian = NULL,
+                            transform.sigma = NULL, transform.k = NULL, transform.rho = NULL){
 
     ## ** prepare
     type <- object$param$type
@@ -83,92 +85,79 @@
     
     Upattern <- object$X$Upattern
     n.Upattern <- NROW(Upattern)
-    pattern.cluster <- object$X$pattern.cluster
-    X.var <- object$X$var
-    X.cor <- object$X$cor
+    pattern.cluster <- object$X$pattern.cluster$pattern
+    X.var <- object$X$Xpattern.var
+    X.cor <- object$X$Xpattern.cor
+
+    if(identical(transform.sigma,"log") && identical(transform.k,"log") && identical(transform.rho,"atanh")){
+        Jacobian <- NULL
+    }else{
+        transform.sigma <- "none"
+        transform.k <- "none"
+        transform.rho <- "none"
+    }
+    log.param <- log(param[c(name.sigma,name.k)])
 
     ## ** loop over covariance patterns
     out <- lapply(1:n.Upattern, function(iPattern){ ## iPattern <- 1
 
         iPattern.var <- Upattern[iPattern,"var"]
         iPattern.cor <- Upattern[iPattern,"cor"]
-        iTime <- Upattern[iPattern,"time"][[1]]
-        iNtime <- length(iTime)
+        iNtime <- Upattern[iPattern,"n.time"]
         iName.param <- Upattern[iPattern,"param"][[1]]
 
         iOmega.sd <- attr(Omega[[iPattern]],"sd")
         iOmega.cor <- attr(Omega[[iPattern]],"cor")
         iOmega <- Omega[[iPattern]] ; attr(iOmega,"sd") <- NULL; attr(iOmega,"cor") <- NULL; attr(iOmega,"time") <- NULL;
-
-        iParam.sigma <- intersect(name.sigma, iName.param)
+        iParam.sigma <- intersect(iName.param, name.sigma)
         n.iParam.sigma <- length(iParam.sigma)
-        iParam.k <- intersect(name.k, iName.param)
+        iParam.k <- intersect(iName.param, name.k)
         n.iParam.k <- length(iParam.k)
-        iParam.rho <- intersect(name.rho, iName.param)
+        iParam.rho <- intersect(iName.param, name.rho)
         n.iParam.rho <- length(iParam.rho)
-        iParamVar <- c(iParam.sigma, iParam.k, iParam.rho)
-        
-        iScore <- stats::setNames(vector(mode = "list", length = length(iParamVar)), iParamVar)
-        iX.var <- X.var[[iPattern.var]][,c(iParam.sigma,iParam.k),drop=FALSE]
-        iX.cor <- X.cor[[iPattern.cor]][,c(iParam.rho),drop=FALSE]
-        iIndicator <- attr(X.cor[[iPattern.cor]],"indicator.param")
 
-        if(n.iParam.sigma==1){
-            ## compute derivative
-            iParam.dsigma <- matrix(param[c(iParam.sigma,iParam.k)], nrow = n.iParam.sigma+n.iParam.k, ncol = n.iParam.sigma, byrow = FALSE,
-                                    dimnames = list(c(iParam.sigma,iParam.k),iParam.sigma))
-            iParam.dsigma[iParam.sigma,iParam.sigma] <- 1
-            idOmega.sigma <- exp(iX.var %*% log(iParam.dsigma))
-            ## propage
-            iScore[[iParam.sigma]] <- unname(diag(2*as.double(idOmega.sigma)*as.double(iOmega.sd), nrow = iNtime, ncol = iNtime) + iOmega.cor * (idOmega.sigma %*% t(iOmega.sd) + iOmega.sd %*% t(idOmega.sigma)))
-            ## iScore[[iParam.sigma]] - 2*iOmega/param[iParam.sigma]
-        }else{
-            stop("No sigma parameter in the structure. Something is wrong. \n")
+        iScore <- stats::setNames(vector(mode = "list", length = length(iName.param)), iName.param)
+        iIndicator.cor <- attr(X.cor[[iPattern.cor]],"indicator.param")
+        iMindicator.var <- attr(X.var[[iPattern.var]],"Mindicator.param")
+
+        if(transform.sigma == "log"){
+            iScore[[iParam.sigma]] <- 2 * iOmega
+        }else{ ## no transformation  (other transformations are made through jacobian)
+            iScore[[iParam.sigma]] <- 2 * iOmega / param[iParam.sigma]
         }
-        
+
         if(n.iParam.k>0){
-            ## compute derivative
-            iParam.dk <- matrix(param[c(iParam.sigma,iParam.k)], nrow = n.iParam.sigma+n.iParam.k, ncol = n.iParam.k, byrow = FALSE,
-                                dimnames = list(c(iParam.sigma,iParam.k),iParam.k))
-            if(n.iParam.k==1){
-                iParam.dk[iParam.k,iParam.k] <- 1
-            }else{
-                diag(iParam.dk[iParam.k,iParam.k]) <- 1
-            }
-            idOmega.k <- exp(iX.var %*% log(iParam.dk)) * iX.var[,iParam.k]
-            for(iK in iParam.k){ ## iK <- iParam.k[1]
-                iScore[[iK]] <- diag(2*as.double(idOmega.k[,iK])*as.double(iOmega.sd), nrow = iNtime, ncol = iNtime) + iOmega.cor * (idOmega.k[,iK] %*% t(iOmega.sd) + iOmega.sd %*% t(idOmega.k[,iK]))
-                ## iIndicator <- tcrossprod(X.var[[iPattern.var]][,iK], rep(1,NROW(X.var[[iPattern.var]][,iK]))) + t(tcrossprod(X.var[[iPattern.var]][,iK], rep(1,NROW(X.var[[iPattern.var]][,iK])))) > 0
-                ## iScore[[iK]] - iOmega/param[iK] * (iIndicator + tcrossprod(X.var[[iPattern.var]][,iK]))
+            if(transform.k == "log"){
+                iScore[names(iMindicator.var)] <- lapply(iMindicator.var, function(iM){iM * iOmega})
+            }else{ ## no transformation  (other transformations are made through jacobian)
+                iScore[names(iMindicator.var)] <- lapply(names(iMindicator.var), function(iParam){iMindicator.var[[iParam]] * iOmega / param[iParam]})
             }
         }
+
         if(n.iParam.rho>0){
             iOmega.var <- tcrossprod(iOmega.sd)
             
             for(iRho in iParam.rho){ ## iRho <- iParam.rho[1]
                 iScore[[iRho]] <- diag(0, nrow = iNtime, ncol = iNtime)
-                iScore[[iRho]][iIndicator[[iRho]]] <- iOmega.var[iIndicator[[iRho]]]
-
-                ## iIndicator <- diag(0, nrow = iNtime, ncol = iNtime)
-                ## iIndicator[attr(iX.cor,"index.vec2matrix")] <- iX.cor[,iRho]
-                ## ## derivative
-                ## iScore[[iRho]] <- iIndicator * tcrossprod(iOmega.sd)
-
-                ## iScore[[iRho]] - iOmega/param[iRho] * ind.rho
+                if(transform.rho == "atanh"){
+                    iScore[[iRho]][iIndicator.cor[[iRho]]] <- iOmega.var[iIndicator.cor[[iRho]]] * (1-param[iRho]^2)
+                }else{ ## no transformation (other transformations are made through jacobian)
+                    iScore[[iRho]][iIndicator.cor[[iRho]]] <- iOmega.var[iIndicator.cor[[iRho]]]
+                }
             }
-        }
 
+        }
         ## apply transformation
         if(!is.null(Jacobian)){
             ## [dOmega_[11]/d theta_1] ... [dOmega_[11]/d theta_p] %*% Jacobian
             ## [dOmega_[ij]/d theta_1] ... [dOmega_[ij]/d theta_p] %*% Jacobian
             ## [dOmega_[mm]/d theta_1] ... [dOmega_[mm]/d theta_p] %*% Jacobian
-            if(any(abs(Jacobian[iParamVar,setdiff(name.paramVar,iParamVar),drop=FALSE])>1e-10)){
+            if(any(abs(Jacobian[iName.param,setdiff(name.paramVar,iName.param),drop=FALSE])>1e-10)){
                 stop("Something went wrong when computing the derivative of the residual variance covariance matrix. \n",
                      "Contact the package manager with a reproducible example generating this error message. \n")
             }
-            M.iScore <- do.call(cbind,lapply(iScore,as.double)) %*% Jacobian[iParamVar,iParamVar,drop=FALSE]
-            iScore <- stats::setNames(lapply(1:NCOL(M.iScore), function(iCol){matrix(M.iScore[,iCol], nrow = iNtime, ncol = iNtime, byrow = FALSE)}), iParamVar)
+            M.iScore <- do.call(cbind,lapply(iScore,as.double)) %*% Jacobian[iName.param,iName.param,drop=FALSE]
+            iScore <- stats::setNames(lapply(1:NCOL(M.iScore), function(iCol){matrix(M.iScore[,iCol], nrow = iNtime, ncol = iNtime, byrow = FALSE)}), iName.param)
         }
         return(iScore)
     })
@@ -178,11 +167,99 @@
     return(out)
 }
 
-## * calc_Omega.IND
-.calc_dOmega.IND <- .calc_dOmega.UN
+## * calc_dOmega.IND
+.calc_dOmega.IND <- .calc_dOmega.ID
 
-## * calc_Omega.CS
-.calc_dOmega.CS <- .calc_dOmega.UN
+## * calc_dOmega.CS
+.calc_dOmega.CS <- .calc_dOmega.ID
+
+## * calc_dOmega.UN
+.calc_dOmega.UN <- .calc_dOmega.ID
+
+## * calc_dOmega.CUSTOM
+.calc_dOmega.CUSTOM <- function(object, param, Omega, Jacobian = NULL,
+                                transform.sigma = NULL, transform.k = NULL, transform.rho = NULL){
+
+    Upattern <- object$X$Upattern
+    n.Upattern <- NROW(Upattern)
+
+    FCT.sigma <- object$FCT.sigma
+    FCT.rho <- object$FCT.rho
+    dFCT.sigma <- object$dFCT.sigma
+    dFCT.rho <- object$dFCT.rho
+    name.sigma <- names(object$init.sigma)
+    name.rho <- names(object$init.rho)
+
+    if(!is.null(FCT.sigma) && is.null(dFCT.sigma) || !is.null(FCT.rho) && is.null(dFCT.rho) ){
+
+        ## unlist(.calc_Omega.CUSTOM(object, param = param, keep.interim = FALSE))
+        vec.dOmega <- numDeriv::jacobian(func = function(x){
+            unlist(.calc_Omega.CUSTOM(object, param = x, keep.interim = FALSE))
+        }, x = param[c(name.sigma,name.rho)])
+
+        vec.pattern <- unlist(lapply(names(Omega), function(iName){
+            iTime <- attr(Omega[[iName]],"time") ## warning: may be NULL
+            iNtime <- Upattern[Upattern$name==iName,"n.time"]
+            iOut <- matrix(iName, nrow = iNtime, ncol = iNtime, dimnames = list(iTime,iTime))
+        }))
+        out <- by(data = vec.dOmega, INDICES = vec.pattern, FUN = function(idOmega){ ## idOmega <- vec.dOmega[1:16,]
+            iOut <- apply(idOmega, MARGIN = 2, simplify = FALSE, function(iVec){
+                iNtime <- sqrt(length(iVec))
+                matrix(iVec, nrow = iNtime, ncol = iNtime)
+            })
+            names(iOut) <- c(name.sigma,name.rho)
+            return(iOut)
+        })
+        class(out) <- "list"
+        attr(out,"call") <- NULL
+
+    }else{
+
+        pattern.cluster <- object$X$pattern.cluster
+        X.var <- object$X$var
+        X.cor <- object$X$cor
+
+        out <- stats::setNames(lapply(1:n.Upattern, function(iPattern){ ## iPattern <- 1
+
+            ## derivative of sd with respect to the variance parameters
+            iPattern.var <- object$X$Upattern$var[iPattern]
+            iNtime <- object$X$Upattern$n.time[iPattern]
+            iX.var <- object$X$Xpattern.var[[iPattern.var]]
+            iTime <- attr(iX.var, "index.time")
+            iOmega.sd <- attr(Omega[[iPattern]], "sd")
+            idOmega.sd <- dFCT.sigma(p = param[name.sigma], time = iTime, X = iX.var)
+        
+            ## derivative of rho with respect to the correlation parameters
+            if(iNtime > 1 && !is.null(X.cor)){
+                iPattern.cor <- object$X$Upattern$cor[iPattern]
+                iX.cor <- object$X$Xpattern[[iPattern.cor]]
+                iOmega.cor <- attr(Omega[[iPattern]], "cor")
+                idOmega.cor <- dFCT.rho(p = param[name.rho], time = iTime, X = iX.cor)
+            }
+
+            ## derivative of Omega with respect to the variance and correlation parameters
+            if(iNtime > 1 && !is.null(X.cor)){
+                iOut <- c(
+                    lapply(idOmega.sd, function(iDeriv){
+                        iDeriv <- unname(iDeriv)
+                        return(diag(2*iDeriv*iOmega.sd, nrow = iNtime, ncol = iNtime) + iOmega.cor * (iDeriv %*% t(iOmega.sd) + iOmega.sd %*% t(iDeriv)))
+                    }),
+                    lapply(idOmega.cor, function(iDeriv){
+                        iDeriv <- unname(iDeriv)
+                        return(iDeriv * tcrossprod(iOmega.sd))
+                    })
+                )
+            }else{
+                iOut <- lapply(idOmega.sd, function(iDeriv){
+                    diag(2*as.double(iDeriv)*as.double(iOmega.sd), nrow = iNtime, ncol = iNtime)
+                })
+            }
+        
+            return(iOut)
+        }), Upattern$name)
+    }
+    return(out)
+}
 
 
 

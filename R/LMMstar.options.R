@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Apr 16 2021 (12:01) 
 ## Version: 
-## Last-Updated: mar 14 2022 (11:39) 
+## Last-Updated: May 31 2022 (23:37) 
 ##           By: Brice Ozenne
-##     Update #: 93
+##     Update #: 105
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -66,7 +66,7 @@ LMMstar.options <- function(..., reinitialise = FALSE){
                     method.fit = "REML",
                     method.numDeriv = "simple",
                     optimizer = "gls",
-                    param.optimizer = c(n.iter = 100, tol.score = 1e-4, tol.param = 1e-5),
+                    param.optimizer = c(n.iter = 100, tol.score = 1e-4, tol.param = 1e-5, n.backtracking = 10),
                     precompute.moments = TRUE,
                     trace = FALSE,
                     transform.sigma = "log",
@@ -118,15 +118,25 @@ LMMstar.options <- function(..., reinitialise = FALSE){
               if(!is.vector(args$param.optimizer)){
                   stop("Argument \'param.optimizer\' should be a vector. \n")
               }
-              if(length(args$param.optimizer)!=3){
-                  stop("Argument \'param.optimizer\' should have length 4. \n")
+              valid.args <- names(object$param.optimizer)
+              if(is.null(args$param.optimizer) || any(names(args$param.optimizer) %in% valid.args == FALSE)){
+                  stop("Argument \'param.optimizer\' must contain elements named \"",paste(valid.args,collapse ="\" \""),"\". \n")
               }
-              if(any(c("n.iter","tol.score","tol.param") %in% names(args$param.optimizer) == FALSE)){
-                  stop("Argument \'param.optimizer\' contain elements named \'n.iter\', \'tol.score\', and \'tol.param\'. \n")
-              }
-              if(args$param.optimizer["n.iter"]<=0){
+              if(("n.iter" %in% names(args$param.optimizer)) && (args$param.optimizer["n.iter"]<=0)){
                   stop("Element \"n.iter\" in argument \'param.optimizer\' should be strictly positive. \n")
               }
+              if(("n.backtracking" %in% names(args$param.optimizer)) && (args$param.optimizer["n.backtracking"]<=0)){
+                  stop("Element \"n.backtracking\" in argument \'param.optimizer\' should be strictly positive. \n")
+              }
+              if(("tol.score" %in% names(args$param.optimizer)) && (args$param.optimizer["tol.score"]<=0)){
+                  stop("Element \"tol.score\" in argument \'param.optimizer\' should be strictly positive. \n")
+              }
+              if(("tol.param" %in% names(args$param.optimizer)) && (args$param.optimizer["tol.param"]<=0)){
+                  stop("Element \"tol.param\" in argument \'param.optimizer\' should be strictly positive. \n")
+              }
+              param.optimizer.save <- args$param.optimizer
+              args$param.optimizer <- get(".LMMstar-options", envir = LMMstar.env)$param.optimizer
+              args$param.optimizer[names(param.optimizer.save)] <- param.optimizer.save
           }
           if("method.fit" %in% names(args)){
               args$method.fit <- match.arg(args$method.fit, c("ML","REML"))

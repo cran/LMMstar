@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (12:59) 
 ## Version: 
-## Last-Updated: feb 14 2022 (11:29) 
+## Last-Updated: May 29 2022 (22:37) 
 ##           By: Brice Ozenne
-##     Update #: 486
+##     Update #: 524
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -90,39 +90,34 @@ score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE,
             if(any(duplicated(names(p)))){
                 stop("Incorrect argument \'p\': contain duplicated names \"",paste(unique(names(p)[duplicated(names(p))]), collapse = "\" \""),"\".\n")
             }
-            if(any(names(x$param$type) %in% names(p) == FALSE)){
-                stop("Incorrect argument \'p\': missing parameter(s) \"",paste(names(x$param$type)[names(x$param$type) %in% names(p) == FALSE], collapse = "\" \""),"\".\n")
+            if(any(names(x$param) %in% names(p) == FALSE)){
+                stop("Incorrect argument \'p\': missing parameter(s) \"",paste(names(x$param)[names(x$param) %in% names(p) == FALSE], collapse = "\" \""),"\".\n")
             }
-            p <- p[names(x$param$value)]
+            p <- p[names(x$param)]
         }else{
-            p <- x$param$value
+            p <- x$param
         }
-        
         out <- .moments.lmm(value = p, design = design, time = x$time, method.fit = x$method.fit,
                             transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho,
                             logLik = FALSE, score = TRUE, information = FALSE, vcov = FALSE, df = FALSE, indiv = indiv, effects = effects,
                             trace = FALSE, precompute.moments = test.precompute, transform.names = transform.names)$score
     }
 
-    ## ** restaure NA
-    if(length(x$index.na)>0 && indiv && is.null(data)){ 
-        iAdd <- .addNA(index.na = x$index.na, design = design, time = x$time)
-        if(length(iAdd$missing.cluster)>0){
+    ## ** restaure NAs and name
+    if(indiv){
+        if(is.null(data) && length(x$index.na)>0 && any(is.na(attr(x$index.na,"cluster.index")))){
+            rownames(out) <- x$design$cluster$levels
             out.save <- out
-            out <- matrix(NA, nrow = iAdd$n.allcluster, ncol = NCOL(out.save),
-                          dimnames = list(NULL, colnames(out.save)))
-            out[match(design$cluster$levels, iAdd$allcluster),] <- out.save
-        }
-    }
+            out <- matrix(NA, nrow = x$cluster$n, ncol = NCOL(out),
+                          dimnames = list(x$cluster$levels, colnames(out)))
+            out[rownames(out.save),] <- out.save
 
-    ## re-order columns when converting to sd with strata (avoid sd0:0 sd0:1 sd1:0 sd1:1 sd2:0 sd2:1 ...)
-    if("variance" %in% effects && transform.k %in% c("sd","var","logsd","logvar") && x$strata$n>1 && transform.names){
-        out.name <- names(stats::coef(x, effects = effects, transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = TRUE))
-        if(indiv){
-            out <- out[,out.name,drop=FALSE]
-        }else{
-            out <- out[out.name]
-        }
+            if(is.numeric(design$cluster$levels.original)){
+                rownames(out) <- NULL
+            }
+        }else if(!is.numeric(design$cluster$levels.original)){
+            rownames(out) <- design$cluster$levels.original
+        } 
     }
 
     ## ** export
@@ -132,9 +127,10 @@ score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE,
 ## * .score
 .score <- function(X, residuals, precision, dOmega,
                    Upattern.ncluster, weights, scale.Omega,
-                   index.variance, time.variance, index.cluster, name.varcoef, name.allcoef,
+                   index.variance, time.variance, index.cluster, name.allcoef,
                    indiv, REML, effects,
                    precompute){
+
 
     ## ** extract information
     test.loopIndiv <- indiv || is.null(precompute)
@@ -142,6 +138,7 @@ score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE,
     n.cluster <- length(index.variance)
     name.mucoef <- colnames(X)
     n.mucoef <- length(name.mucoef)
+    name.varcoef <- lapply(dOmega,names)
     n.varcoef <- lapply(name.varcoef, length)
     name.allvarcoef <- unique(unlist(name.varcoef))
     U.pattern <- names(dOmega)
@@ -194,7 +191,7 @@ score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE,
     ## ** compute score
     ## *** looping over individuals
     if(test.loopIndiv){
-        
+
         if(test.vcov){ ## precompute
             trOmegaM1_dOmega <- stats::setNames(vector(mode = "list", length = n.pattern), U.pattern)
             OmegaM1_dOmega_OmegaM1 <- stats::setNames(vector(mode = "list", length = n.pattern), U.pattern)
@@ -208,7 +205,7 @@ score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE,
         ## loop
         for(iId in 1:n.cluster){ ## iId <- 7
             iPattern <- index.variance[iId]
-            iIndex <- attr(index.cluster,"sorted")[[iId]]
+            iIndex <- index.cluster[[iId]]
             iWeight <- weights[iId]
             iOmegaM1 <- precision[[index.variance[iId]]] * scale.Omega[iId]
             ## iIndex <- which(index.cluster==iId)

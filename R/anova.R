@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:38) 
 ## Version: 
-## Last-Updated: mar  7 2022 (12:07) 
+## Last-Updated: maj 31 2022 (10:12) 
 ##           By: Brice Ozenne
-##     Update #: 789
+##     Update #: 851
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -74,9 +74,7 @@
 ##'
 ##' e.amod <- anova(amod, effect = mcp(tension = "Tukey"))
 ##' summary(e.amod)
-##'
 ##' 
-##' anova(amod, effect = mcp(tension = "Tukey"), ci = TRUE)
 ##' }
 
 ## * anova.lmm (code)
@@ -84,8 +82,7 @@
 ##' @export
 anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !is.null(object$df), ci = TRUE, 
                       transform.sigma = NULL, transform.k = NULL, transform.rho = NULL, transform.names = TRUE, ...){
-    
-    
+
     ## ** normalized user input    
     dots <- list(...)
     options <- LMMstar.options()
@@ -102,9 +99,8 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
         out <- .anova_Wald(object, effects = effects, robust = robust, rhs = rhs, df = df, ci = ci, 
                            transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = transform.names)
     }
-    
     ## ** export
-    out$call <- match.call()
+    attr(out,"call") <- match.call()
     class(out) <- append("anova_lmm",class(out))
     return(out)
 }
@@ -112,7 +108,7 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
 ## * .anova_Wald
 .anova_Wald <- function(object, effects, robust, rhs, df, ci, 
                         transform.sigma, transform.k, transform.rho, transform.names){
-    
+
     ## ** normalized user input
     terms.mean <- attr(stats::terms(object$formula$mean.design),"term.labels")
     subeffect <- NULL
@@ -131,7 +127,7 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
                 subeffect <- iLabels[effects == paste0("variance_",iLabels)]
                 effects <- "variance"
             }
-        }else if(grepl("^cor_",effects) && !is.null(object$design$vcov$X$cor)){
+        }else if(grepl("^cor_",effects) && !is.null(object$design$vcov$X$cor.pairwise)){
             iLabels <- attr(stats::terms(object$formula$cor.design),"term.labels")
             if(any(effects == paste0("correlation_",iLabels))){
                 subeffect <- iLabels[effects == paste0("correlation_",iLabels)]
@@ -243,7 +239,7 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
         }
         if("correlation" %in% effects){
             out <- c(out,list(correlation = NULL))
-            ls.assign$correlation <- attr(object$design$vcov$X$cor,"assign")
+            ls.assign$correlation <- rep(1,sum(object$design$param$type=="rho"))
             ls.nameTerms$correlation <- if(!is.null(ls.assign$correlation)){object$time$var}else{NULL}
             ls.contrast <- c(ls.contrast,list(correlation = NULL))
             null.correlation <- switch(transform.rho,
@@ -267,16 +263,33 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
         newname.coef <- names(stats::coef(object, effects = "all"))
         
         if(inherits(out.glht,"try-error")){
+
+            ## maybe the error is due to white space in the name of the coefficients
+            if(any(grepl(" ",effects))){
+                lhs <- sapply(strsplit(effects, split = "=",fixed = TRUE),"[",1)
+                lhs.term <- unlist(strsplit(unlist(strsplit(lhs, split = "+", fixed = TRUE)), split = "-", fixed = TRUE))
+                lhs.variable <- trimws(lapply(strsplit(lhs.term, split = "*", fixed = TRUE), utils::tail, 1), which = "both")
+                if(any(grepl(" ",lhs.variable))){
+                    stop("Possible mispecification of the argument \'effects\' as running mulcomp::glht lead to the following error: \n",
+                         out.glht,
+                         "There seems to be whitespace(s) in the name of certain coefficients which is likely to be the cause of the error. \n",
+                         "Consider using a contrast matrix to specific the argument \'effects\' \n or renaming the values of categorical variables without whitespace and refiting the lmm object. \n"
+                         )
+                }
+            }
+            
             test.reparametrize <- grepl("log", c(object$reparametrize$transform.sigma,object$reparametrize$transform.k)) || grep("atanh", object$reparametrize$transform.rho)
             
             ## restaure untransformed parametrization (glht does not handle log(k). or atanh(cor))
             if(test.reparametrize){
                 object2 <- object
-                index.var <- which(object$param$type %in% c("sigma","k","rho"))
-                object2$reparametrize <- .reparametrize(p = object$param$value[index.var],
-                                                        type = object$param$type[index.var], strata = object$param$strata[index.var], 
-                                                        time.k = object$design$param$time.k, time.rho = object$design$param$time.rho,
-                                                        name2sd = stats::setNames(object$design$vcov$param$name2,object$design$vcov$param$name),
+                index.var <- which(object$design$param$type %in% c("sigma","k","rho"))
+                object2$reparametrize <- .reparametrize(p = object$param[index.var],
+                                                        type = object$design$param$type[index.var], 
+                                                        level = object$design$param$level[index.var], 
+                                                        sigma = object$design$param$sigma[index.var], 
+                                                        k.x = object$design$param$k.x[index.var], 
+                                                        k.y = object$design$param$k.y[index.var], 
                                                         Jacobian = FALSE, dJacobian = FALSE, inverse = FALSE,
                                                         transform.sigma = "none",
                                                         transform.k = "none",
@@ -344,7 +357,7 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
     type <- names(out)
     for(iType in type){ ## iType <- "correlation"
         ## skip empty type
-        if(length(ls.nameTerms.num[[iType]])==0 || (is.null(ls.contrast[[iType]]) && all(ls.assign[[iType]]==0))){ next }
+        if(length(ls.nameTerms.num[[iType]])==0 || (is.null(ls.contrast[[iType]]) && (all(ls.assign[[iType]]==0)))){ next }
 
         iParam <- coef(object, effects = iType,
                        transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = transform.names)
@@ -424,10 +437,12 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
                                  lower = NA,
                                  upper = NA,
                                  null = iNull,
+                                 partial.R = NA,
                                  p.value = NA,
                                  stringsAsFactors = FALSE)
                 CI$statistic <- (CI$estimate-iNull)/CI$se
                 rownames(CI) <- rownames(iC)
+                CI$partial.R <- sign(CI$statistic)*sqrt(CI$statistic^2 / (CI$df + CI$statistic^2))
                 if(!is.null(names(effects)) && !inherits(effects,"mcp")){
                     indexName <- intersect(which(names(effects)!=""),which(!is.na(names(effects))))
                     rownames(CI)[indexName] <- names(effects)[indexName]
@@ -446,8 +461,13 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
                                "statistic" = iStat,
                                "df.num" = iDf[1],
                                "df.denom" = iDf[2],
+                               "partial.R2"  =  iDf[1] * iStat / (iDf[2] + iDf[1] * iStat),
                                "p.value" = 1 - stats::pf(iStat, df1 = iDf[1], df2 = iDf[2]),
                                stringsAsFactors = FALSE)
+            ## R2 calculation from
+            ## "An R2 statistic for fixed effects in the linear mixed model" by Lloyd J. Edwards et al. 2008 (Statistic in medicine)
+            ## Equation 19
+            ## DOI: 10.1002/sim.3429
 
             attr(iRes, "CI") <- CI
             attr(iRes, "glht") <- CI.glht
@@ -466,8 +486,9 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
         attr(out[[iType]], "glht") <- lapply(iLs,attr,"glht")
         
     }
-
+    
     ## ** export
+    attr(out, "df") <- df
     attr(out, "test") <- "Wald"
     attr(out, "robust") <- robust
     return(out)
@@ -486,11 +507,10 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
     }else{
         stop("One model must be nest in the other model to perform a likelihood ratio test. \n")
     }
-
-    paramH1 <-  names(objectH1$param$type)
-    typeH1 <-  objectH1$param$type
-    paramH0 <-  names(objectH0$param$type)
-    typeH0 <-  objectH0$param$type
+    paramH1 <-  objectH1$design$param$name
+    typeH1 <-  objectH1$design$param$type
+    paramH0 <-  objectH0$design$param$name
+    typeH0 <-  objectH0$design$param$type
     if(NROW(objectH0$design$mean)!=NROW(objectH1$design$mean)){
         stop("Mismatch between the design matrices for the mean of the two models - could be due to missing data. \n",
              "Different number of rows: ",NROW(objectH0$design$mean)," vs. ",NROW(objectH1$design$mean),".\n")
@@ -523,7 +543,7 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
                       stringsAsFactors = FALSE)
     out$statistic <- 2*(out$logLikH1 - out$logLikH0)
     out$p.value <- 1 - stats::pchisq(out$statistic, df = out$df)
-               
+
     ## ** export
     attr(out, "test") <- "LRT"
     return(out)

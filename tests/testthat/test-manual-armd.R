@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Dec 19 2021 (17:07) 
 ## Version: 
-## Last-Updated: Dec 19 2021 (17:38) 
+## Last-Updated: Jun  2 2022 (11:35) 
 ##           By: Brice Ozenne
-##     Update #: 12
+##     Update #: 14
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -20,6 +20,7 @@ if(FALSE){
     library(lattice) 
     library(psych)   
     library(emmeans) 
+    library(ggplot2) 
 
     library(LMMstar)
 }
@@ -68,7 +69,7 @@ test_that("lmm 2 times", {
     ## figure
     
     ## chunk 20
-    levels(e052.lmm)$reference
+    expect_equal(levels(e052.lmm)$reference, c(treat.f = "Placebo", week = "0"))
 
     ## chunk 21
     c(placebo.0 = as.double(coef(e052.lmm)["(Intercept)"]),

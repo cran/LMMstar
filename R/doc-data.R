@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt 21 2020 (13:42) 
 ## Version: 
-## Last-Updated: mar 14 2022 (09:41) 
+## Last-Updated: Jun  2 2022 (14:07) 
 ##           By: Brice Ozenne
-##     Update #: 79
+##     Update #: 98
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -15,6 +15,65 @@
 ## 
 ### Code:
 
+## * abeta
+## ** abetaW
+#' @title Data From The abeta Study (Wide Format)
+#'
+#' @description Extract data from a longitudinal case control study including 87 patients newly diagnosed with bipolar disorder and 44 age and sex matched healthy controls.
+#' Contains demographic data and lifestyle factors at baseline, as well as measures of psychosocial functioning at baseline and 1 year follow-up.
+#' This dataset is in the wide format (i.e. one line per participant).
+#'
+#' \itemize{
+#' \item id Study participant
+#' \item sex M/F
+#' \item age in years
+#' \item group Bipolar disorder (BD) or healthy control (HC)
+#' \item episode Whether the patient experience an affective episode during follow-up.
+#' \item fast0,fast1 Functioning assessment short test at baseline and follow-up
+#' \item qol0,qol1 WHO quality of life score at baseline and follow-up
+#' \item pss0,pss1 Perceived stress score at baseline and follow-up
+#' \item educationyears Years of education including basic school.
+#' \item alcohol Daily alcohol consumption.
+#' \item missingreason Reason of drop out or missed visit
+#' }
+#' 
+#' @name abetaW
+#' @docType data
+#' @usage data(abetaW)
+#' @references Pech, Josefine, et al. "The impact of a new affective episode on psychosocial functioning, quality of life and perceived stress in newly diagnosed patients with bipolar disorder: A prospective one-year case-control study."Journal of Affective Disorders 277 (2020): 486-494.
+#' @keywords data
+NULL
+
+## ** abetaL
+#' @title Data From The Bland Altman Study (Long Format)
+#'
+#' @description Extract data from a longitudinal case control study including 87 patients newly diagnosed with bipolar disorder and 44 age and sex matched healthy controls.
+#' Contains demographic data and lifestyle factors at baseline, as well as measures of psychosocial functioning at baseline and 1 year follow-up.
+#' This dataset is in the long format (i.e. one line per measurement).
+#'
+#' \itemize{
+#' \item id Study participant.
+#' \item sex M/F.
+#' \item age in years.
+#' \item group Bipolar disorder (BD) or healthy control (HC).
+#' \item episode Whether the patient experience an affective episode during follow-up.
+#' \item visit index of time at which pss, fast, and qol measurements where performed.
+#' \item year time at which pss, fast, and qol measurements where performed.
+#' \item pss Perceived stress score.
+#' \item fast Functioning assessment short test.
+#' \item qol WHO quality of life score.
+#' \item educationyears Years of education including basic school.
+#' \item alcohol Daily alcohol consumption.
+#' \item missingreason Reason of drop out or missed visit.
+#' }
+#' 
+#' @name abetaL
+#' @docType data
+#' @usage data(abetaL)
+#' @references Pech, Josefine, et al. The impact of a new affective episode on psychosocial functioning, quality of life and perceived stress in newly diagnosed patients with bipolar disorder: A prospective one-year case-control study.Journal of Affective Disorders 277 (2020): 486-494.
+#' @keywords data
+NULL
+
 ## * blandAltman
 ## ** blandAltmanW
 #' @title Data From The Bland Altman Study (Wide Format)
@@ -23,7 +82,7 @@
 #' This dataset is in the wide format (i.e. one line per patient).
 #'
 #' \itemize{
-#' \item id Patient identifier
+#' \item id Patient identifier.
 #' \item wright1 First measurement made with a Wright peak flow meter.
 #' \item wright2 Second measurement made with a Wright peak flow meter.
 #' \item mini1 First measurement made with a mini Wright peak flow meter.
@@ -37,7 +96,7 @@
 #' @keywords data
 NULL
 
-## ** calciumL
+## ** blandAltmanL
 #' @title Data From The Bland Altman Study (Long Format)
 #'
 #' @description  Data From The Bland Altman Study where two methods to measure the peak expiratory flow rate (PEFR) where compared.
@@ -155,8 +214,8 @@ NULL
 ##                             "4" = 1.5,
 ##                             "5" = 2.0)
 ## calciumL$time.fac <- factor(calciumL$visit, levels = 1:5,
-##                             labels = c("0 years","0.5 years","1 years","1.5 years","2 years")) 
-## save(calciumL, file = "data/gastricbypassL.rda")
+##                             labels = c("0years","0.5years","1years","1.5years","2years")) 
+## save(calciumL, file = "data/calciumL.rda")
 ##
 ## str(calciumL)
 
@@ -211,7 +270,6 @@ NULL
 NULL
 
 ## * gastricbypass
-
 ## ** gastricbypassW
 #' @title Data From The Gastric Bypass Study (Wide Format)
 #'
@@ -267,11 +325,11 @@ NULL
 ## gastricbypassL <- as.data.frame(dtL)
 ## gastricbypassL$visit <- gastricbypassL$time
 ## gastricbypassL$time <- factor(gastricbypassL$visit, levels = 1:4,
-##                               labels = c("3 months before","1 week before",
-##                                          "1 week after","3 months after"))
+##                               labels = c("3monthsBefore","1weekBefore",
+##                                          "1weekAfter","3monthsAfter"))
 ## gastricbypassL <- gastricbypassL[,c("id","visit","time","weight","glucagonAUC")]
 ## save(gastricbypassL, file = "data/gastricbypassL.rda")
-##
+
 ## str(gastricbypassL)
 
 ## * ncgs
@@ -327,11 +385,13 @@ NULL
 #' @keywords data
 NULL
 ## data("ncgsW")
-## ncgsL <- reshape2::melt(ncgsW, id.vars = c("group","id"),
-##                         measure.vars = paste0("cholest",1:5),
-##                         value.name = c("cholest"), variable.name = "visit")
-## ncgsL$visit <- as.factor(sapply(ncgsL$visit, gsub,
-##                       pattern = "cholest", replacement = ""))
+## ncgsL <- stats::reshape(ncgsW, direction  = "long",
+##                         idvar = "id",
+##                         varying = paste0("cholest",1:5),
+##                         v.names = "choltest",
+##                         timevar = "visit")
+## ncgsL$visit <- as.factor(ncgsL$visit)
+## rownames(ncgsL) <- NULL
 ## ncgsL$time <- sapply(as.character(ncgsL$visit), switch,
 ##                             "1" = 0,
 ##                             "2" = 6,
@@ -416,6 +476,25 @@ NULL
 #' @usage data(potassiumRepeatedL)
 #' @references Dreier et al. Effect of increased potassium intake on the reninangiotensinaldosterone system and subcutaneous resistance arteries: a randomized crossover study,
 #' Nephrol Dial Transplant (2020) 110. doi: 10.1093/ndt/gfaa114
+#' @keywords data
+NULL
+
+## * school
+## ** schoolL
+#' @title Simulated Data with 3-level struture (Long Format)
+#'
+#' @description Simulated data a nested structure: Student/Class/School and one outcome.
+#'
+#' \itemize{
+#' \item school 
+#' \item class 
+#' \item student
+#' \item outcome  
+#' }
+#' 
+#' @name schoolL
+#' @docType data
+#' @usage data(schoolL)
 #' @keywords data
 NULL
 

@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: feb  9 2022 (14:51) 
 ## Version: 
-## Last-Updated: mar 14 2022 (13:27) 
+## Last-Updated: maj 31 2022 (15:24) 
 ##           By: Brice Ozenne
-##     Update #: 57
+##     Update #: 65
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -87,7 +87,6 @@ confint.anova_lmm <- function(object, parm, level = 0.95, method = NULL, simplif
                 iOut[[iTest]]$df <- iGlht$df
             }else if(iMethod == "single-step2"){
                 iGlht <- attr(iO,"glht")[[iTest]]
-                requireNamespace("copula")
                 n.sample <- options$n.sampleCopula
 
                 rho <- stats::cov2cor(iGlht$linfct %*% iGlht$vcov %*% t(iGlht$linfct))
@@ -95,12 +94,13 @@ confint.anova_lmm <- function(object, parm, level = 0.95, method = NULL, simplif
 
                 myMvd <- copula::mvdc(copula = copula::normalCopula(param=rho[lower.tri(rho)], dim = NROW(rho), dispstr = "un"),
                                       margins = rep("t", n.marginal),
-                                      paramMargins = as.list(stats::setNames(iOut[[iTest]]$df,rep("df",n.marginal))))
+                                      paramMargins = as.list(stats::setNames((iOut[[iTest]]$df),rep("df",n.marginal))))
                 maxH0 <- sort(apply(abs(copula::rMvdc(n.sample, myMvd)), 1, max))
                 
                 iOut[[iTest]]$p.value <- sapply(abs(iOut[[iTest]]$statistic), function(iT){(sum(iT <= maxH0)+1)/(n.sample+1)})
 
                 cH0 <- stats::quantile(maxH0, 0.95) ## attr(confint(iGlht)$confint,"calpha")
+                iOut[[iTest]]$df <- iOut[[iTest]]$df
                 iOut[[iTest]]$lower <- iOut[[iTest]]$estimate - iOut[[iTest]]$se * cH0
                 iOut[[iTest]]$upper <- iOut[[iTest]]$estimate + iOut[[iTest]]$se * cH0
                 attr(iOut[[iTest]], "n.sample") <-  n.sample

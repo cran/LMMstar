@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar 14 2022 (09:45) 
 ## Version: 
-## Last-Updated: mar 14 2022 (12:32) 
+## Last-Updated: May 30 2022 (01:30) 
 ##           By: Brice Ozenne
-##     Update #: 39
+##     Update #: 51
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -18,11 +18,11 @@
 ## * mlmm (documentation)
 ##' @title Fit Multiple Linear Mixed Model
 ##' @description Fit several linear mixed models, extract relevant coefficients, and combine them into a single table. 
-##'g
+##'
 ##' @param ... arguments passed to \code{\link{lmm}}.
 ##' @param data [data.frame] dataset (in the long format) containing the observations.
 ##' @param by [character] variable used to split the dataset. On each split a seperate linear mixed model is fit.
-##'@param effects [character] Linear combinations of coefficients relative to which Wald test should be computed.
+##' @param effects [character] Linear combinations of coefficients relative to which Wald test should be computed.
 ##' @param robust [logical] Should robust standard errors (aka sandwich estimator) be output instead of the model-based standard errors. Argument passed to \code{anova.lmm}.
 ##' @param df [logical] Should the degree of freedom be computed using a Satterthwaite approximation?
 ##' @param ci [logical] Should a confidence interval be output for each hypothesis?
@@ -89,11 +89,18 @@ mlmm <- function(..., data, by, effects = NULL, robust = FALSE, df = TRUE, ci = 
     ls.lmm <- lapply(ls.data, function(iData){
         lmm(..., data = iData, df = df)
     })
-    if(is.null(effects)){
-        
+
+    if(is.null(effects) || all(effects %in% c("mean","fixed","variance","correlation","all"))){
         ls.anova <- lapply(ls.lmm, function(iLMM){
-            iE <- paste(names(coef(iLMM, effects = options$effects)),"==0", sep = "")
-            anova(iLMM, effects = iE, robust = robust, df = df, ci = ci)
+            iAllCoef <- names(coef(iLMM, effects = "all"))
+            iAllCoef.effects <- names(coef(iLMM, effects = options$effects))
+            iC <- matrix(0, nrow = length(iAllCoef.effects), ncol = length(iAllCoef), dimnames = list(iAllCoef.effects,iAllCoef))
+            if(length(iAllCoef.effects)==1){
+                iC[iAllCoef.effects,iAllCoef.effects] <- 1
+            }else{
+                diag(iC[iAllCoef.effects,iAllCoef.effects]) <- 1
+            }
+            anova(iLMM, effects = iC, robust = robust, df = df, ci = ci)
         })
     }else{
         ls.anova <- lapply(ls.lmm, anova, effects = effects, robust = robust, df = df, ci = ci)

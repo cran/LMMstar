@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar 22 2021 (22:13) 
 ## Version: 
-## Last-Updated: feb 14 2022 (11:29) 
+## Last-Updated: May 30 2022 (01:54) 
 ##           By: Brice Ozenne
-##     Update #: 973
+##     Update #: 993
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -98,31 +98,38 @@ information.lmm <- function(x, effects = NULL, data = NULL, p = NULL, indiv = FA
             if(any(duplicated(names(p)))){
                 stop("Incorrect argument \'p\': contain duplicated names \"",paste(unique(names(p)[duplicated(names(p))]), collapse = "\" \""),"\".\n")
             }
-            if(any(names(x$param$type) %in% names(p) == FALSE)){
-                stop("Incorrect argument \'p\': missing parameter(s) \"",paste(names(x$param$type)[names(x$param$type) %in% names(p) == FALSE], collapse = "\" \""),"\".\n")
+            if(any(names(x$param) %in% names(p) == FALSE)){
+                stop("Incorrect argument \'p\': missing parameter(s) \"",paste(names(x$param)[names(x$param$type) %in% names(p) == FALSE], collapse = "\" \""),"\".\n")
             }
-            p <- p[names(x$param$value)]
+            p <- p[names(x$param)]
         }else{
-            p <- x$param$value
+            p <- x$param
         }
         out <- .moments.lmm(value = p, design = design, time = x$time, method.fit = x$method.fit, type.information = type.information,
                             transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho,
                             logLik = FALSE, score = FALSE, information = TRUE, vcov = FALSE, df = FALSE, indiv = indiv, effects = effects, robust = robust,
                             trace = FALSE, precompute.moments = test.precompute, transform.names = transform.names)$information
     }
-    
-    ## ** restaure NA
-    if(length(x$index.na)>0 && indiv && is.null(data)){ 
-        iAdd <- .addNA(index.na = x$index.na, design = design, time = x$time)
-        if(length(iAdd$missing.cluster)>0){
+
+    ## ** restaure NAs and name
+    if(indiv){
+        if(is.null(data) && length(x$index.na)>0 && any(is.na(attr(x$index.na,"cluster.index")))){
+            dimnames(out)[[1]] <- x$design$cluster$levels
             out.save <- out
-            out <- array(NA, dim = c(iAdd$n.allcluster, dim(out.save)[2:3]),
-                         dimnames = c(list(NULL), dimnames(out.save)[2:3]))
-            out[match(design$cluster$levels, iAdd$allcluster),,] <- out.save
-        }
+            out <- array(NA, dim = c(x$cluster$n, dim(out.save)[2:3]),
+                          dimnames = c(list(x$cluster$levels), dimnames(out.save)[2:3]))
+            out[dimnames(out.save)[[1]],,] <- out.save
+
+            if(is.numeric(design$cluster$levels.original)){
+                dimnames(out)[[1]] <- NULL
+            }
+        }else if(!is.numeric(design$cluster$levels.original)){
+            dimnames(out)[[1]] <- design$cluster$levels.original
+        } 
     }
 
-    ## re-order values when converting to sd with strata (avoid sd0:0 sd0:1 sd1:0 sd1:1 sd2:0 sd2:1 ...)
+
+    ## ** re-order values when converting to sd with strata (avoid sd0:0 sd0:1 sd1:0 sd1:1 sd2:0 sd2:1 ...)
     if("variance" %in% effects && transform.k %in% c("sd","var","logsd","logvar") && x$strata$n>1 && transform.names){
         out.name <- names(stats::coef(x, effects = effects, transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = TRUE))
         if(indiv){
@@ -143,7 +150,7 @@ information.lmm <- function(x, effects = NULL, data = NULL, p = NULL, indiv = FA
 ##                                                                 + 0.5 tr[ (X \OmegaM1 X)^{-1} (X \OmegaM1 d2\Omega \OmegaM1 X) ]
 .information <- function(X, residuals, precision, dOmega, d2Omega,
                          Upattern.ncluster, weights, scale.Omega,
-                         index.variance, time.variance, index.cluster, name.varcoef, name.allcoef,
+                         index.variance, time.variance, index.cluster, name.allcoef,
                          pair.meanvarcoef, pair.varcoef, indiv, REML, type.information, effects, robust,
                          precompute){
 
@@ -153,6 +160,7 @@ information.lmm <- function(x, effects = NULL, data = NULL, p = NULL, indiv = FA
     n.cluster <- length(index.variance)
     name.mucoef <- colnames(X)
     n.mucoef <- length(name.mucoef)
+    name.varcoef <- lapply(dOmega, names)
     n.varcoef <- lapply(name.varcoef, length)
     n.allcoef <- length(name.allcoef)
     name.allvarcoef <- name.allcoef[name.allcoef %in% unique(unlist(name.varcoef))] ## make sure the ordering is correct
@@ -284,7 +292,7 @@ information.lmm <- function(x, effects = NULL, data = NULL, p = NULL, indiv = FA
         ## loop
         for(iId in 1:n.cluster){ ## iId <- 7
             iPattern <- index.variance[iId]
-            iIndex <- attr(index.cluster,"sorted")[[iId]]
+            iIndex <- index.cluster[[iId]]
             iWeight <- weights[iId]
             ## iIndex <- which(index.cluster==iId)
             ## iIndex <- iIndex[order(time.variance[iIndex])] ## re-order observations according to the variance-covariance matrix
@@ -320,7 +328,7 @@ information.lmm <- function(x, effects = NULL, data = NULL, p = NULL, indiv = FA
                     iCoef2 <- pair.varcoef[[iPattern]][2,iPair]
 
                     iValue <- 0.5 * iWeight * tr_OmegaM1_d2OmegaAndCo[[iPattern]][iPair]
-                    ## 0.5 * tr(iOmegaM1 %*% idOmega$sigma %*% iOmegaM1 %*% idOmega$sigma)
+                    ## 0.5 * ntr(iOmegaM1 %*% idOmega$sigma %*% iOmegaM1 %*% idOmega$sigma)
 
                     if(type.information == "observed"){
                         iValue <- iValue - 0.5 * iWeight * (t(iResidual) %*% OmegaM1_d2OmegaAndCo_OmegaM1[[iPattern]][,,iPair] %*% iResidual) * scale.Omega[iId]
@@ -496,7 +504,7 @@ information.lmm <- function(x, effects = NULL, data = NULL, p = NULL, indiv = FA
         attr.bread <- crossprod(.score(X = X, residuals = residuals, precision = precision, dOmega = dOmega,
                                        weights = weights, scale.Omega = scale.Omega,
                                        index.variance = index.variance, time.variance = time.variance, 
-                                       index.cluster = index.cluster, name.varcoef = name.varcoef, name.allcoef = name.allcoef, indiv = TRUE, REML = REML, effects = effects2,
+                                       index.cluster = index.cluster, name.allcoef = name.allcoef, indiv = TRUE, REML = REML, effects = effects2,
                                        precompute = precompute) )
         if(any(c("mean","variance","correlation") %in% effects2 == FALSE)){
             keep.cols <- intersect(names(which(rowSums(abs(attr.bread))!=0)),names(which(rowSums(abs(attr.bread))!=0)))

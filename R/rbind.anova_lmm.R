@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: feb  9 2022 (14:51) 
 ## Version: 
-## Last-Updated: mar 14 2022 (11:02) 
+## Last-Updated: Jun  2 2022 (14:56) 
 ##           By: Brice Ozenne
-##     Update #: 68
+##     Update #: 91
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -31,8 +31,10 @@
 ##' dL <- sampleRem(1e2, n.times = 3, format = "long")
 ##'
 ##' ## estimate mixed models
-##' e.lmm1 <- lmm(Y ~ X1+X2+X3, repetition = ~visit|id, data = dL)
-##' e.lmm2 <- lmm(Y ~ X1+X8+X9, repetition = ~visit|id, data = dL)
+##' e.lmm1 <- lmm(Y ~ X1+X2+X3, repetition = ~visit|id, data = dL,
+##'               structure = "CS", df = FALSE)
+##' e.lmm2 <- lmm(Y ~ X1+X8+X9, repetition = ~visit|id, data = dL,
+##'               structure = "CS", df = FALSE)
 ##'
 ##' ## select null hypotheses
 ##' AAA <- anova(e.lmm1, ci = TRUE, effect = c("X1|X2,X3"="X1=0","X2|X1,X3"="X2=0"))
@@ -49,7 +51,9 @@ rbind.anova_lmm <- function(model, ..., name = NULL, sep = ": "){
 
     ## ** check user input
     dots <- list(...)
-    if(any(sapply(dots,inherits,"anova_lmm")==FALSE)){
+    if(length(dots)==0){
+        return(model) ## nothing to combine
+    }else if(any(sapply(dots,inherits,"anova_lmm")==FALSE)){
         stop("Extra arguments should inherit from anova_lmm. \n")
     }
     ls.object <- c(list(model),dots)
@@ -140,7 +144,17 @@ rbind.anova_lmm <- function(model, ..., name = NULL, sep = ": "){
     out$coef <- unlist(lapply(1:length(vec.outcome), function(iO){stats::setNames(ls.coef[[iO]],paste0(vec.outcome[iO],sep,names(ls.coef[[iO]])))}))
 
     iIID <- do.call(cbind,ls.iid)
-    out$vcov <- crossprod(iIID[rowSums(is.na(iIID))==0,,drop=FALSE])
+    if(any(is.na(iIID))){
+        out$vcov <- tcrossprod(sqrt(apply(iIID^2, 2, sum, na.rm = TRUE))) * stats::cor(iIID, use = "pairwise")
+        ## usually better compared to formula 11.43 from chapter 11.4 of the book High-dimensional statistics by WAINWRIGHT
+        ## iIDD0 <- iIID/(1-mean(is.na(iIID)))
+        ## iIDD0[is.na(iIDD)] <- 0
+        ## out$vcov <- crossprod(iIDD0) - mean(is.na(iIDD))*diag(diag(crossprod(iIDD0)))
+
+        ## out$vcov - crossprod(iIID)
+    }else{
+        out$vcov <- crossprod(iIID)
+    }
     rownames(out$vcov) <- unlist(lapply(1:length(vec.outcome), function(iO){paste0(vec.outcome[iO],sep,colnames(ls.iid[[iO]]))}))
     colnames(out$vcov) <- unlist(lapply(1:length(vec.outcome), function(iO){paste0(vec.outcome[iO],sep,colnames(ls.iid[[iO]]))}))
 
@@ -197,6 +211,7 @@ rbind.anova_lmm <- function(model, ..., name = NULL, sep = ": "){
     out$df <- ceiling(stats::median(out$df))
     attr(out2$all,"glht") <- list(out)
     
+    attr(out2, "df") <- is.na(out$df)
     attr(out2, "test") <- "Wald"
     attr(out2, "robust") <- robust
     class(out2) <- append("anova_lmm",class(out))

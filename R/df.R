@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Jun 18 2021 (10:34) 
 ## Version: 
-## Last-Updated: feb 11 2022 (17:14) 
+## Last-Updated: maj 20 2022 (09:47) 
 ##           By: Brice Ozenne
-##     Update #: 156
+##     Update #: 172
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -147,9 +147,11 @@
 
     ## ** prepare vector of parameters
     param.value <- value
-    param.type <- design$param$type
-    param.strata <- design$param$strata
-    name.allcoef <- names(param.type)
+    param.type <- stats::setNames(design$param$type, design$param$name)
+    sigma <- stats::setNames(design$param$sigma, design$param$name)
+    k.x <- stats::setNames(design$param$k.x, design$param$name)
+    k.y <- stats::setNames(design$param$k.y, design$param$name)
+    name.allcoef <- design$param$name
     n.allcoef <- length(param.type)
 
     param.nameVar <- name.allcoef[param.type %in% c("sigma","k","rho")]
@@ -164,7 +166,10 @@
 
         if(test.transform){ ## back-transform
             backp <- .reparametrize(p = p[param.nameVar],
-                                    type = param.type[param.nameVar], strata = param.strata[param.nameVar], 
+                                    type = param.type[param.nameVar],
+                                    sigma = sigma[param.nameVar], 
+                                    k.x = k.x[param.nameVar], 
+                                    k.y = k.y[param.nameVar], 
                                     Jacobian = FALSE, dJacobian = FALSE, inverse = TRUE,
                                     transform.sigma = transform.sigma,
                                     transform.k = transform.k,

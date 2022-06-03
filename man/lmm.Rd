@@ -23,9 +23,7 @@ lmm(
 On the left hand side the outcome and on the right hand side the covariates affecting the mean value.
 E.g. Y ~ Gender + Gene.}
 
-\item{repetition}{[formula] Specify the model for the covariance.
-On the right hand side the time/repetition variable and the grouping variable, e.g. ~ time|id.
-On the left hand side, a possible stratification variable, e.g. group ~ time|id. In that case the mean structure should only be stratified on this variable using interactions.}
+\item{repetition}{[formula] Specify the structure of the data: the time/repetition variable and the grouping variable, e.g. ~ time|id.}
 
 \item{structure}{[character] type of covariance structure, either \code{"CS"} (compound symmetry) or \code{"UN"} (unstructured).}
 
@@ -43,7 +41,8 @@ On the left hand side, a possible stratification variable, e.g. group ~ time|id.
 
 \item{trace}{[interger, >0] Show the progress of the execution of the function.}
 
-\item{control}{[list] Control values for the optimization method. The element \code{optimizer} indicates which optimizer to use and additional argument will be pass to the optimizer.}
+\item{control}{[list] Control values for the optimization method.
+The element \code{optimizer} indicates which optimizer to use and additional argument will be pass to the optimizer.}
 }
 \value{
 an object of class \code{lmm} containing the estimated parameter values, the residuals, and relevant derivatives of the likelihood.
@@ -57,6 +56,15 @@ g
 
 By default, the estimation of the model parameters will be made using the \code{nlme::gls} function.
 See argument optimizer in \code{\link{LMMstar.options}}
+
+\bold{Argument control:} when using the optimizer \code{"FS"}, the following elements can be used
+\itemize{
+\item \code{init}: starting values for the model parameters.
+\item \code{n.iter}: maximum number of interations of the optimization algorithm.
+\item \code{tol.score}: score value below which convergence has been reached.
+\item \code{tol.param}: difference in estimated parameters from two successive iterations below which convergence has been reached.
+\item \code{trace}: display progress of the optimization procedure.
+}
 }
 \examples{
 #### 1- simulate data in the long format ####
@@ -90,7 +98,7 @@ model.tables(eCS.lmm, effects = "all")
 confint(eCS.lmm, effects = "all")
 
 ## variance-covariance structure
-getVarCov(eCS.lmm)
+sigma(eCS.lmm)
 
 #### 4- diagnostic plots ####
 quantile(residuals(eCS.lmm))
@@ -134,7 +142,7 @@ dfW <- rbind(data.frame(id = 1:n, rep = 5, Y = rowMeans(rmvnorm(n, sigma = Sigma
              data.frame(id = (n+1):(2*n), rep = 1, Y = rmvnorm(n, sigma = Sigma1)))
 
 e.lmmW <- lmm(Y~1, data = dfW, scale.Omega=~rep, control = list(optimizer = "FS"))
-e.lmm0 <- lmm(Y~1, data = dfW)
+e.lmm0 <- lmm(Y~1, data = dfW, control = list(optimizer = "FS"))
 model.tables(e.lmmW, effects = "all")
 model.tables(e.lmm0, effects = "all")
 ## TRUE standard error is 1

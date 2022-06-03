@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:39) 
 ## Version: 
-## Last-Updated: feb 10 2022 (11:05) 
+## Last-Updated: maj 23 2022 (12:36) 
 ##           By: Brice Ozenne
-##     Update #: 331
+##     Update #: 357
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -30,14 +30,13 @@
 ##' @param robust [logical] Should robust standard errors (aka sandwich estimator) be output instead of the model-based standard errors. Not feasible for variance or correlation coefficients estimated by REML.
 ##' @param null [numeric vector] the value of the null hypothesis relative to each coefficient.
 ##' @param df [logical] Should a Student's t-distribution be used to model the distribution of the coefficient. Otherwise a normal distribution is used.
-##' @param strata [character vector] When not \code{NULL}, only output coefficient relative to specific levels of the variable used to stratify the mean and covariance structure.
-##' @param columns [character vector] Columns to be output. Can be any of \code{"estimate"}, \code{"se"}, \code{"statistic"}, \code{"df"}, \code{"null"}, \code{"lower"}, \code{"upper"}, \code{"p.value"}.
+##' @param columns [character vector] Columns to be output.
+##' Can be any of \code{"estimate"}, \code{"se"}, \code{"statistic"}, \code{"df"}, \code{"null"}, \code{"lower"}, \code{"upper"}, \code{"p.value"}, \code{"partial.R"}.
 ##' @param type.information,transform.sigma,transform.k,transform.rho,transform.names are passed to the \code{vcov} method. See details section in \code{\link{coef.lmm}}.
 ##' @param backtransform [logical] should the variance/covariance/correlation coefficient be backtransformed?
 ##' @param ... Not used. For compatibility with the generic method.
 ##'
 ##' @seealso the function \code{anova} to perform inference about linear combinations of coefficients and adjust for multiple comparisons.
-##'
 ##' 
 ##' @return A data.frame containing for each coefficient (in rows): \itemize{
 ##' \item column estimate: the estimate.
@@ -69,9 +68,14 @@
 ## * confint.lmm (code)
 ##' @export
 confint.lmm <- function (object, parm = NULL, level = 0.95, effects = NULL, robust = FALSE, null = NULL,
-                         strata = NULL, columns = NULL,
+                         columns = NULL,
                          df = NULL, type.information = NULL, transform.sigma = NULL, transform.k = NULL, transform.rho = NULL, transform.names = TRUE,
                          backtransform = NULL, ...){
+
+
+    ## ** extract from object
+    name.param <- object$design$param$name
+    type.param <- stats::setNames(object$design$param$type, name.param)
 
     ## ** normalize user imput
     dots <- list(...)
@@ -84,7 +88,6 @@ confint.lmm <- function (object, parm = NULL, level = 0.95, effects = NULL, robu
         stop("Argument \'parm\' should not be used. It is here for compatibility with the generic method. \n",
              "Use \'effects\' instead. \n")
     }
-    type.param <- object$param$type
     if(is.null(effects)){
         effects <- options$effects
     }else if(identical(effects,"all")){
@@ -92,9 +95,6 @@ confint.lmm <- function (object, parm = NULL, level = 0.95, effects = NULL, robu
     }
     effects <- match.arg(effects, c("mean","fixed","variance","correlation"), several.ok = TRUE)
     effects[effects== "fixed"] <- "mean"
-    if(!is.null(strata)){
-        strata <- match.arg(strata, object$strata$levels, several.ok = TRUE)
-    }
     if(is.null(df)){
         df <- (!is.null(object$df)) && (robust==FALSE)
     }
@@ -122,20 +122,23 @@ confint.lmm <- function (object, parm = NULL, level = 0.95, effects = NULL, robu
         type.information <- match.arg(type.information, c("expected","observed"))
     }
     if(!is.null(columns)){
-        columns  <- match.arg(columns, c("estimate","se","statistic","df","lower","upper","null","p.value"), several.ok = TRUE)
+        columns  <- match.arg(columns, c("estimate","se","statistic","df","lower","upper","null","p.value","partial.R"), several.ok = TRUE)
     }else{
         columns <- options$columns.confint
     }
 
     ## ** get estimate
-    beta <- coef(object, effects = effects, strata = strata,
+    beta <- coef(object, effects = effects, 
                  transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = transform.names)
     p <- length(beta)
-    nameNoTransform.beta <- names(coef(object, effects = effects, strata = strata,
+    nameNoTransform.beta <- names(coef(object, effects = effects, 
                                        transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = FALSE))
-   
+    name.beta <- names(beta)
+    type.beta <- type.param[name.beta]
+
+        
     ## ** get uncertainty
-    vcov.beta <- vcov(object, effects = effects, df = df, strata = strata, robust = robust,
+    vcov.beta <- vcov(object, effects = effects, df = df, robust = robust,
                       type.information = type.information, transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = transform.names)
     if(df){
         df <- pmax(attr(vcov.beta,"df"), options$min.df)
@@ -176,19 +179,25 @@ confint.lmm <- function (object, parm = NULL, level = 0.95, effects = NULL, robu
         }
         null <- null[nameNoTransform.beta]
     }
-
     ## ** combine
     name.beta <- names(beta)
     out <- data.frame(estimate = beta, se = sqrt(diag(vcov.beta[name.beta,name.beta,drop=FALSE])),
                       statistic = as.numeric(NA), df = df[name.beta], lower = as.numeric(NA), upper = as.numeric(NA), null = null, p.value = as.numeric(NA),
+                      partial.R = as.numeric(NA),
                       stringsAsFactors = FALSE)
     out$statistic <- (out$estimate-null)/out$se
     out$p.value <- 2*(1-stats::pt(abs(out$statistic), df = out$df))
-
+    index.cor <- setdiff(which(type.beta=="mu"), which(name.beta=="(Intercept)"))
+    if(length(index.cor)>0){
+        out[index.cor,"partial.R"] <- sign(out$statistic[index.cor])*sqrt(out$statistic[index.cor]^2/(out$df[index.cor]+out$statistic[index.cor]^2))
+        ## inspired from "An R2 statistic for fixed effects in the linear mixed model" by Lloyd J. Edwards et al. 2008 (Statistic in medicine)
+        ## Equation 19
+        ## DOI: 10.1002/sim.3429
+    }
+    
     alpha <- 1-level
     out$lower <- out$estimate + stats::qt(alpha/2, df = out$df) * out$se
     out$upper <- out$estimate + stats::qt(1-alpha/2, df = out$df) * out$se
-    
     ## ** export
     attr(out, "transform") <- list(sigma = transform.sigma,
                                    k = transform.k,
@@ -198,7 +207,7 @@ confint.lmm <- function (object, parm = NULL, level = 0.95, effects = NULL, robu
         attr(out, "type")[attr(out, "type")=="sigma"] <- "k"
     }
     attr(out, "old2new") <-  stats::setNames(nameNoTransform.beta, rownames(out))
-    attr(out, "backtransform.names") <- names(coef(object, effects = effects, strata = strata,
+    attr(out, "backtransform.names") <- names(coef(object, effects = effects, 
                                                    transform.sigma = gsub("log","",transform.sigma), transform.k = gsub("log","",transform.k), transform.rho = gsub("atanh","",transform.rho), transform.names = transform.names))
 
     attr(out, "backtransform") <-  FALSE
@@ -209,6 +218,7 @@ confint.lmm <- function (object, parm = NULL, level = 0.95, effects = NULL, robu
         out$se  <- numDeriv::grad(func = backtransform, x = out.save$estimate) * out.save$se
         out$lower <- do.call(backtransform, list(out.save$lower))
         out$upper <- do.call(backtransform, list(out.save$upper))
+        out$partial.R <- as.numeric(NA)
         attr(out, "backtransform") <-  2    
     }else if(backtransform){
         out <- .backtransform(out)
