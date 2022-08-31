@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:28) 
 ## Version: 
-## Last-Updated: maj 27 2022 (13:13) 
+## Last-Updated: jun 28 2022 (09:51) 
 ##           By: Brice Ozenne
-##     Update #: 487
+##     Update #: 495
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -72,6 +72,11 @@ vcov.lmm <- function(object, effects = "mean", robust = FALSE, df = FALSE, strat
         type.information <- attr(object$information,"type.information")
     }else{
         type.information <- match.arg(type.information, c("expected","observed"))
+    }
+    if(df && robust && object$method.fit == "REML"){
+        stop("Cannot compute degrees of freedom under REML for robust standard errors. \n",
+             "Consider setting the argument df to FALSE",
+             " \n or using ML estimation by setting the argument method.fit=\"ML\" when calling lmm.")
     }
 
     init <- .init_transform(transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, 

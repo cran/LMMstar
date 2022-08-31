@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Jun 18 2021 (10:34) 
 ## Version: 
-## Last-Updated: maj 20 2022 (09:47) 
+## Last-Updated: jun 27 2022 (12:22) 
 ##           By: Brice Ozenne
-##     Update #: 172
+##     Update #: 189
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -67,11 +67,11 @@
         iName.varcoef <- name.varcoef[[iPattern]]
         iN.varcoef <- length(iName.varcoef)
 
-        iX <- matrix(unlist(precompute$XX$pattern[[iPattern]]), nrow = iTime2, ncol = dim(precompute$XX$pattern[[iPattern]])[3], byrow = FALSE)
+        iX <- precompute$XX$pattern[[iPattern]]
                     
         ## *** mean,mean,vcov
         for(iParam in name.varcoef[[iPattern]]){ ## iParam <- name.varcoef[[iPattern]][1]
-            iValue <- (as.double(iOmega %*% dOmega[[iPattern]][[iParam]] %*% iOmega)  %*% iX)[as.double(precompute$XX$key)]
+            iValue <- (as.double(iOmega %*% dOmega[[iPattern]][[iParam]] %*% iOmega) %*% iX)[as.double(precompute$XX$key)]
             dhessian[name.mucoef,name.mucoef,iParam] <- dhessian[name.mucoef,name.mucoef,iParam] + iValue
         }
         ## *** mean,vcov,vcov
@@ -89,7 +89,7 @@
             termB <- precision[[iPattern]] %*% d2Omega[[iPattern]][[index.pairB1]] %*% precision[[iPattern]] %*% dOmega[[iPattern]][[iParam[1]]]
             termC <- precision[[iPattern]] %*% dOmega[[iPattern]][[iParam[2]]] %*% precision[[iPattern]] %*% d2Omega[[iPattern]][[index.pairB2]]
             iValue <- -0.5 * Upattern.ncluster[iPattern] * tr(-2*termA + termB + termC)
-            ## if(all(iParam==c("rho","rho","rho"))){browser()}
+
             dhessian[iParam[1],iParam[2],iParam[3]] <- dhessian[iParam[1],iParam[2],iParam[3]] + iValue ## a b c
             if(iParam[1]!=iParam[2]){ 
                 dhessian[iParam[2],iParam[1],iParam[3]] <- dhessian[iParam[2],iParam[1],iParam[3]] + iValue ## b a c
@@ -235,6 +235,7 @@
     ## ** degrees of freedom
     if(diag){
         df <- stats::setNames(sapply(name.effects, function(iP){
+            ## print(data.frame(name = as.character(iP),num = as.double(2 * vcov[iP,iP]^2),denum = as.double((A.dVcov[iP,iP,] %*% vcov %*% A.dVcov[iP,iP,]))))
             2 * vcov[iP,iP]^2 / (A.dVcov[iP,iP,] %*% vcov %*% A.dVcov[iP,iP,])
         }), name.effects)
     }else{

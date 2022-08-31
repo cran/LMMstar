@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt  7 2020 (11:12) 
 ## Version: 
-## Last-Updated: Jun  2 2022 (14:43) 
+## Last-Updated: jun 30 2022 (15:25) 
 ##           By: Brice Ozenne
-##     Update #: 1958
+##     Update #: 1996
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -160,7 +160,7 @@ lmm <- function(formula, repetition, structure, data,
     }
     
     ## ** 1. check and normalize user input
-    if(trace>=1){cat("1. Check and normalize user input \n")}
+    if(trace>=1){cat("1. Check and normalize user input")}
 
     ## *** structure
     if(!missing(structure)){
@@ -293,7 +293,8 @@ lmm <- function(formula, repetition, structure, data,
     }
     U.time <- levels(data$XXtimeXX)
     if(length(var.time)>0){
-        attr(U.time,"original") <- data[!duplicated(data[["XXtimeXX"]]), var.time,drop=FALSE]
+        ls.timeOriginal <- by(data[,var.time,drop=FALSE],data$XXtimeXX,function(iDF){iDF[1,,drop=FALSE]}, simplify = FALSE)
+        attr(U.time,"original") <- do.call(rbind,ls.timeOriginal)
     }
     n.time <- length(U.time)
     out$time <- list(n = n.time, levels = U.time, var = var.time)
@@ -345,6 +346,12 @@ lmm <- function(formula, repetition, structure, data,
         optimizer <- match.arg(control$optimizer, c("gls","FS",optimx.method)) ## FS = fisher scoring
         control$optimizer <- NULL
     }
+    if(is.null(control$trace)){
+        trace.control <- trace-1
+    }else{
+        trace.control <- control$trace
+    }
+
     if(optimizer=="gls"){
 
         ## stratification of the mean structure
@@ -379,7 +386,6 @@ lmm <- function(formula, repetition, structure, data,
         }
 
     }
-
 
     ## *** weights
     if(!is.null(weights)){
@@ -539,6 +545,20 @@ lmm <- function(formula, repetition, structure, data,
     out$formula$var.design <- structure$formula$var
     out$formula$cor.design <- structure$formula$cor
     var.Z <- c(all.vars(out$formula$var.design),all.vars(out$formula$cor.design))
+
+    if(!identical(structure$name$var[[1]], NA) && any(structure$name$var[[1]] %in% names(data) == FALSE)){
+        invalid <- structure$name$var[[1]][structure$name$var[[1]] %in% names(data) == FALSE]
+        stop("Variance structure inconsistent with argument \'data\'. \n",
+             "Variable(s) \"",paste(invalid, collapse = "\" \""),"\" could not be found in the dataset. \n",
+             sep = "")
+    }
+    if(!identical(structure$name$cor[[1]], NA) && any(structure$name$cor[[1]] %in% names(data) == FALSE)){
+        invalid <- structure$name$cor[[1]][structure$name$cor[[1]] %in% names(data) == FALSE]
+        stop("Correlation structure inconsistent with argument \'data\'. \n",
+             "Variable(s) \"",paste(invalid, collapse = "\" \""),"\" could not be found in the dataset. \n",
+             sep = "")
+    }
+
     if(trace>=2){cat("\n")}
 
     ## *** missing values
@@ -642,7 +662,7 @@ lmm <- function(formula, repetition, structure, data,
 
 
     ## ** 3. Estimate model parameters
-    if(trace>=1){cat("3. Estimate model parameters")}
+    if(trace>=1){cat("3. Estimate model parameters\n")}
 
     if(optimizer=="gls"){
         name.var <- unlist(structure$name$var)
@@ -721,21 +741,61 @@ lmm <- function(formula, repetition, structure, data,
         }
         out$opt <- list(name = "gls")
     }else{
+
+        if(identical(control$init,"lmer")){
+            ## check feasibility
+            requireNamespace("lme4")
+            if(out$design$vcov$type!="CS" || out$design$vcov$heterogeneous){
+                stop("Initializer \"lmer\" only available for homegeneous CS structures.")
+            }
+            if(n.strata>1){
+                stop("Initializer \"lmer\" cannot handle multiple strata.")
+            }
+
+            ## identify nesting
+            nesting <- .nestingRanef(out)
+            table.nesting <- attr(nesting,"rho2variable")[[1]]
+
+            ## fit lmer model
+            lmer.formula <- out$formula$mean
+            if(is.null(attr(nesting, "nesting.var"))){
+                lmer.formula <- stats::update(lmer.formula, stats::as.formula(paste0(".~.+(1|",out$cluster$var,")")))
+            }else{
+                lmer.formula <- stats::update(lmer.formula, stats::as.formula(paste0(".~.+(1|",paste(c(out$cluster$var,attr(nesting, "nesting.var")),collapse="/"),")")))
+            }
+            e.lmer <- lme4::lmer(lmer.formula, data = data, REML = method.fit=="REML")
+
+            ## extract lmer estimates
+            lmer.beta <- lme4::fixef(e.lmer)
+            lmer.sigma <- stats::setNames(stats::sigma(e.lmer)^2,"sigma")
+            lmer.tau <- stats::setNames((sapply(lme4::VarCorr(e.lmer),attr,"stddev"))^2, sapply(strsplit(names(lme4::VarCorr(e.lmer)),split=":"),"[",1))
+
+            ## convert to LMMstar estimates
+            init.sigma <- sqrt(lmer.sigma+sum(lmer.tau))
+            init.tau <- cumsum(rev(lmer.tau))/init.sigma^2
+            names(init.tau) <- table.nesting$param[match(gsub("(Intercept)",out$cluster$var,table.nesting$variable, fixed = TRUE),names(init.tau))]
+            if(!identical(sort(names(c(lmer.beta,init.sigma,init.tau))), sort(out$design$param$name))){
+                stop("Could not identify all coefficients from the lmer model. \n")
+            }
+            
+            control$init <- c(lmer.beta,init.sigma,init.tau)[out$design$param$name]
+        }
+        
         outEstimate <- .estimate(design = out$design, time = out$time, method.fit = method.fit, type.information = type.information,
                                  transform.sigma = options$transform.sigma, transform.k = options$transform.k, transform.rho = options$transform.rho,
                                  precompute.moments = precompute.moments, 
-                                 optimizer = optimizer, init = control$init, n.iter = control$n.iter, tol.score = control$tol.score, tol.param = control$tol.param, trace = control$trace)
+                                 optimizer = optimizer, init = control$init, n.iter = control$n.iter, tol.score = control$tol.score, tol.param = control$tol.param, trace = trace.control)
         param.value <- outEstimate$estimate
-        out$opt <- c(name = optimizer, outEstimate[c("cv","n.iter","score","previous.estimate")])
+        out$opt <- c(name = optimizer, outEstimate[c("cv","n.iter","score","previous.estimate","previous.logLik","control")])
         
-        if(out$opt$cv==FALSE){
+        if(out$opt$cv<=0){
             warning("Convergence issue: no stable solution has been found. \n")
         }
         
     }
     out$param <- param.value
 
-    if(trace>=1){cat("\n")}
+    if(trace.control>=2){cat("\n")}
 
     ## ** 4. Compute likelihood derivatives
     if(trace>=1){cat("4. Compute likelihood derivatives \n")}
@@ -893,7 +953,7 @@ lmm <- function(formula, repetition, structure, data,
         }
     }
     data$XXtime.indexXX <- as.numeric(data$XXtimeXX)
-    
+
     ## ** strata
     if(length(var.strata)>1){
         ## create new variable summarizing all variables

@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Jun 18 2021 (09:15) 
 ## Version: 
-## Last-Updated: maj 30 2022 (11:23) 
+## Last-Updated: Jul  1 2022 (09:42) 
 ##           By: Brice Ozenne
-##     Update #: 343
+##     Update #: 394
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -107,11 +107,23 @@
 
     if(trace>=1){cat("- Omega \n")}
     out$Omega <- .calc_Omega(object = design$vcov, param = param.value, keep.interim = TRUE)
-    out$OmegaM1 <- try(lapply(out$Omega,solve), silent = TRUE)
-    if(inherits(out$OmegaM1,"try-error")){
-        stop("Could not invert the residuals variance-covariance matrix. \n",
-             out$OmegaM1)
+
+    ## choleski decomposition
+    Omega.chol <- lapply(out$Omega,function(iO){try(chol(iO),silent=TRUE)})
+    if(any(sapply(Omega.chol,inherits,"try-error"))){
+        index.error <- which(sapply(Omega.chol,inherits,"try-error"))
+        attr(out,"error") <- c("Residuals variance-covariance matrix is not positive definite. Original error message:\n",
+                               unique(unlist(Omega.chol[index.error])))
     }
+    ## inverse
+    out$OmegaM1 <- lapply(Omega.chol,function(iChol){
+        if(inherits(iChol,"try-error")){return(iChol)}else{return(chol2inv(iChol))}
+    })
+    ## determinant
+    attr(out$OmegaM1,"logdet") <- sapply(Omega.chol, function(iChol){
+        if(inherits(iChol,"try-error")){return(NA)}else{return(-2*sum(log(diag(iChol))))}
+    })
+    ## log(sapply(out$OmegaM1,det))
     if(score || information || vcov || df){
         if(trace>=1){cat("- dOmega \n")}
         out$dOmega <- .calc_dOmega(object = design$vcov, param = param.value, Omega = out$Omega,
@@ -119,6 +131,19 @@
                                    transform.sigma = transform.sigma,
                                    transform.k = transform.k,
                                    transform.rho = transform.rho)
+
+        attr(out$dOmega, "ls.dOmega_OmegaM1") <- stats::setNames(lapply(design$vcov$X$Upattern$name, function(iPattern){
+            lapply(out$dOmega[[iPattern]], function(iM){
+                if(inherits(out$OmegaM1[[iPattern]],"try-error")){return(NA)}else{iM %*% out$OmegaM1[[iPattern]]}
+            })
+        }), design$vcov$X$Upattern$name)
+        attr(out$dOmega, "ls.OmegaM1_dOmega_OmegaM1") <- stats::setNames(lapply(design$vcov$X$Upattern$name, function(iPattern){ ## iPattern <- "1:1"
+            lapply(attr(out$dOmega, "ls.dOmega_OmegaM1")[[iPattern]], function(iM){
+                if(inherits(out$OmegaM1[[iPattern]],"try-error")){return(NA)}else{out$OmegaM1[[iPattern]] %*% iM}
+            })
+        }), design$vcov$X$Upattern$name)
+        attr(out$dOmega, "dOmega_OmegaM1") <- lapply(attr(out$dOmega, "ls.dOmega_OmegaM1"), function(iO){ do.call(cbind, lapply(iO,as.numeric)) })
+        attr(out$dOmega, "OmegaM1_dOmega_OmegaM1") <- lapply(attr(out$dOmega, "ls.OmegaM1_dOmega_OmegaM1"), function(iO){ do.call(cbind, lapply(iO,as.numeric)) })
     }
 
     if(test.d2Omega){
@@ -245,6 +270,7 @@
             dimnames(out$dVcov) <- list(newname.allcoef[dimnames(out$dVcov)[[1]]], newname.allcoef[dimnames(out$dVcov)[[2]]], newname.allcoef[dimnames(out$dVcov)[[3]]])
         }
     }
+
     ## ** 4- export
     return(out)
 }

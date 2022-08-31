@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: sep 22 2021 (13:47) 
 ## Version: 
-## Last-Updated: maj 17 2022 (16:39) 
+## Last-Updated: jun 27 2022 (12:21) 
 ##           By: Brice Ozenne
-##     Update #: 19
+##     Update #: 25
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -22,7 +22,7 @@
     p <- NCOL(X)
     n.pattern <- length(pattern)
 
-    out <- list(pattern = stats::setNames(lapply(pattern, function(iPattern){array(0, dim = c(pattern.ntime[iPattern],pattern.ntime[iPattern],p*(p+1)/2))}), pattern),
+    out <- list(pattern = stats::setNames(lapply(pattern, function(iPattern){matrix(0, nrow = pattern.ntime[iPattern]*pattern.ntime[iPattern], ncol = p*(p+1)/2)}), pattern),
                 key = matrix(as.numeric(NA),nrow=p,ncol=p,dimnames=list(colnames(X),colnames(X))),
                 Xpattern = stats::setNames(vector(mode = "list", length = n.pattern),pattern))
 
@@ -38,17 +38,18 @@
             out$Xpattern[[iPattern]] <- do.call(rbind,lapply(index.cluster[pattern.cluster[[iPattern]]], function(iIndex){X[iIndex,,drop=FALSE]}))
             iX.summary <- crossprod(out$Xpattern[[iPattern]])
             ## out$key[lower.tri(out$key,diag = TRUE)]
-            out$pattern[[iPattern]][1,1,] <- iX.summary[lower.tri(iX.summary, diag = TRUE)]
+            out$pattern[[iPattern]][1,] <- iX.summary[lower.tri(iX.summary, diag = TRUE)]
         }else{
             out$Xpattern[[iPattern]] <- array(unlist(lapply(index.cluster[pattern.cluster[[iPattern]]], function(iIndex){X[iIndex,,drop=FALSE]})),
-                                              dim = c(iTime,NCOL(X),length(index.cluster[pattern.cluster[[iPattern]]])))
+                                              dim = c(iTime,NCOL(X),length(index.cluster[pattern.cluster[[iPattern]]])),
+                                              dimnames = list(NULL,colnames(X),NULL))
 
             for(iCol1 in 1:p){ ## iCol1 <- 1
                 for(iCol2 in 1:iCol1){ ## iCol2 <- 2
                     ## for(iId in pattern.cluster[[iPattern]]){
                     ##     out$pattern[[iPattern]][,,out$key[iCol1,iCol2]] <- out$pattern[[iPattern]][,,out$key[iCol1,iCol2]] + tcrossprod(X[index.cluster[[iId]],iCol1,drop=FALSE],X[index.cluster[[iId]],iCol2,drop=FALSE])
                     ## }
-                    out$pattern[[iPattern]][,,out$key[iCol1,iCol2]] <- tcrossprod(out$Xpattern[[iPattern]][,iCol1,],out$Xpattern[[iPattern]][,iCol2,])
+                    out$pattern[[iPattern]][,out$key[iCol1,iCol2]] <- tcrossprod(out$Xpattern[[iPattern]][,iCol1,],out$Xpattern[[iPattern]][,iCol2,])
                 }
             }
         }
@@ -60,7 +61,7 @@
 ## Precompute design matrix times residuals
 .precomputeXR <- function(X, residuals, pattern, pattern.ntime, pattern.cluster, index.cluster){
     p <- NCOL(X[[1]])
-    name.mucoef <- colnames(X)
+    name.mucoef <- colnames(X[[1]])
     n.pattern <- length(pattern)
 
     out <- stats::setNames(lapply(pattern, function(iPattern){
