@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: jun 16 2022 (15:19) 
 ## Version: 
-## Last-Updated: jun 28 2022 (11:44) 
+## Last-Updated: jan  4 2023 (11:41) 
 ##           By: Brice Ozenne
-##     Update #: 261
+##     Update #: 285
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -18,7 +18,6 @@
 ## * profile.lmm (documentation)
 ##' @title Display Contour of the log-Likelihood
 ##' @description Display the (restricted) log-likelihood around Maximum Likelihood Estimate (MLE) under specific constrains.
-##' @name profile
 ##'
 ##' @param fitted a \code{lmm} object.
 ##' @param effects [character vector] name of the parameters who will be constrained.
@@ -99,8 +98,9 @@ profile.lmm <- function(fitted, effects = NULL, profile.likelihood = FALSE,
 
     p.trans <- confint(fitted, effects = "all", level = conf.level,
                        transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho,
-                       transform.names = transform.names)
+                       transform.names = transform.names, backtransform = FALSE)
     name.p.trans <- rownames(p.trans)
+    rownames(p.trans) <- name.p
 
     if(is.null(effects)){
         effects <- options$effects
@@ -141,6 +141,7 @@ profile.lmm <- function(fitted, effects = NULL, profile.likelihood = FALSE,
     ls.profile <- lapply(1:n.effects, function(iParam){ ## iParam <- 4
 
         iIndex <- which(name.p == effects[iParam])
+        iName <- name.p[iIndex]
         iName.trans <- name.p.trans[iIndex]
         iType <- unname(type.p[iIndex])
         iValue <- unname(p[iIndex,"estimate"])
@@ -230,7 +231,8 @@ profile.lmm <- function(fitted, effects = NULL, profile.likelihood = FALSE,
     ## ** collect
     df.profile <- do.call(rbind,ls.profile)
     df.profile$param <- factor(df.profile$param, levels = unique(df.profile$param))
-    
+    ## unique(df.profile$param)
+
     ## ** display
     if(plot){
         if(plot>=2){
@@ -257,7 +259,7 @@ profile.lmm <- function(fitted, effects = NULL, profile.likelihood = FALSE,
         }
         gg <- gg + ggplot2::facet_wrap(~param, scales= scales, nrow = nrow, ncol = ncol)
         if(size[2]>0){
-            gg <- gg + ggplot2::geom_line(size = size[2])
+            gg <- gg + ggplot2::geom_line(linewidth = size[2])
         }
         if(size[3]>0 && (plot<=1)){
             df.fit <- do.call(rbind,by(df.profile, df.profile$param, function(iDF){ ## iDF <- df.profile[df.profile$param=="sigma",]
@@ -269,7 +271,7 @@ profile.lmm <- function(fitted, effects = NULL, profile.likelihood = FALSE,
                 return(iDF)
             }))
             df.fit$param <- factor(df.fit$param, levels = levels(df.profile$param))
-            gg <- gg + ggplot2::geom_line(data = df.fit, size = size[3], linetype = linetype[1], ggplot2::aes(color = "quadratic approximation"))
+            gg <- gg + ggplot2::geom_line(data = df.fit, linewidth = size[3], linetype = linetype[1], ggplot2::aes(color = "quadratic approximation"))
         }
         if(size[1]>0){
             gg <- gg  + ggplot2::geom_point(data = df.profile[df.profile$optimum==TRUE,,drop=FALSE], ggplot2::aes(color = "MLE"), size = size[1], shape = shape)
@@ -283,11 +285,16 @@ profile.lmm <- function(fitted, effects = NULL, profile.likelihood = FALSE,
 
             ## recompute ci at level 0.95
             p.trans2 <- confint(fitted, effects = "all", level = 0.95,
-                               transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho,
-                               transform.names = transform.names)
+                                transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho,
+                                transform.names = transform.names, backtransform = FALSE)
 
             df.ci <- cbind(param = rownames(p.trans2), p.trans2)[which(name.p %in% effects),,drop=FALSE]
-            df.ci$param <- factor(df.ci$param, levels = levels(df.profile$param))
+            if(transform.names){
+                df.ci$param <- factor(df.ci$param, levels = levels(df.profile$param))
+                ## df.ci$param <- factor(name.p.trans[match(df.ci$param,name.p)], levels = levels(df.profile$param))
+            }else{
+                df.ci$param <- factor(df.ci$param, levels = levels(df.profile$param))
+            }
             gg <- gg + ggplot2::geom_vline(data = df.ci, mapping = ggplot2::aes_string(xintercept = "lower"), size = size[4], linetype = linetype[2])
             gg <- gg + ggplot2::geom_vline(data = df.ci, mapping = ggplot2::aes_string(xintercept = "upper"), size = size[4], linetype = linetype[2])
         }

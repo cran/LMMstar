@@ -1429,8 +1429,18 @@ INPUT C:\Users\hpl802\AppData\Roaming\MiKTeX\2.9\tex\generic\gettitlestring\gett
 INPUT C:\Users\hpl802\AppData\Roaming\MiKTeX\2.9\tex\generic\gettitlestring\gettitlestring.sty
 INPUT C:\Users\hpl802\AppData\Roaming\MiKTeX\2.9\tex\latex\kvoptions\kvoptions.sty
 INPUT C:\Users\hpl802\AppData\Roaming\MiKTeX\2.9\tex\generic\ltxcmds\ltxcmds.sty
-OUTPUT overview.out
+INPUT .\overview.out
+INPUT overview.out
+INPUT .\overview.out
+INPUT overview.out
+INPUT .\overview.out
+INPUT overview.out
+INPUT .\overview.out
+INPUT overview.out
 OUTPUT overview.pdf
+INPUT .\overview.out
+INPUT .\overview.out
+OUTPUT overview.out
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\ec-lmr17.tfm
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\ec-lmr12.tfm
 INPUT C:\Program Files\MiKTeX 2.9\tex\latex\lm\ot1lmr.fd
@@ -1512,6 +1522,7 @@ INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\ec-lmtt10.tfm
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\ec-lmr10.tfm
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\ec-lmr17.tfm
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\ec-lmbx12.tfm
+INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\ec-lmbx12.tfm
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmr10.tfm
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmr8.tfm
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmr6.tfm
@@ -1533,7 +1544,12 @@ INPUT C:\Users\hpl802\AppData\Local\MiKTeX\2.9\fonts\tfm\public\stmaryrd\stmary6
 INPUT C:\Users\hpl802\AppData\Roaming\MiKTeX\2.9\fonts\tfm\public\prodint\prodint.tfm
 INPUT C:\Users\hpl802\AppData\Roaming\MiKTeX\2.9\fonts\tfm\public\prodint\prodint.tfm
 INPUT C:\Users\hpl802\AppData\Roaming\MiKTeX\2.9\fonts\tfm\public\prodint\prodint.tfm
-INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\ec-lmbx12.tfm
+INPUT .\figures\summarizeNA.pdf
+INPUT .\figures\summarizeNA.pdf
+INPUT figures\summarizeNA.pdf
+INPUT .\figures\summarizeNA.pdf
+INPUT .\figures\summarizeNA.pdf
+INPUT .\figures\summarizeNA.pdf
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmr12.tfm
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmmi12.tfm
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmsy10.tfm
@@ -1551,7 +1567,18 @@ INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\amsfonts\symbols\msbm5.tfm
 INPUT C:\Users\hpl802\AppData\Local\MiKTeX\2.9\fonts\tfm\public\stmaryrd\stmary5.tfm
 INPUT C:\Users\hpl802\AppData\Roaming\MiKTeX\2.9\fonts\tfm\public\prodint\prodint.tfm
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\ec-lmr7.tfm
+INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmbx12.tfm
+INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmbx8.tfm
+INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmbx6.tfm
+INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmmib10.tfm
+INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmmib10.tfm
+INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmmib7.tfm
+INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmbsy10.tfm
+INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmbsy10.tfm
+INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmbsy7.tfm
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\ec-lmtt10.tfm
+INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\ec-lmr6.tfm
+INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\ec-lmbx6.tfm
 INPUT .\figures\diag-scatterplot.pdf
 INPUT .\figures\diag-scatterplot.pdf
 INPUT figures\diag-scatterplot.pdf
@@ -1570,12 +1597,16 @@ INPUT figures\diag-correlation.pdf
 INPUT .\figures\diag-correlation.pdf
 INPUT .\figures\diag-correlation.pdf
 INPUT .\figures\diag-correlation.pdf
+INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmbx10.tfm
+INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmbx7.tfm
+INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmbx5.tfm
 INPUT .\figures\diag-qqplot.pdf
 INPUT .\figures\diag-qqplot.pdf
 INPUT figures\diag-qqplot.pdf
 INPUT .\figures\diag-qqplot.pdf
 INPUT .\figures\diag-qqplot.pdf
 INPUT .\figures\diag-qqplot.pdf
+INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmbx10.tfm
 INPUT .\figures\fit-autoplot.pdf
 INPUT .\figures\fit-autoplot.pdf
 INPUT figures\fit-autoplot.pdf
@@ -1600,7 +1631,6 @@ INPUT figures\fit-pres.pdf
 INPUT .\figures\fit-pres.pdf
 INPUT .\figures\fit-pres.pdf
 INPUT .\figures\fit-pres.pdf
-INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\ec-lmr6.tfm
 INPUT .\figures\gg-baseAdj.pdf
 INPUT .\figures\gg-baseAdj.pdf
 INPUT figures\gg-baseAdj.pdf
@@ -1613,28 +1643,23 @@ INPUT figures\imputation.pdf
 INPUT .\figures\imputation.pdf
 INPUT .\figures\imputation.pdf
 INPUT .\figures\imputation.pdf
-INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmbx12.tfm
-INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmbx8.tfm
-INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmbx6.tfm
-INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmmib10.tfm
-INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmmib10.tfm
-INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmmib7.tfm
-INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmbsy10.tfm
-INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmbsy10.tfm
-INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmbsy7.tfm
+INPUT .\figures\forestplot.pdf
+INPUT .\figures\forestplot.pdf
+INPUT figures\forestplot.pdf
+INPUT .\figures\forestplot.pdf
+INPUT .\figures\forestplot.pdf
+INPUT .\figures\forestplot.pdf
 INPUT .\overview.bbl
 INPUT overview.bbl
 INPUT .\overview.bbl
 INPUT overview.bbl
-INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmbx10.tfm
-INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmbx7.tfm
-INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmbx5.tfm
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmmib10.tfm
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmmib7.tfm
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmmib5.tfm
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmbsy10.tfm
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmbsy7.tfm
 INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\lmbsy5.tfm
+INPUT C:\Program Files\MiKTeX 2.9\fonts\tfm\public\lm\rm-lmbx12.tfm
 OUTPUT overview.soc
 OUTPUT overview.loc
 INPUT overview.aux
@@ -1643,13 +1668,15 @@ INPUT .\overview.out
 INPUT C:\Program Files\MiKTeX 2.9\fonts\enc\dvips\lm\lm-mathsy.enc
 INPUT C:\Program Files\MiKTeX 2.9\fonts\enc\dvips\lm\lm-rm.enc
 INPUT C:\Program Files\MiKTeX 2.9\fonts\enc\dvips\lm\lm-mathit.enc
-INPUT C:\Program Files\MiKTeX 2.9\fonts\enc\dvips\lm\lm-mathex.enc
 INPUT C:\Program Files\MiKTeX 2.9\fonts\enc\dvips\lm\lm-ec.enc
+INPUT C:\Program Files\MiKTeX 2.9\fonts\enc\dvips\lm\lm-mathex.enc
 INPUT C:\Program Files\MiKTeX 2.9\fonts\enc\dvips\lm\lm-ts1.enc
 INPUT C:\Program Files\MiKTeX 2.9\fonts\type1\public\lm\lmbx10.pfb
 INPUT C:\Program Files\MiKTeX 2.9\fonts\type1\public\lm\lmbx10.pfb
 INPUT C:\Program Files\MiKTeX 2.9\fonts\type1\public\lm\lmbx12.pfb
 INPUT C:\Program Files\MiKTeX 2.9\fonts\type1\public\lm\lmbx12.pfb
+INPUT C:\Program Files\MiKTeX 2.9\fonts\type1\public\lm\lmbx6.pfb
+INPUT C:\Program Files\MiKTeX 2.9\fonts\type1\public\lm\lmbx6.pfb
 INPUT C:\Program Files\MiKTeX 2.9\fonts\type1\public\lm\lmbx7.pfb
 INPUT C:\Program Files\MiKTeX 2.9\fonts\type1\public\lm\lmbx7.pfb
 INPUT C:\Program Files\MiKTeX 2.9\fonts\type1\public\lm\lmbx8.pfb

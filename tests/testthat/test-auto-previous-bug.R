@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt 23 2020 (12:33) 
 ## Version: 
-## Last-Updated: May 31 2022 (20:58) 
+## Last-Updated: jan  3 2023 (17:57) 
 ##           By: Brice Ozenne
-##     Update #: 115
+##     Update #: 135
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -19,6 +19,8 @@ if(FALSE){
     library(testthat)
     library(data.table)
     library(nlme)
+    library(lme4)
+    library(lmerTest)
 
     library(LMMstar)
 }
@@ -93,14 +95,16 @@ test_that("lmm - error due to minus sign in levels of a categorical variable",{
 ## * from: Julie Lyng Forman <jufo@sund.ku.dk> date: Wednesday, 07/07/21 11:00 PM (1/3)
 test_that("lmm - error when predicting due to missing values in the covariates",{
     data(gastricbypassL, package = "LMMstar")
-    e.lmm  <- lmm(weight ~ glucagonAUC, repetition = ~ time|id , structure = "CS", data = gastricbypassL)
+    e.lmm  <- lmm(weight ~ glucagonAUC, repetition = ~ time|id , structure = "CS",
+                  data = gastricbypassL[!is.na(gastricbypassL$glucagonAUC),])
     summary(e.lmm, print = FALSE) ## was bugging at some point
     capture.output(summary(e.lmm, hide.fit = TRUE, hide.sd = TRUE, hide.cor = TRUE)) ## was bugging at some point
     expect_equal(NROW(predict(e.lmm, newdata = gastricbypassL)),NROW(gastricbypassL))
 
     set.seed(10)
     gastricbypassL$Gender <- factor(as.numeric(gastricbypassL$id) %% 2, levels = 0:1, labels = c("M","F"))
-    e2.lmm  <- lmm(weight ~ Gender*glucagonAUC, repetition =Gender ~ time|id , structure = "CS", data = gastricbypassL)
+    e2.lmm  <- lmm(weight ~ Gender*glucagonAUC, repetition = Gender ~ time|id , structure = "CS",
+                   data = gastricbypassL[!is.na(gastricbypassL$glucagonAUC),])
     sigma(e2.lmm)
     summary(e2.lmm, print = FALSE)
 })
@@ -443,6 +447,106 @@ test_that("LRT", {
     test <- anova(e.lmm1, e.lmm2)
     expect_equal(test$p.value,0.5017193, tol = 1e-5)
     expect_equal(test$p.value,1-pchisq(abs(2*(logLik(e.lmm1)-logLik(e.lmm2))), df = 2), tol = 1-5)
+})
+
+## * from: Sophia Armand Thursday, Aug 18, 2022 11:57:41 AM
+test_that("0 variability in the outcome", {
+
+    df <- data.frame("Accuracy_fear" = c(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, NA, 1.0, 1.0, 1.0, 1.0, 1.0, 0.5, 1.0, 1.0, 1.0, NA, 1.0, 0.8, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0), 
+                     "intervention" = c("baseline", "baseline", "baseline", "baseline", "psilocybin", "psilocybin", "baseline", "baseline", "psilocybin", "psilocybin", "baseline", "baseline", "psilocybin", "baseline", "psilocybin", "psilocybin", "baseline", "baseline", "psilocybin", "baseline", "psilocybin", "baseline", "baseline", "psilocybin", "psilocybin", "psilocybin", "baseline", "baseline", "baseline", "psilocybin", "baseline", "psilocybin", "baseline", "psilocybin", "baseline", "baseline", "psilocybin", "psilocybin", "baseline", "baseline", "psilocybin", "baseline", "baseline", "psilocybin", "psilocybin", "psilocybin"), 
+                     "cimbi" = c( 2, 20,  9, 18,  2, 20, 19,  5,  5, 18, 22, 21, 22, 24, 21, 24, 23, 25, 23, 26, 25, 16, 15, 16, 12, 15, 13, 17, 14, 13,  8, 14, 11, 11,  7,  1,  7,  1, 10,  4,  4,  6,  3, 10,  3,  6))
+
+    ## tapply(df$Accuracy_fear, df$intervention, var, na.rm = TRUE)
+    ##   baseline psilocybin 
+    ## 0.00000000 0.01467836 
+
+    expect_error(lmm(Accuracy_fear ~ intervention, repetition = ~intervention|cimbi, data = df,
+                     control = list(optimizer = "FS"), structure = "UN"))
+
+    e.lmm <- lmm(Accuracy_fear ~ intervention, repetition = ~intervention|cimbi, data = df,
+                 control = list(optimizer = "FS"), structure = "CS")
+    expect_equal(logLik(e.lmm), 43.76518, tol = 1e-5)
+
+})
+
+## * from: Brice, Monday 22-10-10 at 11:18
+library(mvtnorm)
+library(data.table)
+
+test_that("Incorrect ordering of the coefficient in mlmm", {
+    ## confusion of the order 1, 10, 2, 3 instead of 1, 2, 3, ...
+    n <- 25
+    J <- 10
+    rho <- 0.5
+    mu <- 1:J
+    Sigma <- rho + diag(1-rho,J,J)
+    dmu <- rep(0.2,J)
+
+    set.seed(10)
+    Y_G1 <- rmvnorm(n, mean = mu, sigma = Sigma)
+    Y_G2 <- rmvnorm(n, mean = mu + dmu, sigma = Sigma)
+
+    dtW <- rbind(data.table(id = paste0("H",formatC(1:n, width = 3, format = "d", flag = "0")),
+                            group = "G1",
+                            Y_G1),
+                 data.table(id = paste0("C",formatC(1:n, width = 3, format = "d", flag = "0")),
+                            group = "G2",
+                            Y_G2))
+    dtL <- melt(dtW, id.vars = c("id","group"), variable.name = "pipeline")
+    dtLS <- summarize(value ~ group+pipeline, dtL)
+
+    e.mlmm <- mlmm(value~group, repetition = ~1|id, data = dtL, df = FALSE, robust = TRUE,
+                   by = "pipeline", effects = "groupG2=0")
+
+    expect_equal(as.double(tapply(dtLS$mean,dtLS$pipeline,diff)),
+                 as.double(coef(e.mlmm)),
+                 tol = 1e-6)
+    expect_equal(c(0.73517896, 0.74659791, 0.4706369, 0.55304145, 0.50451361, 0.40581536, 0.57647407, 0.45109887, 0.66812277, 0.61664579),
+                 as.double(coef(e.mlmm)),
+                 tol = 1e-6)
+
+    expect_equal(as.double(model.tables(e.mlmm, method = "pool.gls")),
+                 c(0.6344376,0.22787562, Inf, 0.1878096, 1.0810656, 0.00536699),
+                 tol =  1e-6
+                 )
+})
+
+## * from: Brice, torsdag 22-11-03 at 11:18
+test_that("Start with cluster with single observation", {
+
+    set.seed(10)
+    dL <- sampleRem(100, n.times = 3, format = "long")
+    e.lmm <- lmm(Y ~ X1, repetition = ~1|id, structure = "CS", data = dL[3:19,], df = FALSE)
+    e.lmer <- lmer(Y ~ X1 + (1|id), data = dL[3:19,])
+    ## was giving an error
+    expect_equal(as.double(coef(e.lmm, effects = "ranef")[,1]),as.double(ranef(e.lmer)$id[,1]), tol = 1e-6)
+
+})
+
+## * from: Brice onsdag 22-12-07 at 16:44
+test_that("Incorrect count of the missing data when duplicated visit within individual", {
+
+    set.seed(10)
+    dL <- sampleRem(2, n.times = 3, format = "long")
+    dL$visit2 <- dL$visit
+    dL$visit2[2] <- "1"
+    dL$Y[2] <- NA
+
+    dLS0 <- summarize(Y ~ 1| id, data = dL[dL$visit==1,], na.rm = TRUE)
+    expect_equal(0, dLS0$missing)
+
+    ## summarize(Y ~ visit, data = dL, na.rm = TRUE)
+    dLS <- summarize(Y ~ visit| id, data = dL, na.rm = TRUE)
+    expect_equal(c(0,1,0), dLS$missing)
+    dLS2 <- summarize(Y ~ visit2| id, data = dL, na.rm = TRUE)
+    expect_equal(c(1,0,0), dLS2$missing)
+
+    
+    summarizeNA(dL)
+    summarizeNA(dL[,c("id","visit","Y")], repetition = ~visit|id)
+    summarizeNA(dL[,c("id","visit","Y","X1")], repetition = ~visit|id)
+    summarizeNA(dL, repetition = ~visit|id)
+
 })
 
 ######################################################################

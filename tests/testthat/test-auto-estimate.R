@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: jan 31 2022 (11:36) 
 ## Version: 
-## Last-Updated: jun 13 2022 (13:26) 
+## Last-Updated: Jan  5 2023 (09:19) 
 ##           By: Brice Ozenne
-##     Update #: 65
+##     Update #: 70
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -111,7 +111,7 @@ test_that("delta method for association based on residual variance", {
           X1 = as.double(p["variableY2:X1"]-p["k.Y2"]*p["rho(Y1,Y2)"]*p["variableY1:X1"]))
     })
     ## do not match standard error
-    summary(e.ANCOVA2)$coef[c("Y1","X1"),]
+    ## summary(e.ANCOVA2)$coef[c("Y1","X1"),]
     ## e.deltaANCOVA2
 
     test <- data.frame("estimate" = c(-0.07833768, -0.16568061), 
@@ -120,7 +120,7 @@ test_that("delta method for association based on residual variance", {
                        "lower" = c(-0.20496993, -0.84053168), 
                        "upper" = c(0.04829458, 0.50917047), 
                        "p.value" = c(0.22461774, 0.62798535))
-    expect_equal(as.double(unlist(test)), as.double(unlist(e.deltaANCOVA2)), tol = 1e-5)
+    expect_equal(as.double(unlist(test)), as.double(unlist(e.deltaANCOVA2)), tol = 1e-3)
 })
 
 ## * Association between the changes
@@ -133,7 +133,6 @@ summary(e.lm)$coef["dX",]
 test_that("delta method for association based on residual variance", {
 
     dL2 <- reshape2::melt(d, id.vars = c("id","X5"),  measure.vars = c("dX","dY"))
-
 
     ## bivariate mixed model estimating the association between the changes
     e.lmm2 <- lmm(value ~ variable, data = dL2, repetition = ~variable|id)
@@ -159,10 +158,10 @@ test_that("delta method for association based on residual variance", {
 
     test <- data.frame("estimate" = c(0.26819079), 
                        "se" = c(0.27761318), 
-                       "df" = c(45.3428542), 
-                       "lower" = c(-0.29083419), 
-                       "upper" = c(0.82721577), 
-                       "p.value" = c(0.33913908))
+                       "df" = c(45.32849395), 
+                       "lower" = c(-0.29083904), 
+                       "upper" = c(0.82722062), 
+                       "p.value" = c(0.33914069))
     expect_equal(as.double(unlist(e.delta2)), as.double(unlist(test)), tol = 1e-5)
     
     ## quadrivariate mixed model estimating the association between the changes
@@ -180,12 +179,12 @@ test_that("delta method for association based on residual variance", {
         iOmega[1,2]/iOmega[1,1]
     })
     test <- data.frame("estimate" = c(0.26819312), 
-                       "se" = c(0.27761253), 
-                       "df" = c(16.65819987), 
-                       "lower" = c(-0.31843493), 
-                       "upper" = c(0.85482116), 
-                       "p.value" = c(0.34782614))
-    expect_equal(as.double(unlist(e.delta4)), as.double(unlist(test)), tol = 1e-4)
+                       "se" = c(0.27761261), 
+                       "df" = c(16.66677284), 
+                       "lower" = c(-0.31841161), 
+                       "upper" = c(0.85479785), 
+                       "p.value" = c(0.34781928))
+    expect_equal(as.double(unlist(e.delta4)), as.double(unlist(test)), tol = 1e-3)
 
 })
 
@@ -235,9 +234,9 @@ test_that("crossed random effect", {
     ## mydataR <- mydata[mydata$schoolid %in% 1:8,c("mathgain","schoolid","classid2","rep")]
 
     mydataR <- data.frame("mathgain" = c(32, 109, 56, 83, 53, 65, 51, 66, 88, -7, 60, -2, 101, 30, 65, 29, 152, 50, 60, 74, 91, 68, 94, 120, 58, 123, 88, 60, 152, 96, 57, 115, 58, 51, 104, 65, 64, 59, 70, 63, -110, 73, 100, -9, 67, 58, 72, 88, 115, 62, 42, 88, 71, 74, 67, 74, 87, 83, 93, 56, 40, 69, 75, 57, 23, 53, 114, 56, 55, 28, 61, 59, 57, 85, 28, 166, 61, 47, 62, 35, 52, 70, 11, 37, 36, 13, 6, 21, 26), 
-           "schoolid" = c(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8), 
-           "classid2" = c(1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 1, 1, 1, 1, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 1, 1, 1, 2, 2, 2, 2, 3, 3, 4, 4, 4, 4, 4, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3), 
-           "rep" = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16))
+                          "schoolid" = c(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8), 
+                          "classid2" = c(1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 1, 1, 1, 1, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 1, 1, 1, 1, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 1, 1, 1, 2, 2, 2, 2, 3, 3, 4, 4, 4, 4, 4, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3), 
+                          "rep" = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16))
 
     e.lmer <- lme4::lmer(mathgain ~ (1 | schoolid/classid2), data = mydataR)
     e.lmm <- lmm(mathgain ~ 1, repetition =~rep|schoolid,

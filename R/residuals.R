@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:40) 
 ## Version: 
-## Last-Updated: jun 28 2022 (11:35) 
+## Last-Updated: jan  3 2023 (18:58) 
 ##           By: Brice Ozenne
-##     Update #: 643
+##     Update #: 702
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -18,7 +18,6 @@
 ## * residuals.lmm (documentation)
 ##' @title Extract The Residuals From a Linear Mixed Model
 ##' @description Extract or compute the residuals of a linear mixed model.
-##' @name residuals
 ##' 
 ##' @param object a \code{lmm} object.
 ##' @param type [character] type of residual to output: raw residuals (\code{"response"}), Pearson residuals (\code{"pearson"}), normalized residuals (\code{"normalized"}, scaled residual \code{"scaled"}), or partial residuals (\code{"partial"} or \code{"partial-center"}). Can also be \code{"all"} to output all except partial residuals. See detail section.
@@ -29,7 +28,7 @@
 ##' @param plot [character] Should a qqplot (\code{"qqplot"}), or a heatmap of the correlation between residuals  (\code{"correlation"}, require wide format), or a plot of residuals along the fitted values (\code{"scatterplot"}, require long format) be displayed?
 ##' @param engine.qqplot [character] Should ggplot2 or qqtest be used to display quantile-quantile plots? Only used when argument \code{plot} is \code{"qqplot"}.
 ##' @param add.smooth [logical] should a local smoother be used to display the mean of the residual values across the fitted values. Only relevant for \code{plot="scatterplot"}.
-##' @param digit.cor [integer, >0] Number of digit used to display the correlation coefficients? No correlation coefficient is displayed when set to 0. Only used when argument \code{plot} is \code{"correlation"}.
+##' @param digits.cor [integer, >0] Number of digit used to display the correlation coefficients? No correlation coefficient is displayed when set to 0. Only used when argument \code{plot} is \code{"correlation"}.
 ##' @param size.text [numeric, >0] Size of the font used to displayed text when using ggplot2.
 ##' @param keep.data [logical] Should the argument \code{data} be output along side the residuals? Only possible in the long format.
 ##' @param scales [character] Passed to \code{ggplot2::facet_wrap}.
@@ -38,12 +37,12 @@
 ##' @details The argument \code{type} defines how the residuals are computed:
 ##' \itemize{
 ##' \item \code{"fitted"}: fitted value \eqn{X_{ij} \hat{\beta}}.
-##' \item \code{"raw"}: observed outcome minus fitted value \eqn{\varepsilon_{ij} = Y_{ij} - X_{ij} \hat{\beta}}.
+##' \item \code{"response"}: raw residual, i.e. observed outcome minus fitted value \eqn{\varepsilon_{ij} = Y_{ij} - X_{ij} \hat{\beta}}.
 ##' \item \code{"pearson"}: each raw residual is divided by its modeled standard deviation \eqn{\varepsilon_{ij} = \frac{Y_{ij} - X_{ij} \hat{\beta}}{\sqrt{\hat{\omega}_{ij}}}}.
 ##' \item \code{"studentized"}: same as \code{"pearson"} but excluding the contribution of the cluster in the modeled standard deviation  \eqn{\varepsilon_{ij} = \frac{Y_{ij} - X_{ij} \hat{\beta}}{\sqrt{\hat{\omega}_{ij}-\hat{q}_{ij}}}}.
-##' \item \code{"normalized"}: raw residuals are multiplied, within clusters, by the inverse of the (lower) Cholesky factor of the modeled residual variance covariance matrix \eqn{\varepsilon_{ij} = ( Y_{i} - X_{i} \hat{\beta} )\hat{C}^{-1}}.
+##' \item \code{"normalized"}: raw residuals are multiplied, within clusters, by the inverse of the (upper) Cholesky factor of the modeled residual variance covariance matrix \eqn{\varepsilon_{ij} = ( Y_{i} - X_{i} \hat{\beta} )\hat{C}^{-1}}.
 ##' \item \code{"normalized2"}: same as \code{"normalized"} but excluding the contribution of the cluster in the modeled residual variance covariance matrix \eqn{\varepsilon_{ij} = ( Y_{i} - X_{i} \hat{\beta} ) \hat{D}_i^{-1}}.
-##' \item \code{"scaled"}: scaled residuals (see PROC MIXED in SAS).
+##' \item \code{"scaled"}: scaled residuals (see PROC MIXED in SAS). Numerically identical to \code{"normalized"} but computed by sequentially scaling and centering the residuals, to make them conditionally independent of previous residuals from the same cluster at previous repetitions.
 ##' \item \code{"partial"}: partial residuals (\eqn{\gamma E + \hat{\varepsilon}}). A reference level can be also be specified via the attribute \code{"reference"} to change the absolute level of the partial residuals.
 ##' \code{"partial-center"}: partial residuals with centered covariates (\eqn{\gamma E + \hat{\varepsilon}} where \eqn{E} has been centered, i.e., has 0-mean)
 ##' }
@@ -53,9 +52,9 @@
 ##' \item \eqn{Y} the outcome
 ##' \item \eqn{\hat{\beta}=(\hat{\gamma},\hat{\delta})} the estimated mean coefficients relative to \eqn{X=(E,W)}
 ##' \item \eqn{\hat{\Omega}} the modeled variance-covariance of the residuals and \eqn{\hat{\omega}} its diagonal elements
-##' \item \eqn{\hat{C}} the lower Cholesky factor of \eqn{\hat{\Omega}}, i.e. \eqn{\hat{C} \hat{C}^{t} = \hat{\Omega}}
+##' \item \eqn{\hat{C}} the upper Cholesky factor of \eqn{\hat{\Omega}}, i.e. upper triangular matrix satisfying \eqn{\hat{C}^{t} \hat{C} = \hat{\Omega}}
 ##' \item \eqn{\hat{Q}_i= X_i (X^{t}\hat{\Omega}X)^{-1}X_i^{t}} a cluster specific correction factor, approximating the contribution of cluster i to \eqn{\hat{\Omega}}. Its diagonal elements are denoted \eqn{\hat{q}_i}.
-##' \item \eqn{\hat{D}_i} the lower Cholesky factor of \eqn{\hat{\Omega}-\hat{Q}_i}
+##' \item \eqn{\hat{D}_i} the upper Cholesky factor of \eqn{\hat{\Omega}-\hat{Q}_i}
 ##' }
 ##'
 ##' @return
@@ -105,11 +104,10 @@
 ##' residuals(eUN.lmm, type = "partial", var = c("X6"), plot = "scatterplot")
 
 ## * residuals.lmm (code)
-##' @rdname residuals
 ##' @export
 residuals.lmm <- function(object, type = "response", format = "long",
                           data = NULL, p = NULL, keep.data = FALSE, var = NULL,
-                          plot = "none", engine.qqplot = "ggplot2", add.smooth = TRUE, digit.cor = 2, size.text = 16, scales = "free", ...){
+                          plot = "none", engine.qqplot = "ggplot2", add.smooth = TRUE, digits.cor = 2, size.text = 16, scales = "free", ...){
 
     options <- LMMstar.options()
     type.residual <- type
@@ -134,7 +132,7 @@ residuals.lmm <- function(object, type = "response", format = "long",
     object.OmegaM1 <- object$OmegaM1
 
     cluster.levels.original <- object$design$cluster$levels.original
-    time.levels.original <- object$design$time$levels.original
+    ## time.levels.original <- object$design$time$levels.original
     
     ## ** normalize user imput
     dots <- list(...)
@@ -357,8 +355,13 @@ residuals.lmm <- function(object, type = "response", format = "long",
     if("normalized" %in% type.residual){
         ## from SAS documentation
         ## If Var[Y]=V and C'C=V, then C'-1 Y has uniform dispersion and its elements are uncorrelated
-        ## B=chol(M) gives B'B = M 
-        sqrtPrecision$normalized <- lapply(precision,function(iP){t(chol(iP))})
+        ## B=chol(M) gives B'B = M
+
+        ## Var(AX) = A VarX A' = A \Omega A' = A \Omega^{1/2} \Omega^{t/2} A'
+        ## so A = \Omega^{-1/2} by first taking Cholesky and then inverting
+        ## However later on we use X A i.e. X[1,] %*% A i.e. t(A) %*% t(X[1,])
+        ## but chol(B) = A' A in R (instead of A A') so we do have A = solve(chol(\Omega))
+        sqrtPrecision$normalized <- lapply(Omega,function(iP){solve(chol(iP))})
     }
 
     ## ** raw residuals
@@ -398,7 +401,7 @@ residuals.lmm <- function(object, type = "response", format = "long",
             iOrder <- order(index.time[iIndex])
             iResidual <- res[iIndex[iOrder]]
             iN.time <- length(iIndex)
-                
+
             for(iType in type.residual){
                 if("pearson" %in% type.residual){
                     resnorm <- iResidual * sqrtPrecision$pearson[[index.variance[iId]]]
@@ -418,7 +421,7 @@ residuals.lmm <- function(object, type = "response", format = "long",
                 if("normalized2" %in% type.residual){
                     iX <- X[iIndex[iOrder],,drop=FALSE]
                     iQ <- iX %*% tX.precision.X.M1 %*% t(iX)
-                    resnorm <- as.double(iResidual %*% t(chol(solve(Omega[[index.variance[iId]]] - iQ))))
+                    resnorm <- as.double(iResidual %*% solve(chol(Omega[[index.variance[iId]]] - iQ)))
                     M.res[iIndex,"r.normalized2"] <- resnorm[order(iOrder)]
                 }
                 if("scaled" %in% type.residual){
@@ -454,12 +457,27 @@ residuals.lmm <- function(object, type = "response", format = "long",
         fitted <- matrix(NA, nrow = n.allobs, ncol = NCOL(Msave.fit), dimnames = list(NULL, colnames(Msave.fit)))
         fitted[-index.na,] <- Msave.fit
 
-        level.cluster <- rep(NA, n.allobs)
-        level.cluster[index.na] <- factor(attr(index.na,"cluster"), levels = cluster.levels.original)
-        level.cluster[-index.na] <- factor(index.cluster, levels = 1:length(cluster.levels.original), labels = cluster.levels.original)
-        level.time <- rep(NA, n.allobs)
-        level.time[index.na] <- factor(attr(index.na,"time"), levels = time.levels.original)
-        level.time[-index.na] <- factor(index.time, levels = 1:length(time.levels.original), labels = time.levels.original)
+        if(is.null(cluster.levels.original)){
+            level.cluster <- levels(attr(index.na,"cluster"))
+        }else{
+            level.cluster <- rep(NA, n.allobs)
+            level.cluster[index.na] <- factor(attr(index.na,"cluster"), levels = cluster.levels.original)
+            level.cluster[-index.na] <- factor(index.cluster, levels = 1:length(cluster.levels.original), labels = cluster.levels.original)
+        }
+
+        if(is.null(cluster.levels.original)){
+            level.time <- levels(attr(index.na,"time"))
+        }else{
+            level.time <- rep(NA, n.allobs)
+            if(NCOL(attr(index.na,"time"))>1){
+                level.time[index.na] <- factor(interaction(attr(index.na,"time")), levels = U.time)
+                level.time[-index.na] <- factor(index.time, levels = 1:length(U.time), labels = U.time) ## time.levels.original
+            }else{
+                level.time[index.na] <- factor(attr(index.na,"time"), levels = U.time)
+                level.time[-index.na] <- factor(index.time, levels = 1:length(U.time), labels = U.time) ## time.levels.original
+            }
+            
+        }
     }else{
         level.cluster <- index.cluster
         level.time <- index.time
@@ -468,7 +486,6 @@ residuals.lmm <- function(object, type = "response", format = "long",
     ##
     if(format=="wide"){
         dfL.res <- data.frame(residuals = as.vector(M.res), cluster = level.cluster, time = factor(U.time[level.time], U.time), stringsAsFactors = FALSE)
-
         MW.res <- stats::reshape(data = dfL.res[,c("cluster","time","residuals"),drop=FALSE], 
                                  direction = "wide", timevar = "time", idvar = "cluster", v.names = "residuals")
         colnames(MW.res)[-1] <- gsub("^residuals.","",colnames(MW.res)[-1])
@@ -531,9 +548,9 @@ residuals.lmm <- function(object, type = "response", format = "long",
                 df.gg$col.index <- match(df.gg$col, Ulevel.time)
                 dfR.gg <- df.gg[df.gg$col.index>=df.gg$row.index,,drop=FALSE]
                 attr(MW.res,"plot") <- ggplot2::ggplot(dfR.gg, ggplot2::aes_string(x = "col", y = "row", fill = "correlation")) + ggplot2::geom_tile() + ggplot2::scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0, limit = c(-1,1), space = "Lab", name="Correlation") + ggplot2::xlab(name.time) + ggplot2::ylab(name.time) + ggplot2::ggtitle(label.residual) + ggplot2::theme(text = ggplot2::element_text(size=size.text))
-                if(!is.na(digit.cor) && digit.cor>0){
+                if(!is.na(digits.cor) && digits.cor>0){
                     correlation <- NULL ## [[:forCRANcheck:]]
-                    attr(MW.res,"plot") <- attr(MW.res,"plot") + ggplot2::geom_text(ggplot2::aes(label = round(correlation,digit.cor)))
+                    attr(MW.res,"plot") <- attr(MW.res,"plot") + ggplot2::geom_text(ggplot2::aes(label = round(correlation,digits.cor)))
                 }
                 print(attr(MW.res,"plot"))
             }
@@ -602,6 +619,46 @@ residuals.lmm <- function(object, type = "response", format = "long",
         }
     }
 
+## NOTE: normalizing the residuals can be done by inverting, taking the cholesky transform, possibly transpose
+##       but it is not clear in which order to do that
+##       here is a small simulation study indicating the "best" solution
+##
+## rho <- 0.8
+## Rho <- matrix(c(1,rho,rho^2,rho^3,
+##                 rho,1,rho,rho^2,
+##                 rho^2,rho,1,rho,
+##                 rho^3,rho^2,rho,1),4,4)
+## Sigma <- tcrossprod(1:4) * Rho
+##
+## library(mvtnorm)
+## X <- rmvnorm(100000, mean = rep(0,4), sigma = Sigma)
+## var(X)
+##
+## quantile(var(X %*% solve(t(chol(Sigma)))) - diag(1,4)) ## -2.00926751 -0.78138946 -0.26772457 -0.03288554  2.86152941 
+## quantile(var(X %*% solve(chol(Sigma))) - diag(1,4))    ## -0.0022343367 -0.0009080941  0.0013634135  0.0041065544  0.0080840791 
+## quantile(var(X %*% chol(solve(Sigma))) - diag(1,4))    ## -0.5963488 -0.1940092  0.3265089  0.6047354  1.7839809 
+## quantile(var(X %*% t(chol(solve(Sigma)))) - diag(1,4)) ## -0.0044414902 -0.0004810946  0.0003719232  0.0014844712  0.0098206876
 
+## tSigmaM12 <- t(chol(solve(Sigma)))
+## SigmaM12 <- chol(solve(Sigma))
+## (X %*% tSigmaM12)[1,]
+## X[1,,drop=FALSE] %*% tSigmaM12
+## SigmaM12 %*% X[1,]
+## 
+## quantile(var(t(SigmaM12 %*% t(X))) - diag(1,4))
+
+
+
+## * residuals.clmm
+##' @export
+residuals.clmm <- function(object, ...){
+
+    object$residuals <- object$design$Y - stats::predict(object, newdata = object$data.original, se = FALSE)$estimate
+    object$Omega <- .calc_Omega(object$design$vcov, param = object$param, keep.interim = FALSE)
+    object$OmegaM1 <- lapply(object$Omega, solve)
+    out <- residuals.lmm(object, ...)
+    return(out)
+
+}
 ##----------------------------------------------------------------------
 ### residuals.R ends here

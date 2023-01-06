@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: May 26 2022 (11:18) 
 ## Version: 
-## Last-Updated: May 30 2022 (22:45) 
+## Last-Updated: Sep 23 2022 (12:24) 
 ##           By: Brice Ozenne
-##     Update #: 165
+##     Update #: 167
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -131,7 +131,6 @@
             ## expand variance parameters across strata
             iG <- iParam[index.clusterStrata]
             ## compute random effects
-
             iLs.zranef <- by(sweep(iX, MARGIN = 1, FUN = "*", STATS = vec.OmegaM1epsilon), INDICES = Vindex.cluster.sorted, FUN = colSums, simplify = FALSE)
             iRanef <- sweep(do.call(rbind,iLs.zranef), MARGIN = 1, FUN = "*", STATS = iG)
             colnames(iRanef) <- gsub("_X_XX_X_",":",colnames(iRanef))
@@ -165,7 +164,10 @@
     Xpattern.cor <- object$design$vcov$X$Xpattern.cor    
     name.X.cor <- colnames(X.cor)
 
-    if((object$design$vcov$type != "CS") || object$design$vcov$heterogeneous){
+    if(object$design$vcov$type != "CS"){
+        stop("Identification of random effect structure only implemented for \"CS\" structure with argument heterogenous=FALSE. \n")
+    }
+    if(object$design$vcov$heterogeneous){
         stop("Identification of random effect structure only implemented for \"CS\" structure with argument heterogenous=FALSE. \n")
     }
     if(any(grepl("_X_XX_X_",colnames(X.cor)))){

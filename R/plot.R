@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt 20 2021 (11:00) 
 ## Version: 
-## Last-Updated: mar  7 2022 (09:19) 
+## Last-Updated: jan  4 2023 (11:41) 
 ##           By: Brice Ozenne
-##     Update #: 78
+##     Update #: 93
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -19,10 +19,16 @@
 ##' @title Graphical Display For Linear Mixed Models
 ##' @description Display fitted values or residual plot for the mean, variance, and correlation structure.
 ##' Can also display quantile-quantile plot relative to the normal distribution.
-##' @name plot
 ##' 
 ##' @param x a \code{lmm} object.
-##' @param type [character] the type of plot: \code{"fit"}, \code{"qqplot"}, \code{"correlation"}, \code{"scatterplot"}, \code{"scatterplot2"}, \code{"partial"}.
+##' @param type [character] the type of plot \itemize{
+##' \item \code{"fit"}: fitted values over repetitions.
+##' \item \code{"qqplot"}: quantile quantile plot of the normalized residuals
+##' \item \code{"correlation"}: residual correlation over repetitions
+##' \item \code{"scatterplot"}: normalized residuals vs. fitted values (diagnostic for missing non-linear effects),
+##' \item \code{"scatterplot2"}: square root of the normalized residuals vs. fitted values (diagnostic for heteroschedasticity),
+##' \item \code{"partial"}: partial residual plot.
+##' }
 ##' @param type.residual [character] the type of residual to be used. Not relevant for \code{type="fit"}.
 ##' By default, normalized residuals are used except when requesting a partial residual plot.
 ##' @param by.time [logical] should a separate plot be made at each repetition or a single plot over all repetitions be used?
@@ -40,6 +46,22 @@
 ##' \item \code{data}: data used to create the graphical display.
 ##' \item \code{plot}: ggplot object.
 ##' }
+##'
+##' @examples
+##' set.seed(10)
+##' dL <- sampleRem(100, n.times = 3, format = "long")
+##' dL$X1 <- as.factor(dL$X1)
+##' 
+##' eCS.lmm <- lmm(Y ~ visit + X1,
+##'                repetition = ~visit|id, structure = "CS", data = dL, df = FALSE)
+##' plot(eCS.lmm, type = "fit")
+##' plot(eCS.lmm, type = "qqplot") ## engine.qqplot = "qqtest"
+##' plot(eCS.lmm, type = "correlation") 
+##' plot(eCS.lmm, type = "scatterplot") 
+##' plot(eCS.lmm, type = "scatterplot2") 
+##' plot(eCS.lmm, type = "partial", type.residual = "visit") 
+##' plot(eCS.lmm, type = "partial", type.residual = "X1") 
+##' 
 
  
 ## * plot (code)
@@ -110,12 +132,12 @@ plot.lmm <- function(x, type = "fit", type.residual = "normalized", by.time = TR
             gg <- ggplot2::ggplot(data = gg.data, mapping = ggplot2::aes_string(x = name.varnum))
             gg <- gg + ggplot2::geom_point(ggplot2::aes_string(y = "r.partial"), color = "gray")
             if(length(type.var)==1){
-                gg <- gg + ggplot2::geom_line(ggplot2::aes_string(y = "estimate"), size = mean.size[2])
+                gg <- gg + ggplot2::geom_line(ggplot2::aes_string(y = "estimate"), linewidth = mean.size[2])
                 if(ci){
                     gg <- gg + ggplot2::geom_ribbon(ggplot2::aes_string(ymin = "lower", ymax = "upper"), alpha = ci.alpha)
                 }
             }else{
-                gg <- gg + ggplot2::geom_line(ggplot2::aes_string(y = "estimate", group = name.varcat, color = name.varcat), size = mean.size[2])
+                gg <- gg + ggplot2::geom_line(ggplot2::aes_string(y = "estimate", group = name.varcat, color = name.varcat), linewidth = mean.size[2])
                 if(ci){
                     gg <- gg + ggplot2::geom_ribbon(ggplot2::aes_string(ymin = "lower", ymax = "upper", group = name.varcat, color = name.varcat), alpha = ci.alpha)
                 }
@@ -134,6 +156,24 @@ plot.lmm <- function(x, type = "fit", type.residual = "normalized", by.time = TR
         attr(out$data,"plot") <- NULL
     }
     return(invisible(out))
+}
+
+## * plot (code)
+##' @export
+plot.Wald_lmm <- function(x, ...){
+    autoplot.Wald_lmm(x, ...)
+}
+
+## * plot (code)
+##' @export
+plot.partialCor <- function(x, ...){
+    autoplot.partialCor(x, ...)
+}
+
+## * plot (code)
+##' @export
+plot.summarizeNA <- function(x, ...){
+    autoplot.summarizeNA(x, ...)
 }
 
 ##----------------------------------------------------------------------

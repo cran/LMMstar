@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Jun 17 2022 (05:36) 
 ## Version: 
-## Last-Updated: jun 28 2022 (11:44) 
+## Last-Updated: jan  3 2023 (17:08) 
 ##           By: Brice Ozenne
-##     Update #: 45
+##     Update #: 65
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -38,6 +38,7 @@
 
     ## ** refit model
     x$design$param[x$design$param$name %in% name.effects,"fixed"] <- TRUE
+
     eee <- .estimate(design = x$design, time = x$time, method.fit = x$method.fit, type.information = x$type.information,
                      transform.sigma = x$reparametrize$transform.sigma, transform.k = x$reparametrize$transform.k, transform.rho = x$reparametrize$transform.rho,
                      precompute.moments = "precompute.XX" %in% names(x$design),
@@ -47,7 +48,8 @@
     x$param <- eee$estimate
     x$logLik <- eee$logLik
     x[c("reparametrize","fitted","residuals","Omega","OmegaM1","dOmega","d2Omega","score","information","vcov","df","dVcov")] <- NULL
-    
+
+    class(x) <- append("clmm",class(x))
     return(x)
 }
 

@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Dec 19 2021 (17:07) 
 ## Version: 
-## Last-Updated: jun 13 2022 (14:05) 
+## Last-Updated: jan  4 2023 (10:54) 
 ##           By: Brice Ozenne
-##     Update #: 20
+##     Update #: 27
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -26,7 +26,7 @@ if(FALSE){
 }
 
 context("Check lmm on Basic Statistic course")
-LMMstar.options(optimizer = "FS", method.numDeriv = "simple", precompute.moments = TRUE)
+LMMstar.options(optimizer = "FS", method.numDeriv = "simple", precompute.moments = TRUE, df = TRUE)
 test.practical <- FALSE
 
 ## * Data
@@ -173,7 +173,7 @@ test_that("lmm - ttest", {
                       tol = 1e-6)
 })
 
-## * Predict function
+## * predict function
 test_that("lmm - predict", {
     if(test.practical==FALSE){skip('Not run to save time in the check')}
 
@@ -221,6 +221,37 @@ test_that("lmm - predict", {
     ## }, method.numDeriv = "simple", average = TRUE)
 
 
+})
+
+## * baseline constrain
+test_that("lmm - baseline constrain", {
+
+    armd.long$treat <- armd.long$treat.f
+    armd.long$treat[armd.long$week == 0] <- "Placebo"
+    
+    e.lmm <- lmm(visual ~ week:treat,
+                 repetition = ~week:treat|subject,
+                 structure = UN,
+                 control = list(optimizer = "FS"), data = armd.long)
+    expect_equal(logLik(e.lmm), -4146.824, tol = 1e-5)
+    plot(e.lmm, color = "treat.f")
+    plot(e.lmm, type = "correlation")
+    sigma(e.lmm)
+    
+})
+
+## * graphical display
+test_that("lmm - autoplot", {
+    if(test.practical==FALSE){skip('Not run to save time in the check')}
+
+    armd.long$week.num <- as.numeric(as.character(armd.long$week))
+    eLin.lmm <- lmm(visual ~ 0 + week + week.num:treat.f,
+                    repetition = ~ week | subject,
+                    structure = "UN",
+                    data = armd.long)
+
+    expect_true(!is.null(attr(eLin.lmm$design$mean, "variable")))
+    autoplot(eLin.lmm) ## was returning an error because could not identify the mean variables necessary for the prediction
 })
 ##----------------------------------------------------------------------
 ### test-manual-armd.R ends here

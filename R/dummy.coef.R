@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt 20 2021 (11:08) 
 ## Version: 
-## Last-Updated: mar 21 2022 (10:53) 
+## Last-Updated: jan  3 2023 (16:09) 
 ##           By: Brice Ozenne
-##     Update #: 31
+##     Update #: 41
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -25,7 +25,7 @@
 ##' @param ... arguments passed to \code{emmeans}.
 ##' 
 ##' @return A data.frame containing the level for which the means have been computed (if more than one),
-##' the estimated mean (\code{estimate}), standard error (\code{se}), degree of freedom (\code{df}), and 95% confidence interval (\code{lower} and \code{upper}).
+##' the estimated mean (\code{estimate}), standard error (\code{se}), degree of freedom (\code{df}), and 95\% confidence interval (\code{lower} and \code{upper}).
 ##' 
 
 
@@ -35,7 +35,6 @@
 dummy.coef.lmm <- function(object, drop = TRUE,...){
 
     requireNamespace("emmeans")
-
     var.cat <- intersect(all.vars(object$formula$mean),  names(object$xfactor$mean))
 
     if(length(var.cat)==0){
@@ -73,7 +72,9 @@ dummy.coef.lmm <- function(object, drop = TRUE,...){
         attr(out,"type") <- NULL
         attr(out,"mesg") <- NULL
     }
-    return(out)
+    ## Note (Github isssue 2): out inherits from summary_emm and data.frame
+    ##                         using data.frame on out ensures that it is just a data.frame
+    return(data.frame(out))
 }
 ##----------------------------------------------------------------------
 ### dummy.coef.R ends here

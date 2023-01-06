@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar 22 2021 (22:13) 
 ## Version: 
-## Last-Updated: jun 28 2022 (11:27) 
+## Last-Updated: okt 12 2022 (17:43) 
 ##           By: Brice Ozenne
-##     Update #: 1048
+##     Update #: 1078
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -18,7 +18,6 @@
 ## * information.lmm (documentation)
 ##' @title Extract The Information From a Linear Mixed Model
 ##' @description Extract or compute the (expected) second derivative of the log-likelihood of a linear mixed model.
-##' @name information
 ##' 
 ##' @param x a \code{lmm} object.
 ##' @param data [data.frame] dataset relative to which the information should be computed. Only relevant if differs from the dataset used to fit the model.
@@ -34,7 +33,7 @@
 ##' @param transform.names [logical] Should the name of the coefficients be updated to reflect the transformation that has been used?
 ##' @param ... Not used. For compatibility with the generic method.
 ##'
-##' @details For details about the arguments \bold{transform.sigma}, \bold{transform.k}, \bold{transform.rho}, see the documentation of the \link[LMMstar]{coef} function.
+##' @details For details about the arguments \bold{transform.sigma}, \bold{transform.k}, \bold{transform.rho}, see the documentation of the \link[LMMstar]{coef.lmm} function.
 ##'
 ##' @return
 ##' When argument indiv is \code{FALSE}, a matrix with the value of the infroamtion relative to each pair of coefficient (in rows and columns) and each cluster (in rows).
@@ -42,7 +41,6 @@
 ##' 
 
 ## * information.lmm (code)
-##' @rdname information
 ##' @export
 information.lmm <- function(x, effects = NULL, data = NULL, p = NULL, indiv = FALSE, type.information = NULL,
                             transform.sigma = NULL, transform.k = NULL, transform.rho = NULL, transform.names = TRUE, ...){
@@ -189,7 +187,7 @@ information.lmm <- function(x, effects = NULL, data = NULL, p = NULL, indiv = FA
     ## restrict to relevant parameters
     if(("variance" %in% effects == FALSE) && ("correlation" %in% effects == FALSE)){ ## compute hessian only for mean parameters
         test.vcov <- FALSE
-        test.mean <- TRUE
+        test.mean <- n.mucoef>0
     }else{
         if(REML && indiv){
             stop("Not possible to compute individual hessian for variance and/or correlation coefficients when using REML.\n")
@@ -230,13 +228,13 @@ information.lmm <- function(x, effects = NULL, data = NULL, p = NULL, indiv = FA
                 stop("Not possible to compute individual hessian for variance and/or correlation coefficients when using REML.\n")
             }
 
-            test.vcov <- TRUE
+            test.vcov <- any(unlist(n.varcoef)>0)
             test.mean <- FALSE
 
         }else{ ## compute hessian all parameters
      
-            test.vcov <- TRUE
-            test.mean <- TRUE
+            test.vcov <- any(unlist(n.varcoef)>0)
+            test.mean <- n.mucoef>0
         }
     }
 
@@ -392,11 +390,13 @@ information.lmm <- function(x, effects = NULL, data = NULL, p = NULL, indiv = FA
             iName.varcoef <- name.varcoef[[iPattern]]
             iN.varcoef <- length(iName.varcoef)
             iX <- precompute$XX$pattern[[iPattern]]
-                    
+
             ## **** mean,mean
-            iValue <- (as.double(iOmegaM1) %*% iX)[as.double(precompute$XX$key)]
-            if(test.mean){
-                info[name.mucoef,name.mucoef] <- info[name.mucoef,name.mucoef] + iValue
+            if(test.mean || REML){
+                iValue <- (as.double(iOmegaM1) %*% iX)[as.double(precompute$XX$key)]
+                if(test.mean){
+                    info[name.mucoef,name.mucoef] <- info[name.mucoef,name.mucoef] + iValue
+                }
             }
 
             ## **** var,var
@@ -420,7 +420,11 @@ information.lmm <- function(x, effects = NULL, data = NULL, p = NULL, indiv = FA
                     
                     iDouble2Mat <- as.vector(precompute$XX$key)
                     ## denominator
-                    REML.denom <- REML.denom + (as.double(iOmegaM1) %*% iX)[iDouble2Mat]
+                    if(is.null(precompute$X.OmegaM1.X)){
+                        REML.denom <- REML.denom + (as.double(iOmegaM1) %*% iX)[iDouble2Mat]
+                    }else{
+                        REML.denom <- REML.denom + precompute$X.OmegaM1.X[[iPattern]][iDouble2Mat]
+                    }
                     ## numerator 1
                     iX_OmegaM1_dOmega_OmegaM1_X <- t(iX) %*% OmegaM1_dOmega_OmegaM1[[iPattern]]
                     for(iVarcoef in iName.varcoef){ ## iVarcoef <- iName.varcoef[1]
@@ -468,6 +472,7 @@ information.lmm <- function(x, effects = NULL, data = NULL, p = NULL, indiv = FA
 
     ## ** export
     if(REML && test.vcov){
+        
         REML.denomM1 <- solve(REML.denom)
         REML.numerator2.bis <- array(NA, dim = dim(REML.numerator2), dimnames = dimnames(REML.numerator2))
         ls.REML.numerator1.denomM1 <- stats::setNames(lapply(1:dim(REML.numerator1)[3], FUN = function(iDim){REML.numerator1[,,iDim] %*% REML.denomM1}), dimnames(REML.numerator1)[[3]])
@@ -484,11 +489,6 @@ information.lmm <- function(x, effects = NULL, data = NULL, p = NULL, indiv = FA
 
     if(robust){
         if(REML){
-            if(type.information=="observed"){
-                stop("Cannot compute robust observed information matrix under REML. \n",
-                     "Consider using ML estimation by setting the argument method.fit=\"ML\" when calling lmm \n",
-                     "or using the expected information matrix by setting the argument type.information=\"expected\" when calling lmm.\n")
-            }
             effects2 <- "mean"
             attr(effects2,"original.names") <- attr(effects,"original.names")
             attr(effects2,"reparametrize.names") <- attr(effects,"reparametrize.names")
@@ -507,12 +507,18 @@ information.lmm <- function(x, effects = NULL, data = NULL, p = NULL, indiv = FA
                                        index.variance = index.variance, time.variance = time.variance, 
                                        index.cluster = index.cluster, name.allcoef = name.allcoef, indiv = TRUE, REML = REML, effects = effects2,
                                        precompute = precompute) )
+
+        
+        
         if(any(c("mean","variance","correlation") %in% effects2 == FALSE)){
             keep.cols <- intersect(names(which(rowSums(abs(attr.bread))!=0)),names(which(rowSums(abs(attr.bread))!=0)))
             info <- NA*attr.info
-            info[keep.cols,keep.cols] <- attr.info[keep.cols,keep.cols,drop=FALSE] %*% solve(attr.bread[keep.cols,keep.cols,drop=FALSE]) %*% attr.info[keep.cols,keep.cols,drop=FALSE]
+
+            attr.infoM1 <- solve(attr.info)
+            info[keep.cols,keep.cols] <- solve(attr.infoM1[keep.cols,keep.cols] %*% attr.bread[keep.cols,keep.cols,drop=FALSE] %*% attr.infoM1[keep.cols,keep.cols])
         }else{
-            info <- attr.info %*% solve(attr.bread) %*% attr.info
+            attr.infoM1 <- solve(attr.info)
+            info <- solve(attr.infoM1 %*% attr.bread %*% attr.infoM1)
         }
     }
     return(info)

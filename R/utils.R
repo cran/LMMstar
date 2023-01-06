@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar 23 2021 (09:41) 
 ## Version: 
-## Last-Updated: okt  1 2021 (17:13) 
+## Last-Updated: Nov 14 2022 (09:41) 
 ##           By: Brice Ozenne
-##     Update #: 78
+##     Update #: 92
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -76,6 +76,34 @@ tblock <- function(M){
         out <- matrix(t(M), nrow=nrow(M), byrow = FALSE)[, c(matrix(1:ncol(M), nrow(M), byrow=T)) ]
         return(out)
     }
+}
+
+## * ncharTable
+## compute the width of a table 
+ncharTable <- function(object, digits){
+
+    xplus <- cbind(rownames(object),formatC(as.matrix(object), digits = digits, format = "f"))
+    nchar.colnames <- c(0,nchar(colnames(object)))
+    width <- apply(xplus,1, function(iRow){ ## iRow <- xplus[2,]
+        sum(pmax(nchar.colnames,nchar(trimws(iRow)))+1)-1
+    })
+    return(max(width))
+   
+}
+
+## * is.invertible
+is.invertible <- function(object, cov2cor, tol = 10^(-10*sqrt(NCOL(object)))){
+    if(cov2cor){
+        if(any(diag(object)<=0)){
+            return(FALSE)
+        }else{
+            object <- stats::cov2cor(object)
+        }
+    }
+    if(any(is.na(object))){
+        return(FALSE)
+    }
+    return(abs(det(object))>tol)
 }
 
 ##----------------------------------------------------------------------

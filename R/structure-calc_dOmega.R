@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: sep 16 2021 (13:18) 
 ## Version: 
-## Last-Updated: May 28 2022 (17:35) 
+## Last-Updated: okt 12 2022 (17:02) 
 ##           By: Brice Ozenne
-##     Update #: 156
+##     Update #: 164
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -105,6 +105,7 @@
         iPattern.cor <- Upattern[iPattern,"cor"]
         iNtime <- Upattern[iPattern,"n.time"]
         iName.param <- Upattern[iPattern,"param"][[1]]
+        if(is.null(iName.param)){return(NULL)}
 
         iOmega.sd <- attr(Omega[[iPattern]],"sd")
         iOmega.cor <- attr(Omega[[iPattern]],"cor")
@@ -120,10 +121,12 @@
         iIndicator.cor <- attr(X.cor[[iPattern.cor]],"indicator.param")
         iMindicator.var <- attr(X.var[[iPattern.var]],"Mindicator.param")
 
-        if(transform.sigma == "log"){
-            iScore[[iParam.sigma]] <- 2 * iOmega
-        }else{ ## no transformation  (other transformations are made through jacobian)
-            iScore[[iParam.sigma]] <- 2 * iOmega / param[iParam.sigma]
+        if(n.iParam.sigma>0){
+            if(transform.sigma == "log"){
+                iScore[[iParam.sigma]] <- 2 * iOmega
+            }else{ ## no transformation  (other transformations are made through jacobian)
+                iScore[[iParam.sigma]] <- 2 * iOmega / param[iParam.sigma]
+            }
         }
 
         if(n.iParam.k>0){
@@ -172,6 +175,9 @@
 
 ## * calc_dOmega.CS
 .calc_dOmega.CS <- .calc_dOmega.ID
+
+## * calc_dOmega.TOEPLITZ
+.calc_dOmega.TOEPLITZ <- .calc_dOmega.ID
 
 ## * calc_dOmega.UN
 .calc_dOmega.UN <- .calc_dOmega.ID
@@ -258,9 +264,38 @@
             return(iOut)
         }), Upattern$name)
     }
+    
+    if(!is.null(Jacobian)){
+        type <- object$param$type
+        name.sigma <- object$param$name[type=="sigma"]
+        name.k <- object$param$name[type=="k"]
+        name.rho <- object$param$name[type=="rho"]
+        name.paramVar <- c(name.sigma,name.k,name.rho)
+
+        out <- lapply(1:n.Upattern, function(iPattern){ ## iPattern <- 1
+
+            iPattern.var <- Upattern[iPattern,"var"]
+            iPattern.cor <- Upattern[iPattern,"cor"]
+            iNtime <- Upattern[iPattern,"n.time"]
+            iName.param <- Upattern[iPattern,"param"][[1]]
+
+            ## [dOmega_[11]/d theta_1] ... [dOmega_[11]/d theta_p] %*% Jacobian
+            ## [dOmega_[ij]/d theta_1] ... [dOmega_[ij]/d theta_p] %*% Jacobian
+            ## [dOmega_[mm]/d theta_1] ... [dOmega_[mm]/d theta_p] %*% Jacobian
+            if(any(abs(Jacobian[iName.param,setdiff(name.paramVar,iName.param),drop=FALSE])>1e-10)){
+                stop("Something went wrong when computing the derivative of the residual variance covariance matrix. \n",
+                     "Contact the package manager with a reproducible example generating this error message. \n")
+            }
+            M.iScore <- do.call(cbind,lapply(out[[iPattern]],as.double)) %*% Jacobian[iName.param,iName.param,drop=FALSE]
+            iOut <- stats::setNames(lapply(1:NCOL(M.iScore), function(iCol){matrix(M.iScore[,iCol], nrow = iNtime, ncol = iNtime, byrow = FALSE)}), iName.param)
+            return(iOut)
+        })
+        
+        out <- stats::setNames(out,Upattern$name)
+    }
+
     return(out)
 }
-
 
 
 ##----------------------------------------------------------------------

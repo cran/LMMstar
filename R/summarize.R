@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt  7 2020 (11:12) 
 ## Version: 
-## Last-Updated: jul  1 2022 (16:12) 
+## Last-Updated: dec  7 2022 (19:11) 
 ##           By: Brice Ozenne
-##     Update #: 220
+##     Update #: 266
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -29,7 +29,9 @@
 ##' @param columns [character vector] name of the summary statistics to kept in the output.
 ##' Can be any of, or a combination of:\itemize{
 ##' \item \code{"observed"}: number of observations with a measurement.
-##' \item \code{"missing"}: number of observations with a missing value.
+##' \item \code{"missing"}: number of missing observations.
+##' When specifying a grouping variable, it will also attempt to count missing rows in the dataset.
+##' \item \code{"pc.missing"}: percentage missing observations.
 ##' \item \code{"mean"}, \code{"mean.lower"} \code{"mean.upper"}: mean with its confidence interval.
 ##' \item \code{"median"}, \code{"median.lower"} \code{"median.upper"}: median with its confidence interval.
 ##' \item \code{"sd"}: standard deviation.
@@ -99,7 +101,7 @@ summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, 
                       FUN = NULL,
                       which = NULL,
                       skip.reference = TRUE,
-                      digits = NULL,
+                      digits = NULL,                      
                       ...){
 
     data <- as.data.frame(data)
@@ -159,7 +161,9 @@ summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, 
         warning("Argument \'which\' is deprecated. Consider using argument \'columns\' instead. \n")
         columns <- which
     }
-    valid.columns <- c("observed","missing","mean","mean.lower","mean.upper","predict.lower","predict.upper","sd","min","q1","median","q3","median.upper","median.lower","IQR","max","correlation")
+    valid.columns <- c("observed","missing","pc.missing",
+                       "mean","mean.lower","mean.upper","predict.lower","predict.upper",
+                       "sd","min","q1","median","q3","median.upper","median.lower","IQR","max","correlation")
     columns <- match.arg(columns, choices = valid.columns, several.ok = TRUE)
 
     dots <- list(...)
@@ -201,6 +205,20 @@ summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, 
     name.Y <- unique(c(setdiff(name.Y,to.rm),to.add))
     n.Y <- length(name.Y)
 
+    ## ** between and within variables
+    if(!is.null(name.id)){
+        time <- names(which(!test.between)) ## can be several variables
+        if(length(time)==0){
+            table.id.time <- do.call(table,stats::setNames(list(data[[name.id]],rep(1,NROW(data))),c(name.id,"XXXXXX")))
+        }else{
+            table.id.time <- do.call(table,stats::setNames(c(list(data[[name.id]]),data[,name.X,drop=FALSE]),
+                                                           c(name.id,name.X)))
+        }
+    }else{
+        table.id.time <- NULL
+    }
+        
+    
     ## ** compute summary statistics
     out <- NULL
     iFormula <- stats::update(formula2, paste0("XXindexXX~."))
@@ -214,14 +232,15 @@ summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, 
             n.obs <- sum(!is.na(y))
             n.missing <- sum(is.na(y))
             ## as missing rows in the dataset
-            if(!is.null(name.id) && "missing" %in% columns){
+            if(!is.null(table.id.time) && all(table.id.time %in% 0:1) && ("missing" %in% columns || "pc.missing" %in% columns)){
+
                 if(any(test.between)){
                     iIndex <- which(names(ls.id)==levels(interaction(data[x,names(which(test.between))], drop = TRUE)))
                     n.missing <- n.missing + sum(ls.id[[iIndex]] %in% unique(as.character(data[x,name.id])) == FALSE)
-
                 }else{
                     n.missing <- n.missing + sum(ls.id[[1]] %in% unique(as.character(data[x,name.id])) == FALSE)
                 }
+
             }
 
             ## *** gather
@@ -239,10 +258,11 @@ summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, 
             }else{
                 wty <- list(estimate = NA, parameter = NA, stderr = NA, conf.int = c(NA, NA))
             }
-            
+
             if(all(is.na(y))){ ## avoid warning when taking min(), e.g. min(NA, na.rm = TRUE)
                 iVec <- c("observed" = n.obs,
                           "missing" = n.missing,
+                          "pc.missing" = n.missing/(n.obs+n.missing),
                           "mean" = NA,
                           "mean.lower" = NA,
                           "mean.upper" = NA,
@@ -260,6 +280,7 @@ summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, 
             }else{
                 iVec <- c("observed" = sum(!is.na(y)),
                           "missing" = n.missing,
+                          "pc.missing" = n.missing/length(y),
                           "mean" = mean(y, na.rm = na.rm),
                           "mean.lower" = tty$conf.int[1], ## as.double(tty$estimate + stats::qt((1-level)/2,tty$parameter) * tty$stderr[1])  - tty$conf.int[1]
                           "mean.upper" = tty$conf.int[2], ## as.double(tty$estimate + stats::qt(1-(1-level)/2,tty$parameter) * tty$stderr[1])  - tty$conf.int[2]
@@ -292,12 +313,10 @@ summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, 
         
         out <- rbind(out,iDF)
     }
+
     ## ** correlation
     if(!is.null(name.id) && any(!test.between) && "correlation" %in% columns){ ## id and time variables
 
-        time <- names(which(!test.between)) ## can be several variables
-        table.id.time <- do.call(table,stats::setNames(c(list(data[[name.id]]),data[,name.X,drop=FALSE]),
-                                                       c(name.id,name.X)))
         if(length(time)>1 && paste(time, collapse = "_X_XX_X_") %in% names(data)){
             stop("Argument \'data\' should not contain a column named \"",paste(time, collapse = "_X_XX_X_"),"\" as this name is used internally. \n")
         }
@@ -307,7 +326,7 @@ summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, 
             attr(out,"correlation") <- stats::setNames(vector(mode = "list", length = length(name.Y)),
                                                        name.Y)
 
-            for(iY in 1:n.Y){
+            for(iY in 1:n.Y){ ## iY <- 1 
                 attr(out,"correlation")[[iY]] <- stats::setNames(lapply(ls.id, function(iId){ ## iId <- ls.id[[1]]
                     iDataL <- data[data[[name.id]] %in% iId,,drop = FALSE]
                     if(length(time)>1){
@@ -320,10 +339,16 @@ summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, 
                                              direction = "wide", timevar = Utime, idvar = name.id, v.names = name.Y[iY])
                     
                     if(na.rm){
-                        return(stats::cor(iDataW[,-1,drop=FALSE], use = "pairwise"))
+                        iCor <- stats::cor(iDataW[,-1,drop=FALSE], use = "pairwise")
+                        
                     }else{
-                        return(stats::cor(iDataW[,-1,drop=FALSE]))
+                        iCor <- stats::cor(iDataW[,-1,drop=FALSE])
                     }
+                    iLevels <- levels(as.factor(iDataL[[Utime]]))
+                    if(NROW(iCor)==length(iLevels)){
+                        dimnames(iCor) <- list(iLevels,iLevels)
+                    }
+                    return(iCor)
                 }), names(ls.id))
             }
         }
@@ -333,37 +358,13 @@ summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, 
     if(!is.null(digits)){
         attr(out,"digits") <- digits
     }
+    attr(out,"name.Y") <- name.Y
+    attr(out,"name.X") <- name.X
     class(out) <- append("summarize",class(out))
     return(out)
 }
 
-## * print.summarize
-#' @export
-print.summarize <- function(x,...){
-    if(!is.null(attr(x,"digits")) && ("digits" %in% names(list(...)) == FALSE)){
-        print(as.data.frame(x), digits = attr(x,"digits"), ...)
-    }else{
-        print(as.data.frame(x), ...)
-    }
-    if(!is.null(attr(x,"correlation"))){
-        cat("\n Pearson's correlation: \n")
-        ls.cor <- attr(x,"correlation")
-        if(length(ls.cor)==1){ ## outcome
-            ls.cor <- ls.cor[[1]]
-            if(length(ls.cor)==1){ ## group
-                ls.cor <- ls.cor[[1]]
-            }
-        }else{
-            for(iY in 1:length(ls.cor)){ ## group
-                if(length(ls.cor[[iY]])==1){
-                    ls.cor[[iY]] <- ls.cor[[iY]][[1]]
-                }
-            }
-        }
-        print(ls.cor, ...)
-    }
-    return(invisible(NULL))
-}
+
 
 ######################################################################
 ### summarize.R ends here

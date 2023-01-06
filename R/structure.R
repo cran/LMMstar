@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: May 31 2021 (15:28) 
 ## Version: 
-## Last-Updated: May 30 2022 (22:47) 
+## Last-Updated: nov  3 2022 (11:27) 
 ##           By: Brice Ozenne
-##     Update #: 604
+##     Update #: 755
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -66,7 +66,8 @@
     }
 
     ## ** right hand side
-    ls.var.X <- lapply(formula, function(iF){unique(c(rhs.vars(iF),add.X))})
+    ls.var.X <- list(variance = c(add.X$variance,rhs.vars(formula$variance)),
+                     correlation = c(add.X$correlation,rhs.vars(formula$correlation)))
 
     test.interaction <- sapply(formula, function(iF){
         any(attr(stats::delete.response(stats::terms(iF)),"order")>1)
@@ -78,8 +79,12 @@
     ## ** combine left and right hand side
     ## *** variance
     if(length(ls.var.X$variance)==0){
-        if(length(var.strata)==0){
-            formula.var <- ~1 
+        if(length(var.strata)==0){            
+            if(attr(stats::terms(formula$variance),"intercept")){
+                formula.var <- ~1
+            }else{
+                formula.var <- ~0
+            }
         }else{
             formula.var <- stats::as.formula(paste("~0+",var.strata))
         }
@@ -147,8 +152,14 @@
 ##' @export
 ID <- function(formula, var.cluster, var.time, add.time){
 
-    if(is.null(formula) || length(all.vars(formula))==0){
+    if(missing(formula) || is.null(formula)){
         outCov <- .formulaStructure(~1)
+    }else if(length(all.vars(formula))==0){
+        if(attr(stats::terms(formula),"intercept")){
+            outCov <- .formulaStructure(~1)
+        }else{
+            outCov <- .formulaStructure(~0)
+        }
     }else{
         ## put covariate as strata if in addition to time
         outCov <- .formulaStructure(stats::as.formula(paste0(paste(all.vars(formula), collapse="+"),"~1")))
@@ -200,9 +211,11 @@ IND <- function(formula, var.cluster, var.time, add.time){
 
     if(!missing(add.time)){
         if(is.character(add.time)){
-            add.X <- add.time
+            add.X <- list(variance = add.time,
+                          correlation = NULL)
         }else if(add.time){
-            add.X <- var.time
+            add.X <- list(variance = var.time,
+                          correlation = NULL)
         }else if(!add.time){
             add.X <- NULL
         }else{
@@ -212,10 +225,16 @@ IND <- function(formula, var.cluster, var.time, add.time){
         add.X <- NULL
     }
 
-    if(is.null(formula)){
+    if(missing(formula) || is.null(formula)){
         outCov <- .formulaStructure(~1, add.X = add.X)
     }else{
+
+        if(length(all.vars(formula))==0 && attr(stats::terms(formula),"intercept")==0){
+            stop("Incorrect formula for structure IND. \n",
+                 "Must have an intercept or a explanatory variable. \n")
+        }
         outCov <- .formulaStructure(formula, add.X = add.X)
+
     }
 
     out <- list(call = match.call(),
@@ -239,11 +258,12 @@ IND <- function(formula, var.cluster, var.time, add.time){
 
 ## * CS (compound symmetry)
 ##' @title Compound Symmetry Structure
-##' @description Variance-covariance structure where the residuals have constant variance and correlation.
+##' @description Variance-covariance structure where the residuals have constant variance and correlation,
+##' possibly only within certain covariate levels.
 ##' Can be stratified on a categorical variable.
 ##'
 ##' @param formula formula indicating on which variable to stratify the residual variance and correlation (left hand side)
-##' and variables influencing the residual variance (right hand side).
+##' and variables influencing the residual variance and correlation (right hand side).
 ##' @param var.cluster [character] cluster variable.
 ##' @param var.time [character] time variable.
 ##' @param heterogeneous [logical] when covariates are used for the correlation structure,
@@ -262,14 +282,14 @@ IND <- function(formula, var.cluster, var.time, add.time){
 ##' 
 ##' @export
 CS <- function(formula, var.cluster, var.time, heterogeneous = TRUE, add.time){
-    if(is.list(formula)){
-        outCov <- .formulaStructure(formula, heterogeneous = heterogeneous)
-    }else if(is.null(formula)){
+    if(missing(formula) || is.null(formula)){
         outCov <- .formulaStructure(~1, heterogeneous = heterogeneous)
+    }else if(is.list(formula)){
+        outCov <- .formulaStructure(formula, heterogeneous = heterogeneous)
     }else if(heterogeneous){
         outCov <- .formulaStructure(formula, heterogeneous = heterogeneous)
-    }else{
-        if(attr(stats::terms(formula),"response")==1){
+    }else{ ## covariate affects only the correlation (keep same variance within strata)
+        if(attr(stats::terms(formula),"response")==1){ # with strata
             outCov <- .formulaStructure(list(stats::update(formula,.~0),formula), heterogeneous = heterogeneous)
         }else{
             outCov <- .formulaStructure(list(~1,formula), heterogeneous = heterogeneous)
@@ -288,11 +308,123 @@ CS <- function(formula, var.cluster, var.time, heterogeneous = TRUE, add.time){
                 formula = list(var = outCov$formula.var,
                                cor = outCov$formula.cor),
                 heterogeneous = heterogeneous,
+                block = length(outCov$X.cor) > 0,
                 type = "CS")
 
     ## export
     class(out) <- append("structure",class(out))
     class(out) <- append("CS",class(out))
+    return(out)
+}
+
+## * TOEPLITZ (Toeplitz)
+##' @title Toeplitz Structure
+##' @description Variance-covariance structure for stationnary processes.
+##' Can be stratified on a categorical variable.
+##'
+##' @param formula formula indicating on which variable to stratify the residual variance and correlation (left hand side)
+##' and variables influencing the residual variance and correlation (right hand side). 
+##' @param var.cluster [character] cluster variable.
+##' @param var.time [character] time variable.
+##' @param heterogeneous [character] degree of flexibility of the correlation structure within covariate (\code{"UN","LAG","CS"}).
+##' Will also affect the variance structure when not explicit.
+##' @param add.time Should the default formula (i.e. when \code{NULL}) contain a time effect.
+##'
+##' @details \bold{formula}: there can only be at most one covariate for the correlation structure.
+##' A typical formula would be \code{~1}, indicating a variance constant over time and a correlation specific to each gap time.
+##'
+##' \bold{heterogeneous}: for a binary covariate the correlation matrix can be decomposed into four blocs: A, B, B, C.
+##' A correspond the correlation within level 0 of the covariate, C within level 1, and B between level 0 and 1.
+##' Different correlation structures can be specified:\itemize{ 
+##' \item \code{"UN"}: unstructured matrix except for the diagonal elements of C which are constrained to be equal.
+##' \item \code{"LAG"}: Toeplitz structure within A, B, and C, i.e. correlation specific to each time lag and covariate level.
+##' \item \code{"CS"}: block-specific value except for C which has a different value for its diagonal elements.
+##'}
+##' @return An object of class \code{TOEPLITZ} that can be passed to the argument \code{structure} of the \code{lmm} function.
+##' 
+##' @examples
+##' ## no covariate
+##' TOEPLITZ(~1, var.cluster = "id", var.time = "time")
+##' TOEPLITZ(gender~1, var.cluster = "id", var.time = "time")
+##' TOEPLITZ(list(~time,~1), var.cluster = "id", var.time = "time")
+##' TOEPLITZ(list(gender~time,gender~1), var.cluster = "id", var.time = "time")
+##'
+##' ## with covariates
+##' TOEPLITZ(~1, var.cluster = "id", heterogeneous = "UN",
+##'          var.time = "time", add.time = c("time","side"))
+##' TOEPLITZ(~1, var.cluster = "id", heterogeneous = "LAG",
+##'          var.time = "time", add.time = c("time","side"))
+##' TOEPLITZ(~1, var.cluster = "id", heterogeneous = "CS",
+##'          var.time = "time", add.time = c("time","side"))
+##' TOEPLITZ(gender~1, var.cluster = "id", heterogeneous = "CS",
+##'          var.time = "time", add.time = c("time","side"))
+##' @export
+TOEPLITZ <- function(formula, var.cluster, var.time, heterogeneous = "LAG", add.time){
+
+    if(is.null(heterogeneous)){
+        heterogeneous <- "LAG"
+        toeplitz.block <- FALSE
+    }else{
+        heterogeneous <- match.arg(heterogeneous, c("UN","LAG","CS"))
+        toeplitz.block <- NULL
+    }
+    
+    if(!missing(add.time)){
+        if(is.character(add.time)){
+            if(is.null(heterogeneous) || heterogeneous=="UN"){
+                add.X <- list(variance = add.time,
+                              correlation = add.time)
+            }else if(heterogeneous %in% c("LAG","CS")){
+                add.X <- list(variance = utils::tail(add.time,1),
+                              correlation = add.time)
+            }
+        }else if(add.time){
+            if(is.null(heterogeneous) || heterogeneous=="UN"){
+                add.X <- list(variance = var.time,
+                              correlation = var.time)
+            }else if(heterogeneous %in% c("LAG","CS")){
+                add.X <- list(variance = utils::tail(var.time,1),
+                              correlation = var.time)
+            }
+        }else if(!add.time){
+            add.X <- NULL
+        }else{
+            stop("Incorrect argument \'add.time\': should be logical or character. \n")
+        }
+    }else{
+        add.X <- NULL
+    }
+
+    if(missing(formula) || is.null(formula)){
+        outCov <- .formulaStructure(~1, heterogeneous = TRUE, add.X = add.X)
+    }else{
+        outCov <- .formulaStructure(formula, heterogeneous = TRUE, add.X = add.X)
+    }
+    if(length(outCov$X.var)==0 && length(outCov$X.cor)==0){
+        heterogeneous <- NULL
+    }
+    if(length(outCov$X.cor)>2){
+        stop("TOEPLITZ covariance structure does not support more than 2 covariates for the correlation structure. \n")
+    }else if(is.null(toeplitz.block)){
+        toeplitz.block <- length(outCov$X.cor) > 1
+    }
+
+    out <- list(call = match.call(),
+                name = data.frame(cluster = if(!missing(var.cluster)){var.cluster}else{NA},
+                                  strata = if(!is.null(outCov$strata)){outCov$strata}else{NA},
+                                  time = if(!missing(var.time)){var.time}else{NA},
+                                  var = if(length(outCov$X.var)>0){I(list(outCov$X.var))}else{NA},
+                                  cor = if(length(outCov$X.cor)>0){I(list(outCov$X.cor))}else{NA},
+                                  stringsAsFactors = FALSE),
+                formula = list(var = outCov$formula.var,
+                               cor = outCov$formula.cor),
+                heterogeneous = heterogeneous,
+                block = toeplitz.block,
+                type = "TOEPLITZ")
+
+    ## export
+    class(out) <- append("structure",class(out))
+    class(out) <- append("TOEPLITZ",class(out))
     return(out)
 }
 
@@ -319,9 +451,11 @@ UN <- function(formula, var.cluster, var.time, add.time){
 
     if(!missing(add.time)){
         if(is.character(add.time)){
-            add.X <- add.time
+            add.X <- list(variance = add.time,
+                          correlation = add.time)
         }else if(add.time){
-            add.X <- var.time
+            add.X <- list(variance = var.time,
+                          correlation = var.time)
         }else if(!add.time){
             add.X <- NULL
         }else{
@@ -331,7 +465,7 @@ UN <- function(formula, var.cluster, var.time, add.time){
         add.X <- NULL
     }
     
-    if(is.null(formula) || length(all.vars(formula))==0){
+    if(missing(formula) || is.null(formula) || length(all.vars(formula))==0){
         outCov <- .formulaStructure(~1, add.X = add.X)
     }else{
         outCov <- .formulaStructure(stats::as.formula(paste0(paste(all.vars(formula), collapse="+"),"~1")),
@@ -361,7 +495,75 @@ UN <- function(formula, var.cluster, var.time, add.time){
     return(out)
 }
 
+## * LV (latent variable)
+
 ## * EXP (exponential)
+##' @title Exponential Structure
+##' @description Variance-covariance structure where the residuals have a correlation decreasing exponentially,
+##' Can be stratified on a categorical variable.
+##'
+##' @param formula formula indicating on which variable to stratify the residual variance and correlation (left hand side)
+##' and variables influencing the residual variance and correlation (right hand side).
+##' @param var.cluster [character] cluster variable.
+##' @param var.time [character] time variable.
+##' @param nugget [logical] whether a nugget effect is present.
+##' @param add.time not used.
+##'
+##' @details A typical formula would be \code{~1}, indicating a variance constant over time and correlation with exponential decrease over time.
+##'
+##' Inspired from \code{nlme::corExp} where if \eqn{K} denotes the nugget effect and \eqn{\rho} the time effect,
+##' the correlation between two observations with a time gap \eqn{dt} is \eqn{exp(-\rho dt)} when no nugget effect is present and \eqn{(1-K) exp(-\rho dt)} when a nugget effect is assumed. 
+##'
+##' @return An object of class \code{EXP} that can be passed to the argument \code{structure} of the \code{lmm} function.
+##' 
+##' @examples
+##' EXP(var.cluster = "id", var.time = "time", add.time = TRUE)
+##' EXP(~space, var.cluster = "id", var.time = "time", add.time = TRUE)
+##' EXP(list(~space,~space), var.cluster = "id", var.time = "time", add.time = TRUE)
+##' 
+##' @export
+EXP <- function(formula, var.cluster, var.time, nugget = FALSE, add.time){
+
+    if(missing(formula) || is.null(formula)){
+        outCov <- .formulaStructure(list(~1,stats::as.formula(paste0("~",var.time))), heterogeneous = nugget)
+    }else if(is.list(formula)){
+        outCov <- .formulaStructure(formula, heterogeneous = nugget)
+    }else if(!missing(add.time) && (is.character(add.time) || identical(add.time,TRUE)) && length(all.vars(stats::update(formula,0~.)))==0){
+        if(is.character(add.time)){
+            var.time <- add.time
+        }
+        if(attr(stats::terms(formula),"response")==1){ # with strata
+            ff <- stats::as.formula(paste0(all.vars(formula),"~",var.time))
+        }else{
+            ff <- stats::as.formula(paste0("~",var.time))
+        }
+        outCov <- .formulaStructure(list(formula,ff), heterogeneous = nugget)
+    }else{
+        if(attr(stats::terms(formula),"response")==1){ # with strata
+            outCov <- .formulaStructure(list(stats::as.formula(paste0(all.vars(formula),"~1")),formula), heterogeneous = nugget)
+        }else{
+            outCov <- .formulaStructure(list(~1,formula), heterogeneous = nugget)
+        }
+    }
+
+    out <- list(call = match.call(),
+                name = data.frame(cluster = if(!missing(var.cluster)){var.cluster}else{NA},
+                                  strata = if(!is.null(outCov$strata)){outCov$strata}else{NA},
+                                  time = if(!missing(var.time)){var.time}else{NA},
+                                  var = if(length(outCov$X.var)>0){I(list(outCov$X.var))}else{NA},
+                                  cor = if(length(outCov$X.cor)>0){I(list(outCov$X.cor))}else{NA},
+                                  stringsAsFactors = FALSE),
+                formula = list(var = outCov$formula.var,
+                               cor = outCov$formula.cor),
+                heterogeneous = nugget,
+                type = "EXP")
+
+    ## export
+    class(out) <- append("structure",class(out))
+    class(out) <- append("EXP",class(out))
+    return(out)
+}
+
 
 ## * CUSTOM (user-specified)
 ##' @title Custom Structure

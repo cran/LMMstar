@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Jun  8 2021 (00:01) 
 ## Version: 
-## Last-Updated: Jun  2 2022 (17:10) 
+## Last-Updated: Jan  5 2023 (09:15) 
 ##           By: Brice Ozenne
-##     Update #: 181
+##     Update #: 378
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -16,8 +16,7 @@
 ### Code:
 
 ## * autoplot.lmm (documentation)
-##' @title Graphical Display For Linear Mixed Models
-##' @name autoplot
+##' @title Display Fitted values of Linear Mixed Models
 ##'
 ##' @param object a \code{lmm} object.
 ##' @param at [data.frame] values for the covariates at which to evaluate the fitted values.
@@ -29,21 +28,43 @@
 ##' @param ci.alpha [numeric, 0-1] When not NA, transparency parameter used to display the confidence intervals.
 ##' @param plot [logical] should the plot be displayed?
 ##' @param mean.size [numeric vector of length 2] size of the point and line for the mean trajectory.
-##' @param size.text [numeric, >0] size of the font used to displayed text when using ggplot2.
+##' @param size.text [numeric, >0] size of the font used to display text.
 ##' @param position.errorbar [character] relative position of the errorbars.
+##' @param ylim [numeric vector of length 2] the lower and higher value of the vertical axis.
 ##' @param ... arguments passed to the predict method.
 ##'
 ##' @return A list with two elements \itemize{
 ##' \item \code{data}: data used to create the graphical display.
 ##' \item \code{plot}: ggplot object.
 ##' }
+##'
+##' @seealso
+##' \code{\link{plot.lmm}} for other graphical display (residual plots, partial residual plots).
+##'
+##' @examples
+##' if(require(ggplot2)){
+##' 
+##' #### simulate data in the long format ####
+##' set.seed(10)
+##' dL <- sampleRem(100, n.times = 3, format = "long")
+##' dL$X1 <- as.factor(dL$X1)
+##' 
+##' #### fit Linear Mixed Model ####
+##' eCS.lmm <- lmm(Y ~ visit + X1,
+##'                repetition = ~visit|id, structure = "CS", data = dL, df = FALSE)
+##' 
+##' autoplot(eCS.lmm)
+##' autoplot(eCS.lmm, plot = FALSE)$plot + facet_wrap(~X1)
+##' }
+
+
 
 
 ## * autoplot.lmm (code)
-##' @rdname autplot
 ##' @export
-autoplot.lmm <- function(object, obs.alpha = 0, obs.size = c(2,0.5), at = NULL, time.var = NULL, color = TRUE, ci = TRUE, ci.alpha = NA, plot = TRUE,
-                         mean.size = c(3, 1), size.text = 16, position.errorbar = "identity", ...){
+autoplot.lmm <- function(object, obs.alpha = 0, obs.size = c(2,0.5),
+                         at = NULL, time.var = NULL, color = TRUE, ci = TRUE, ci.alpha = NA, plot = TRUE,
+                         ylim = NULL, mean.size = c(3, 1), size.text = 16, position.errorbar = "identity", ...){
 
     if(object$time$n==1){
         stop("Cannot display the fitted values over time when there only is a single timepoint. \n")
@@ -75,7 +96,7 @@ autoplot.lmm <- function(object, obs.alpha = 0, obs.size = c(2,0.5), at = NULL, 
         xlabel.plot <- time.var
     }
     time.var <- attr(object$time$var,"original") ## need to be after statement on time.var.plot to avoid confusion
-    mu.var <- attr(object$design$mean,"variable") 
+    mu.var <- rhs.vars(object$formula$mean)
     if(length(time.var) == 0 && length(mu.var) == 0){
         message("There is nothing to be displayed: empty time variable and no covariate for the mean structure. \n")
         return(NULL)
@@ -107,7 +128,9 @@ autoplot.lmm <- function(object, obs.alpha = 0, obs.size = c(2,0.5), at = NULL, 
     }
 
     ## design matrix: find unique combinations of covariates
-    X.beta <- stats::model.matrix(object, data = data[,union(time.var, mu.var), drop=FALSE], effects = "mean")
+    timemu.var <- stats::na.omit(union(time.var, mu.var))
+    X.beta <- stats::model.matrix(object, effects = "mean",
+                                  data = data[,timemu.var, drop=FALSE])
     IX.beta <- interaction(as.data.frame(X.beta), drop = TRUE)
     vec.X.beta <- tapply(IX.beta, data[["XXclusterXX"]],paste, collapse = "_XXX_")
     UX.beta <- unique(vec.X.beta)
@@ -181,9 +204,9 @@ autoplot.lmm <- function(object, obs.alpha = 0, obs.size = c(2,0.5), at = NULL, 
 
     ## ** compute fitted curve
     if(!is.na(obs.alpha) && obs.alpha>0){
-        preddata <- cbind(data, stats::predict(object, newdata = data[,union(time.var, mu.var), drop=FALSE], ...))
+        preddata <- cbind(data, stats::predict(object, newdata = data[,timemu.var, drop=FALSE], ...))
     }else{
-        preddata <- cbind(newdata, stats::predict(object, newdata = newdata[,union(time.var, mu.var), drop=FALSE], ...))
+        preddata <- cbind(newdata, stats::predict(object, newdata = newdata[,timemu.var, drop=FALSE], ...))
     }
 
     ## ** generate plot
@@ -193,11 +216,11 @@ autoplot.lmm <- function(object, obs.alpha = 0, obs.size = c(2,0.5), at = NULL, 
             gg <- gg + ggplot2::geom_point(data = data, mapping = ggplot2::aes_string(x = time.var.plot, y = outcome.var, group = "XXclusterXX", color = color),
                                            alpha = obs.alpha, size = obs.size[1])
             gg <- gg + ggplot2::geom_line(data = data, mapping = ggplot2::aes_string(x = time.var.plot, y = outcome.var, group = "XXclusterXX", color = color),
-                                          alpha = obs.alpha, size = obs.size[2])
+                                          alpha = obs.alpha, linewidth = obs.size[2])
             ## gg + facet_wrap(~XXclusterXX)
         }else{
             gg <- gg + ggplot2::geom_point(data = data, mapping = ggplot2::aes_string(x = time.var.plot, y = outcome.var, group = "XXclusterXX"), alpha = obs.alpha, size = obs.size[1])
-            gg <- gg + ggplot2::geom_line(data = data, mapping = ggplot2::aes_string(x = time.var.plot, y = outcome.var, group = "XXclusterXX"), alpha = obs.alpha, size = obs.size[2])
+            gg <- gg + ggplot2::geom_line(data = data, mapping = ggplot2::aes_string(x = time.var.plot, y = outcome.var, group = "XXclusterXX"), alpha = obs.alpha, linewidth = obs.size[2])
         }
     }
     if(ci){
@@ -212,15 +235,17 @@ autoplot.lmm <- function(object, obs.alpha = 0, obs.size = c(2,0.5), at = NULL, 
         }
     }
     if(!is.null(color)){
-        gg <- gg + ggplot2::geom_point(ggplot2::aes_string(color = color), size = mean.size[1]) + ggplot2::geom_line(ggplot2::aes_string(color = color), size = mean.size[2])
+        gg <- gg + ggplot2::geom_point(ggplot2::aes_string(color = color), size = mean.size[1]) + ggplot2::geom_line(ggplot2::aes_string(color = color), linewidth = mean.size[2])
     }else{
-        gg <- gg + ggplot2::geom_point(size = mean.size[1]) + ggplot2::geom_line(size = mean.size[2])
+        gg <- gg + ggplot2::geom_point(size = mean.size[1]) + ggplot2::geom_line(linewidth = mean.size[2])
     }
     gg  <- gg + ggplot2::ylab(outcome.var) + ggplot2::theme(text = ggplot2::element_text(size=size.text))
     if(!is.null(time.var.plot) && any(!is.na(time.var.plot))){
         gg  <- gg + ggplot2::xlab(paste(stats::na.omit(xlabel.plot), collapse = ", "))
     }
-
+    if(!is.null(ylim)){
+        gg <- gg + ggplot2::coord_cartesian(ylim = ylim)
+    }
 
     ## ** display
     if(plot){
@@ -231,6 +256,423 @@ autoplot.lmm <- function(object, obs.alpha = 0, obs.size = c(2,0.5), at = NULL, 
     return(invisible(list(data = preddata,
                           plot = gg)))
 }
+
+## * autoplot.partialCor (documentation)
+##' @title Graphical Display For Partial Correlation
+##' @description Extract and display the correlation modeled via the linear mixed model.
+##'
+##' @param object a \code{partialCor} object.
+##' @param plot [logical] should the plot be displayed?
+##' @param size.text [numeric, >0] size of the font used to display text.
+##' @param limits [numeric vector of length 2] minimum and maximum value of the colorscale relative to the correlation.
+##' @param low,mid,high [character] color for the the colorscale relative to the correlation.
+##' @param midpoint [numeric] correlation value associated with the color defined by argument \code{mid}.
+##' @param ... Not used. For compatibility with the generic method.
+##'
+##' @return A list with two elements \itemize{
+##' \item \code{data}: data used to create the graphical display.
+##' \item \code{plot}: ggplot object.
+##' }
+##' 
+##' @examples
+##' if(require(ggplot2)){
+##' data(gastricbypassL, package = "LMMstar")
+##' 
+##' e.pCor <- partialCor(c(weight,glucagonAUC)~time, repetition = ~visit|id,
+##'                      data = gastricbypassL)
+##' autoplot(e.pCor)
+##' }
+##' 
+
+## * autoplot.partialCor (code)
+##' @export
+autoplot.partialCor <- function(object, plot = TRUE, size.text = 16,
+                                limits = c(-1,1.00001), low = "blue", mid = "white", high = "red", midpoint = 0, ...){
+
+    object.lmm <- attr(object,"lmm")
+    Sigma_t <- sigma(object.lmm)
+    name.time <- object.lmm$time$levels
+    if(!is.matrix(Sigma_t)){
+        stop("Could not extract a unique covariance matrix. \n")
+    }
+    Sigma_t <- stats::cov2cor(Sigma_t)
+        
+    ## from matrix to long format
+    table <- as.data.frame(cbind(which(is.na(NA*Sigma_t), arr.ind = TRUE),value = as.numeric(Sigma_t)))
+    rownames(table) <- NULL
+    table$col <- factor(colnames(Sigma_t)[table$col], levels = name.time)
+    table$row <- factor(rownames(Sigma_t)[table$row], levels = name.time)
+    
+    gg <- ggplot2::ggplot(table) + ggplot2::geom_tile(ggplot2::aes_string(x="row",y="col",fill="value"))
+
+    if(!is.null(mid)){
+        gg <- gg + ggplot2::scale_fill_gradient2(limits = limits, midpoint = midpoint, low = low, mid = mid, high = high)
+    }else{
+        gg <- gg + ggplot2::scale_fill_gradient(limits = limits, low = low, high = high)
+    }
+    gg <- gg + ggplot2::labs(x = NULL, y = NULL, fill = "correlation") + ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 90, vjust = 0.5, hjust=1))
+        
+    gg <- gg + ggplot2::theme(text = ggplot2::element_text(size=size.text))
+
+    ## ** display
+    if(plot){
+        print(gg)
+    }
+
+    ## ** export
+    return(invisible(list(data = table,
+                          plot = gg)))
+}
+
+## * autoplot.summarizeNA (documentation)
+##' @title Graphical Display of Missing Data Pattern
+##' @description Graphical representation of the possible missing data patterns in the dataset.
+##'
+##' @param object a \code{summarizeNA} object, output of the \code{\link{summarizeNA}} function.
+##' @param plot [logical] should the plot be displayed?
+##' @param size.text [numeric, >0] size of the font used to display text.
+##' @param add.missing [logical] should the number of missing values per variable be added to the x-axis tick labels.
+##' @param order.pattern [numeric vector or character] in which order the missing data pattern should be displayed. Can either be a numeric vector indexing the patterns or a character refering to order the patterns per number of missing values (\code{"n.missing"}) or number of observations (\code{"frequency"}).
+##' @param ... Not used. For compatibility with the generic method.
+##'
+##' @return A list with two elements \itemize{
+##' \item \code{data}: data used to create the graphical display.
+##' \item \code{plot}: ggplot object.
+##' }
+##' 
+##' @examples
+##' if(require(ggplot2)){
+##' data(gastricbypassL, package = "LMMstar")
+##' autoplot(summarizeNA(gastricbypassL))
+##' }
+
+## * autoplot.summarizeNA (code)
+##' @export
+autoplot.summarizeNA <- function(object, plot = TRUE, size.text = 16,
+                                 add.missing = " missing", order.pattern = NULL, ...){
+
+    newnames <- attr(object,"args")$newnames
+    keep.data <- attr(object,"args")$keep.data
+    dots <- list(...)
+    
+if(length(dots)>0){
+        stop("Unknown argument(s) \'",paste(names(dots),collapse="\' \'"),"\'. \n")
+    }
+    
+    if(identical(order.pattern,newnames[4])){
+        order.pattern <- order(object[[newnames[4]]])
+    }
+    if(identical(order.pattern,newnames[2])){
+        order.pattern <- order(object[[newnames[2]]])
+    }
+    
+    if(keep.data == FALSE){
+        stop("Argument \'keep.data\' should be set to TRUE when calling summarizeNA to obtain a graphical display. \n")
+    }
+
+    keep.cols <- setdiff(names(object),newnames)
+    data <- as.data.frame(object[,c(newnames[3],keep.cols),drop=FALSE])
+    dataL <- stats::reshape(data, direction = "long", idvar = newnames[3], varying = keep.cols,
+                            v.names = newnames[[2]],
+                            timevar = newnames[[1]])
+
+    nObs.pattern <- stats::setNames(object[[newnames[2]]], object[[newnames[3]]])
+    nNA.Var <- colSums(data[,keep.cols,drop=FALSE])
+
+    if(!is.null(add.missing) && !is.na(add.missing) && !identical(FALSE,add.missing)){
+        dataL[[newnames[1]]] <- factor(dataL[[newnames[1]]], labels = paste0(keep.cols,"\n(",nNA.Var,add.missing,")"))
+    }else{
+        dataL[[newnames[1]]] <- factor(dataL[[newnames[1]]], labels = keep.cols)
+    }
+    dataL[[newnames[2]]] <- factor(dataL[[newnames[2]]], levels = 1:0, labels = c("yes","no"))
+
+    if(!is.null(order.pattern)){
+        if(length(order.pattern)!=NROW(data)){
+            stop("Argument \'order.pattern\' should have length ",NROW(data),".\n",sep="")
+        }
+        if(any(sort(order.pattern)!=1:NROW(data))){
+            stop("Argument \'order.pattern\' should be a vector containing integers from 1 to ",NROW(data),".\n",sep="")
+        }
+        dataL[[newnames[3]]] <- factor(dataL[[newnames[3]]], levels = data[[newnames[3]]][order.pattern])
+    }
+
+    gg.NA <- ggplot2::ggplot(dataL, ggplot2::aes_string(y = newnames[3], x = newnames[1], fill = newnames[2]))
+    gg.NA <- gg.NA + ggplot2::geom_tile(color = "black")
+    gg.NA <- gg.NA + ggplot2::scale_y_discrete(breaks = unique(dataL[[newnames[3]]]), labels = nObs.pattern[unique(dataL[[newnames[3]]])])
+    gg.NA <- gg.NA + ggplot2::labs(fill = "missing", x = "", y = "number of observations")
+    gg.NA <- gg.NA + ggplot2::theme(text = ggplot2::element_text(size=size.text))
+
+    if(plot){
+        print(gg.NA)
+    }
+
+    ## ** export
+    return(invisible(list(data = dataL,
+                          plot = gg.NA)))
+}
+
+## * autoplot.Wald_lmm (documentation)
+##' @title Graphical Display For Linear Hypothesis Test
+##'
+##' @param object a \code{Wald_lmm} object.
+##' @param type [character] what to display: a forest plot (\code{"forest"}) or a heatmap (\code{"heat"}).
+##' @param plot [logical] should the plot be displayed?
+##' @param add.args [list] additional arguments used to customized the graphical display.
+##' Must be a named list. See details.
+##' @param size.text [numeric, >0] size of the font used to display text.
+##' @param ... arguments passed to the confint method.
+##'
+##' @details Argument \strong{add.args}: parameters specific to the forest plot: \itemize{
+##' \item \code{color}: [logical] should the estimates be colored by global null hypothesis, e.g. when testing the effect of a 3 factor covariate, the two corresponding coefficient will have the same color. Alternatively a vector of positive integers giving the color with which each estimator should be displayed.
+##' \item \code{color}: [logical] should the estimates be represented by a different shape per global null hypothesis, e.g. when testing the effect of a 3 factor covariate, the two corresponding coefficient will have the same type of point. Alternatively a vector of positive integers describing the shape to be used for each estimator.
+##' \item \code{ci}: [logical] should confidence intervals be displayed?
+##' \item \code{size.estimate}: [numeric, >0] size of the dot used to display the estimates.
+##' \item \code{size.ci}: [numeric, >0] thickness of the line used to display the confidence intervals.
+##' \item \code{width.ci}: [numeric, >0] width of the line used to display the confidence intervals.
+##' \item \code{size.null}: [numeric, >0] thickness of the line used to display the null hypothesis. 
+##' }
+##' Parameters specific to the heatmap plot: \itemize{
+##' \item \code{limits}: [numeric vector of length 2] minimum and maximum value of the colorscale relative to the correlation.
+##' \item \code{low}, \code{mid}, \code{high}: [character] color for the the colorscale relative to the correlation.
+##' \item \code{midpoint}: [numeric] correlation value associated with the color defined by argument \code{mid}
+##' }
+##'
+##' @return A list with two elements \itemize{
+##' \item \code{data}: data used to create the graphical display.
+##' \item \code{plot}: ggplot object.
+##' }
+##'
+##' @examples
+##' ## From the multcomp package
+##' if(require(datasets) && require(ggplot2)){
+##'
+##' ## only tests with 1 df
+##' ff <- Fertility ~ Agriculture + Examination + Education + Catholic + Infant.Mortality
+##' e.lmm <- lmm(ff, data = swiss)
+##' e.aovlmm <- anova(e.lmm)
+##' 
+##' autoplot(e.aovlmm, type = "forest")
+##' autoplot(e.aovlmm, type = "heat") ## 3 color gradient
+##' autoplot(e.aovlmm, type = "heat", add.args = list(mid = NULL)) ## 2 color gradient
+##'
+##' ## test with more than 1 df
+##' e.lmm2 <- lmm(breaks ~ tension + wool, data = warpbreaks)
+##' e.aovlmm2 <- anova(e.lmm2)
+##' autoplot(e.aovlmm2)
+##' autoplot(e.aovlmm2, add.args = list(color = FALSE, shape = FALSE))
+##' }
+##'
+
+## * autoplot.Wald_lmm (code)
+##' @export
+autoplot.Wald_lmm <- function(object, type = "forest", plot = TRUE, size.text = 16, add.args = NULL, ...){
+
+    ## ** check user input
+    type <- match.arg(type, c("forest","heat"))
+    if(!is.null(add.args) && !is.list(add.args)){
+        stop("Argument \'add.args\' should be a list. \n")
+    }
+    if(is.list(add.args) && is.null(names(add.args))){
+        stop("Argument \'add.args\' should have names, i.e. names(add.args) should not be NULL. \n")
+    }
+
+    if(type=="forest"){
+        init.add.args <- list(color = NULL,
+                              shape = NULL,
+                              ci = TRUE,
+                              size.estimate = 3, 
+                              size.ci = 1,
+                              width.ci = 0.2,
+                              size.null = 1)
+    }else{
+        init.add.args <- list(limits = c(-1,1.00001),
+                              low = "blue",
+                              mid = "white",
+                              high = "red",
+                              midpoint = 0,
+                              value.text = FALSE,
+                              value.round = 2,
+                              value.size = 5)
+    }
+    valid.names <- names(init.add.args)
+    if(any(names(add.args) %in% valid.names == FALSE)){
+        invalid.names <- names(add.args)[names(add.args) %in% valid.names == FALSE]
+        if(length(invalid.names)>1){txt.invalid <- "are not valid arguments"}else{txt.invalid <- "is not a valid argument"}
+
+        possible.names <- setdiff(valid.names,names(add.args))
+        if(length(possible.names)>0){
+            txt.valid <- paste0("Possible arguments: \"",paste(possible.names, collapse = "\", \""),"\". \n")
+        }else{
+            txt.valid <- NULL
+        }
+
+        stop("Incorrect element in argument \'add.args\'. \n",
+             "\"",paste(invalid.names, collapse = "\", \""),"\" ",txt.invalid,". \n",
+             txt.valid, sep = "")
+    }
+
+    if(is.null(add.args)){
+        add.args <- init.add.args
+    }else{
+        missing.names <- setdiff(valid.names, names(add.args))
+        if(length(missing.names)>0){
+            add.args[missing.names] <- init.add.args[missing.names]
+        }
+    }
+
+    ## ** graphical display
+    if(type=="forest"){
+
+        color <- add.args$color
+        shape <- add.args$shape
+        ci <- add.args$ci
+        size.estimate <- add.args$size.estimate
+        size.ci <- add.args$size.ci
+        width.ci <- add.args$width.ci
+        size.null <- add.args$size.null
+        rhs <- unique(object$univariate$null)
+
+        if(ci){
+            table <- confint(object, columns = c("estimate","test","lower","upper"), ...)
+        }else{
+            table <- object$univariate
+        }
+        table <- cbind(names = rownames(table), table)
+        if(is.null(color)){
+            if(length(unique(table$test))==1 || all(duplicated(table$test)==FALSE)){
+                color <- FALSE
+                color.legend <- FALSE
+            }else{
+                table$color <- table$test
+                color <- TRUE
+                color.legend <- FALSE
+            }
+        }else{
+            if(identical(color,FALSE)){
+                color <- FALSE
+                color.legend <- FALSE
+            }else if(length(color)==NROW(table) && all(is.character(color))){
+                table$color <- color
+                color <- TRUE
+                color.legend <- TRUE
+            }else{
+                stop("Argument \'color\' should have length ",NROW(table)," and be of type character. \n")
+            }
+        }
+        if(is.null(shape)){
+            if(length(unique(table$test))==1 || all(duplicated(table$test)==FALSE)){
+                shape <- FALSE
+                shape.legend <- FALSE
+            }else{
+                table$shape <- table$test
+                shape <- TRUE
+                shape.legend <- FALSE
+            }
+        }else{
+            if(identical(shape,FALSE)){
+                shape <- FALSE
+                shape.legend <- FALSE
+            }else if(length(shape)==NROW(table) && all(is.numeric(shape))){
+                table$shape <- as.character(shape)
+                shape <- TRUE
+                shape.legend <- TRUE
+            }else{
+                stop("Argument \'shape\' should have length ",NROW(table)," and be of type numeric. \n")
+            }
+        }
+
+        table$test <- as.factor(table$test)
+        table$names <- factor(table$names, levels = unique(table$names)) ## ensure same ordering as in the object (instead of alphabetical ordering)
+        if(color & shape){
+            gg <- ggplot2::ggplot(table, ggplot2::aes_string(x = "names", y = "estimate", color = "color", shape = "shape")) + ggplot2::labs(color = "", shape = "")
+        }else if(color){
+            gg <- ggplot2::ggplot(table, ggplot2::aes_string(x = "names", y = "estimate", color = "color")) + ggplot2::labs(color = "")
+        }else if(shape){
+            gg <- ggplot2::ggplot(table, ggplot2::aes_string(x = "names", y = "estimate", shape = "shape")) + ggplot2::labs(color = "")
+        }else{
+            gg <- ggplot2::ggplot(table, ggplot2::aes_string(x = "names", y = "estimate"))
+        }
+    
+    if(shape.legend){
+        gg <- gg + ggplot2::scale_shape_manual(values = as.numeric(unique(table$shape)), breaks = unique(table$shape)) + ggplot2::guides(shape = "none")
+    }
+    if(color.legend){
+        gg <- gg + ggplot2::scale_color_manual(values = unique(table$color), breaks = unique(table$color)) + ggplot2::guides(color = "none")
+    }
+    gg <- gg + ggplot2::geom_point(size = size.estimate) + ggplot2::labs(x = "", y = "")
+    if(ci){
+        gg <- gg + ggplot2::geom_errorbar(ggplot2::aes_string(ymin = "lower", ymax = "upper"), size = size.ci, width = width.ci)
+    }
+    if(size.null>0 && length(rhs)==1){
+        gg <- gg + ggplot2::geom_hline(yintercept=rhs, lty=2, size = size.null)
+    }
+    gg <- gg + ggplot2::coord_flip()
+
+    }else if(type=="heat"){
+
+        limits <- add.args$limits
+        low <- add.args$low
+        mid <- add.args$mid
+        high <- add.args$high
+        midpoint <- add.args$midpoint
+        value.text <- add.args$value.text
+        value.round <- add.args$value.round
+        value.size <- add.args$value.size
+
+        Sigma_t <- stats::cov2cor(object$vcov)
+        ## from matrix to long format
+        table <- as.data.frame(cbind(which(is.na(NA*Sigma_t), arr.ind = TRUE), value = as.numeric(Sigma_t)))
+        rownames(table) <- NULL
+
+        ## rename
+        if(!is.null(object$args$sep) && all(colnames(Sigma_t) == rownames(Sigma_t))){
+            splitname <- strsplit(colnames(Sigma_t),split = object$args$sep, fixed = TRUE)
+            if(all(sapply(splitname,length)==2) && length(unique(sapply(splitname,"[",2)))==1){
+                name.x <- splitname[[1]][2]
+                name.y <- splitname[[1]][2]
+                table$col <- sapply(splitname,"[",1)[table$col]
+                table$row <- sapply(splitname,"[",1)[table$row]
+            }else{
+                table$col <- colnames(Sigma_t)[table$col]
+                table$row <- rownames(Sigma_t)[table$row]
+                name.x <- ""
+                name.y <- ""
+            }
+        }else{
+            table$col <- colnames(Sigma_t)[table$col]
+            table$row <- rownames(Sigma_t)[table$row]
+            name.x <- ""
+            name.y <- ""
+        }
+        table$row <- factor(table$row, levels = unique(table$row))
+        table$col <- factor(table$col, levels = rev(levels(table$row)))
+        table$rvalue <- round(table$value, digits = value.round)
+        gg <- ggplot2::ggplot(table) + ggplot2::geom_tile(ggplot2::aes_string(x="row",y="col",fill="value"))
+
+        if(value.text){
+            gg <- gg + ggplot2::geom_text(ggplot2::aes_string(x = "row", y = "col", label = "rvalue"), size = value.size)
+        }
+        if(!is.null(mid)){
+            gg <- gg + ggplot2::scale_fill_gradient2(limits = limits, midpoint = midpoint, low = low, mid = mid, high = high)
+        }else{
+            gg <- gg + ggplot2::scale_fill_gradient(limits = limits, low = low, high = high)
+        }
+        gg <- gg + ggplot2::labs(x=name.x,y=name.y, fill = "correlation")
+    }
+        
+    gg <- gg + ggplot2::theme(text = ggplot2::element_text(size=size.text))
+
+    ## ** display
+    if(plot){
+        print(gg)
+    }
+
+    ## ** export
+    return(invisible(list(data = table,
+                          plot = gg)))
+}
+
+
 
 ##----------------------------------------------------------------------
 ### autoplot.R ends here

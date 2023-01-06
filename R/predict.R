@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:39) 
 ## Version: 
-## Last-Updated: jun 13 2022 (17:27) 
+## Last-Updated: Nov 12 2022 (17:31) 
 ##           By: Brice Ozenne
-##     Update #: 674
+##     Update #: 722
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -105,6 +105,13 @@ predict.lmm <- function(object, newdata, p = NULL, se = "estimation", df = !is.n
     }else{
         keep.intercept <- TRUE
     }
+
+    ## dataset
+    if(identical(newdata,"unique") && type.prediction %in% c("static","terms")){
+        newdata <- unique(object$data[, attr(object$design$mean,"variable"),drop=FALSE])
+        rownames(newdata) <- NULL
+    }
+    
     ## standard error
     if(!missing(se.fit)){se <- "estimation"}
     if(identical(se,FALSE)){
@@ -130,16 +137,12 @@ predict.lmm <- function(object, newdata, p = NULL, se = "estimation", df = !is.n
 
     ## impute cluster when missing (if static) and unambiguous, i.e. no repeated times (id dynamic)
     if(!is.na(name.cluster)){
-        if(is.null(newdata[[name.cluster]])){
-            if(type.prediction=="static"){
-                newdata[[name.cluster]] <- as.character(1:NROW(newdata))
-            }else if(type.prediction == "dynamic" && all(!is.na(name.time)) && all(name.time %in% names(newdata))){
-                if(any(duplicated(newdata[,name.time, drop=FALSE]))){
-                    stop("Duplicated time values found in column ",name.time,".\n",
-                         "Consider specifying the cluster variable in argument \'newdata\'. \n")
-                }else{
-                    newdata[[name.cluster]] <- "1"
-                }
+        if(is.null(newdata[[name.cluster]]) && type.prediction == "dynamic" && all(!is.na(name.time)) && all(name.time %in% names(newdata))){
+            if(any(duplicated(newdata[,name.time, drop=FALSE]))){
+                stop("Duplicated time values found in column ",name.time,".\n",
+                     "Consider specifying the cluster variable in argument \'newdata\'. \n")
+            }else{
+                newdata[[name.cluster]] <- "1"
             }
         }else if((is.factor(newdata[[name.cluster]]) || is.numeric(newdata[[name.cluster]]))){
             newdata[[name.cluster]] <- as.character(newdata[[name.cluster]])
@@ -200,14 +203,20 @@ predict.lmm <- function(object, newdata, p = NULL, se = "estimation", df = !is.n
     ## ** parameters
     if(is.null(p)){
         mu <- coef(object, effects = "mean")
-        vcov.mu <- vcov(object, effects = "mean")
-        theta <- coef(object, effects = "all")
-        vcov.theta <- vcov(object, effects = "all")
+        if(type.prediction == "dynamic"){
+            theta <- coef(object, effects = "all")
+        }
+        if(!is.null(se) || type.prediction == "dynamic"){
+            vcov.mu <- vcov(object, effects = "mean")
+            vcov.theta <- vcov(object, effects = "all")
+        }
     }else{
         theta <- p
-        vcov.theta <- vcov(object, p = p, effects = "all")
         mu <- p[name.mu]
-        vcov.mu <- vcov(object, p = p, effects = "mean")
+        if(!is.null(se) || type.prediction == "dynamic"){
+            vcov.theta <- vcov(object, p = p, effects = "all")
+            vcov.mu <- vcov(object, p = p, effects = "mean")
+        }
     }
 
 
@@ -354,7 +363,7 @@ predict.lmm <- function(object, newdata, p = NULL, se = "estimation", df = !is.n
                 out$se <- sqrt(prediction.var)
                 out$df <- ifelse(!is.na(prediction),Inf,NA)
             }
-        }else{
+p        }else{
             out <- data.frame(estimate = stats::na.omit(prediction),stringsAsFactors = FALSE)
             if(!is.null(se)){
                 if(NROW(out)>0){
@@ -400,7 +409,7 @@ predict.lmm <- function(object, newdata, p = NULL, se = "estimation", df = !is.n
 }
 
 ## * .dfX
-.dfX <- function(X.beta, vcov.param, dVcov.param){
+.dfX <- function(X.beta, vcov.param, dVcov.param, return.vcov = FALSE){
 
     if(!is.matrix(X.beta) && is.vector(X.beta)){
         X.beta <- rbind(X.beta)
@@ -463,8 +472,11 @@ predict.lmm <- function(object, newdata, p = NULL, se = "estimation", df = !is.n
     ##     2 * prediction.vcov[iObs,iObs]^2 / (dXTX.dT[iObs,] %*% vcov.vcovbeta %*% dXTX.dT[iObs,])
     ## })
 
-
     ## ** export
+    if(return.vcov){
+        attr(out,"vcov") <- vcov.vcovbeta
+        attr(out,"contrast") <- X.beta
+    }
     return(out)
 }
 

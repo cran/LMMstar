@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (12:59) 
 ## Version: 
-## Last-Updated: jun 27 2022 (16:43) 
+## Last-Updated: okt 12 2022 (17:43) 
 ##           By: Brice Ozenne
-##     Update #: 555
+##     Update #: 572
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -18,7 +18,6 @@
 ## * score.lmm (documentation)
 ##' @title Extract The Score From a Linear Mixed Model
 ##' @description Extract or compute the first derivative of the log-likelihood of a linear mixed model.
-##' @name score
 ##' 
 ##' @param x a \code{lmm} object.
 ##' @param data [data.frame] dataset relative to which the score should be computed. Only relevant if differs from the dataset used to fit the model.
@@ -33,7 +32,7 @@
 ##' @param transform.names [logical] Should the name of the coefficients be updated to reflect the transformation that has been used?
 ##' @param ... Not used. For compatibility with the generic method.
 ##'
-##' @details For details about the arguments \bold{transform.sigma}, \bold{transform.k}, \bold{transform.rho}, see the documentation of the \link[LMMstar]{coef} function.
+##' @details For details about the arguments \bold{transform.sigma}, \bold{transform.k}, \bold{transform.rho}, see the documentation of the \link[LMMstar]{coef.lmm} function.
 ##'
 ##' @return
 ##' When argument indiv is \code{FALSE}, a vector with the value of the score relative to each coefficient.
@@ -41,7 +40,6 @@
 ##' 
 
 ## * score.lmm (code)
-##' @rdname score
 ##' @export
 score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE, transform.sigma = NULL, transform.k = NULL, transform.rho = NULL, transform.names = TRUE, ...){
 
@@ -112,11 +110,11 @@ score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE,
                           dimnames = list(x$cluster$levels, colnames(out)))
             out[rownames(out.save),] <- out.save
 
-            if(is.numeric(design$cluster$levels.original)){
+            if(is.numeric(design$cluster$levels)){
                 rownames(out) <- NULL
             }
-        }else if(!is.numeric(design$cluster$levels.original)){
-            rownames(out) <- design$cluster$levels.original
+        }else if(!is.numeric(design$cluster$levels)){
+            rownames(out) <- design$cluster$levels
         } 
     }
 
@@ -160,7 +158,7 @@ score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE,
     ## restrict to relevant parameters
     if(("variance" %in% effects == FALSE) && ("correlation" %in% effects == FALSE)){ ## compute score only for mean parameters
         test.vcov <- FALSE
-        test.mean <- TRUE
+        test.mean <- n.mucoef>0
     }else{
         if(REML && indiv){
             stop("Not possible to compute individual score for variance and/or correlation coefficients when using REML.\n")
@@ -176,13 +174,13 @@ score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE,
                 stop("Not possible to compute individual score for variance and/or correlation coefficients when using REML.\n")
             }
 
-            test.vcov <- TRUE
+            test.vcov <- any(unlist(n.varcoef)>0)
             test.mean <- FALSE
 
         }else{ ## compute score all parameters
      
-            test.vcov <- TRUE
-            test.mean <- TRUE
+            test.vcov <- any(unlist(n.varcoef)>0)
+            test.mean <- n.mucoef>0
         }
     }
 
@@ -267,7 +265,11 @@ score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE,
                     iX <- precompute$XX$pattern[[iPattern]]
                     iDouble2Mat <- as.vector(precompute$XX$key)
                     ## denominator
-                    REML.denom <- REML.denom + (as.double(iOmegaM1) %*% iX)[iDouble2Mat]
+                    if(is.null(precompute$X.OmegaM1.X)){
+                        REML.denom <- REML.denom + (as.double(iOmegaM1) %*% iX)[iDouble2Mat]
+                    }else{
+                        REML.denom <- REML.denom + precompute$X.OmegaM1.X[[iPattern]][iDouble2Mat]
+                    }
                     ## numerator
                     iX_OmegaM1_dOmega_OmegaM1_X <- t(iX) %*% OmegaM1_dOmega_OmegaM1[[iPattern]]
                     for(iVarcoef in iName.varcoef){ ## iVarcoef <- iName.varcoef[1]

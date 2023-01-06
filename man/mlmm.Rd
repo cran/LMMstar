@@ -4,7 +4,22 @@
 \alias{mlmm}
 \title{Fit Multiple Linear Mixed Model}
 \usage{
-mlmm(..., data, by, effects = NULL, robust = FALSE, df = TRUE, ci = TRUE)
+mlmm(
+  ...,
+  data,
+  by,
+  contrast.rbind = NULL,
+  effects = NULL,
+  robust = NULL,
+  df = TRUE,
+  ci = TRUE,
+  name.short = c(TRUE, TRUE),
+  transform.sigma = NULL,
+  transform.k = NULL,
+  transform.rho = NULL,
+  transform.names = TRUE,
+  trace = TRUE
+)
 }
 \arguments{
 \item{...}{arguments passed to \code{\link{lmm}}.}
@@ -13,22 +28,41 @@ mlmm(..., data, by, effects = NULL, robust = FALSE, df = TRUE, ci = TRUE)
 
 \item{by}{[character] variable used to split the dataset. On each split a seperate linear mixed model is fit.}
 
-\item{effects}{[character] Linear combinations of coefficients relative to which Wald test should be computed.}
+\item{contrast.rbind}{[character or numeric matrix] Contrast to be be applied to compare the groups.
+Argument passed to the argument \code{effects} of \code{\link{rbind.Wald_lmm}}.
+Right hand side can be specified via an attribute \code{"rhs"}.}
 
-\item{robust}{[logical] Should robust standard errors (aka sandwich estimator) be output instead of the model-based standard errors. Argument passed to \code{anova.lmm}.}
+\item{effects}{[character or numeric matrix] Linear combinations of coefficients relative to which Wald test should be computed.
+Argument passed to \code{\link{anova.lmm}}.
+Right hand side can be specified via an attribute \code{"rhs"}.}
 
-\item{df}{[logical] Should the degree of freedom be computed using a Satterthwaite approximation?}
+\item{robust}{[logical] Should robust standard errors (aka sandwich estimator) be output instead of the model-based standard errors.
+Argument passed to \code{\link{anova.lmm}}.}
 
-\item{ci}{[logical] Should a confidence interval be output for each hypothesis?}
+\item{df}{[logical] Should the degree of freedom be computed using a Satterthwaite approximation?
+Argument passed to \code{\link{anova.lmm}}.}
+
+\item{ci}{[logical] Should a confidence interval be output for each hypothesis?
+Argument passed to \code{\link{anova.lmm}}.}
+
+\item{name.short}{[logical vector of length 2] use short names for the output coefficients:
+omit the name of the by variable, omit the regression variable name when the same regression variable is used in all models.}
+
+\item{transform.sigma, transform.k, transform.rho, transform.names}{[character] transformation used on certain type of parameters.}
+
+\item{trace}{[interger, >0] Show the progress of the execution of the function.}
 }
 \description{
 Fit several linear mixed models, extract relevant coefficients, and combine them into a single table.
 }
+\details{
+\bold{Grouping variable} in argument repetition: when numeric, it will be converted into a factor variable, possibly adding a leading 0 to preserve the ordering.
+This transformation may cause inconsistency when combining results between different \code{lmm} object. 
+This is why the grouping variable should preferably be of type character or factor.
+}
 \examples{
-
 #### univariate regression ####
 if(require(lava)){
-library(LMMstar)
 
 set.seed(10)
 d1 <- cbind(sim(lvm(Y~0.5*X1), 25), group = "A")
@@ -61,4 +95,9 @@ e.mlmmX1 <- mlmm(Y~X1+X2+X6, repetition = ~visit|id, data = dL,
 summary(e.mlmmX1)
 summary(e.mlmmX1, method = "single-step")
 
+}
+\seealso{
+\code{\link{confint.mlmm}} for a data.frame containing estimates with their uncertainty. \cr
+\code{\link{summary.mlmm}} for a summary of the model and estimates. \cr
+\code{\link{autoplot.Wald_lmm}} for a graphical display. \cr
 }

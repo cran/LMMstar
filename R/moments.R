@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Jun 18 2021 (09:15) 
 ## Version: 
-## Last-Updated: Jul  1 2022 (09:42) 
+## Last-Updated: Nov 12 2022 (17:51) 
 ##           By: Brice Ozenne
-##     Update #: 394
+##     Update #: 442
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -53,7 +53,6 @@
     }else{
         newname.allcoef[names(out$reparametrize$p)] <- out$reparametrize$newname
     }
-
     if(score || information || vcov || df){
         type.effects <- c("mu","sigma","k","rho")[c("mean","variance","variance","correlation") %in% effects]
         attr(effects, "original.names") <- names(newname.allcoef[param.type %in% type.effects])
@@ -83,7 +82,7 @@
                                               pattern.ntime = stats::setNames(design$vcov$X$Upattern$n.time, design$vcov$X$Upattern$name),
                                               pattern.cluster = design$vcov$X$Upattern$index.cluster, index.cluster = design$index.cluster)                           
                            )
-        if(score || information || vcov || df){
+        if(!is.null(design$precompute.XX) && (score || information || vcov || df)){
             precompute$XR  <-  .precomputeXR(X = design$precompute.XX$Xpattern, residuals = wR, pattern = design$vcov$X$Upattern$name,
                                              pattern.ntime = stats::setNames(design$vcov$X$Upattern$n.time, design$vcov$X$Upattern$name),
                                              pattern.cluster = design$vcov$X$Upattern$index.cluster, index.cluster = design$index.cluster)
@@ -169,6 +168,12 @@
     ## matrix(MM[,8],4,4)
 
     ## ** 3- compute likelihood derivatives
+    if(indiv == FALSE && method.fit == "REML" && !is.null(precompute)){
+        precompute$X.OmegaM1.X <- mapply(x = out$OmegaM1, y = precompute$XX$pattern, FUN = function(x,y){
+            if(inherits(x,"try-error")){NULL}else{as.double(x) %*% y}
+        }, SIMPLIFY = FALSE)
+    }
+
     if(logLik){
         if(trace>=1){cat("- log-likelihood \n")}
         out$logLik <- .logLik(X = design$mean, residuals = out$residuals, precision = out$OmegaM1,
@@ -230,12 +235,33 @@
     }
     if(vcov || df){
         if(trace>=1){cat("- variance-covariance \n")}
+        
         if(robust && method.fit=="REML"){
             keep.cols <- intersect(names(which(rowSums(!is.na(Minfo))>0)),names(which(rowSums(!is.na(Minfo))>0)))
             Mvcov <- NA*Minfo
-            Mvcov[keep.cols,keep.cols] <- solve(Minfo[keep.cols,keep.cols,drop=FALSE])
+            if(is.invertible(Minfo[keep.cols,keep.cols,drop=FALSE], cov2cor = TRUE)){
+                Mvcov[keep.cols,keep.cols] <- solve(Minfo[keep.cols,keep.cols,drop=FALSE])
+            }else{
+                warning("Singular or nearly singular information matrix. \n")
+                test <- try(solve(Minfo[keep.cols,keep.cols,drop=FALSE]), silent = TRUE)
+                if(inherits(Mvcov,"try-error")){
+                    df <- FALSE
+                }else{
+                    Mvcov[keep.cols,keep.cols] <- test
+                }
+            }
         }else{
-            Mvcov <- solve(Minfo)
+            if(is.invertible(Minfo, cov2cor = TRUE)){
+                Mvcov <- solve(Minfo)
+            }else{
+                warning("Singular or nearly singular information matrix. \n")
+                Mvcov <- try(solve(Minfo), silent = TRUE)
+                if(inherits(Mvcov,"try-error")){
+                    Mvcov <- NA*Minfo
+                    df <- FALSE
+                }
+            }
+            
         }
         if(vcov){
             out$vcov <- Mvcov[attr(effects, "original.names"),attr(effects, "original.names"),drop=FALSE]

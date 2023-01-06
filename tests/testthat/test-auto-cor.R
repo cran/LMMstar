@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 20 2022 (12:12) 
 ## Version: 
-## Last-Updated: May 30 2022 (23:19) 
+## Last-Updated: Nov 12 2022 (17:03) 
 ##           By: Brice Ozenne
-##     Update #: 24
+##     Update #: 66
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -42,7 +42,7 @@ test_that("estimate correlation via lmm", {
     test <- model.tables(e0.lmm, effects = "correlation")[,c("estimate","lower","upper")]
     GS <- unlist(cor.test(Y[,1],Y[,2])[c("estimate","conf.int")])
 
-    test2 <- partialCor(c(V1,V2)~1, data.frame(V1 = Y[,1], V2= Y[,2]))
+    test2 <- partialCor(c(V1,V2)~1, data = data.frame(V1 = Y[,1], V2= Y[,2]))
     
     ## same point estimate
     expect_equal(as.double(test[,"estimate"]),as.double(GS["estimate.cor"]), tol = 1e-5)
@@ -57,26 +57,25 @@ test_that("estimate correlation via lmm", {
 ## * Partial correlation
 data("Orthodont", package = "nlme")
 
-test_that("estimate partial correlation via lmm", {
+test_that("estimate partial correlation via lmm (independence)", {
 
     ## univariate linear model
     e.lm <- lmm(distance ~ age, data = Orthodont)
-    expect_equal(cor(Orthodont$age,Orthodont$distance), confint(e.lm, column = "partial.R")["age","partial.R"], tol = 1e-3)
+    expect_equal(cor(Orthodont$age,Orthodont$distance), partialCor(e.lm, se = FALSE)[,"estimate"], tol = 1e-3)
 
-    e.lm2 <- lmm(distance ~ age+Sex, data = Orthodont)
+    e.lm2 <- lmm(distance ~ Sex+age, data = Orthodont)
     GS <- lava::partialcor(c(age,distance)~Sex, data = Orthodont)
-    expect_equal(GS[,"cor"], confint(e.lm2, column = "partial.R")["age","partial.R"], tol = 1e-3)
+    expect_equal(GS[,"cor"], partialCor(e.lm2, se = FALSE)["age","estimate"], tol = 1e-3)
 
     ## mixed model
-    e.lmm <- lmm(distance ~ age*Sex, repetition = ~1|Subject, structure = "CS", data = Orthodont)
-    e.aovlmm <- summary(anova(e.lmm), columns = "partial.R", print = FALSE)
-    ## e.lmer <- lme4::lmer(distance ~ age*Sex + (1|Subject), data = Orthodont)
+    e.lmm <- lmm(distance ~ Sex*age, repetition = ~1|Subject, structure = "CS", data = Orthodont)
+    e.R2lmm <- suppressWarnings(partialCor(e.lmm, se = FALSE, R2 = TRUE))
 
+    ## e.lmer <- lme4::lmer(distance ~ Sex*age + (1|Subject), data = Orthodont)
     ## library(r2glmm); setNames(r2beta(e.lmer, method = "kr")[2:4,"Rsq"],r2beta(e.lmer, method = "kr")[2:4,"Effect"])
-    GS <- c("age" = 0.57834264, "age:Sex" = 0.07388639, "Sex" = 0.00431524)
-    GS - e.aovlmm[[1]][names(GS),"partial.R2"] ## some difference in age effect
-    
-    expect_equal(e.aovlmm[[1]][names(GS),"partial.R2"], e.aovlmm[[2]][names(GS),"partial.R"]^2, tol = 1e-6)
+
+    GS <- c("age" = 0.57834264, "Sex:age" = 0.07388639, "Sex" = 0.00431524)
+    GS - attr(e.R2lmm, "R2")[names(GS)] ## some difference in age effect
 })
 
 ## * ICC
@@ -118,6 +117,80 @@ test_that("ICC", {
     ## })
     ## colMeans(do.call(rbind,ls.sim)<=0.05)
 
+})
+
+## * Partial correlation with repeated measuremnts
+set.seed(10)
+
+n.time <- 3
+n.id <- 100
+sd.id <- 1.5
+Sigma <- matrix(c(1,0.8,0.8,1),2,2)
+##      [,1] [,2]
+## [1,]  1.0  0.8
+## [2,]  0.8  1.0
+df.W <- data.frame(id = unlist(lapply(1:n.id, rep, n.time)),
+                   time = rep(1:n.time,n.id),
+                   rmvnorm(n.time*n.id, mean = c(3,3), sigma = Sigma)
+                   )
+## df.W$time2 <- as.factor(df.W$time)
+df.W$X2 <- df.W$X2 + rnorm(n.id, sd = sd.id)[df.W$id]
+df.W$id <- as.factor(df.W$id)
+df.L <- reshape2::melt(df.W, id.vars = c("id","time")) 
+df.L$time2 <- as.factor(as.numeric(as.factor(paste(df.L$variable,df.L$time,sep="."))))
+
+Sigma.GS <- as.matrix(bdiag(Sigma,Sigma,Sigma))[c(1,3,5,2,4,6),c(1,3,5,2,4,6)]
+Sigma.GS[4:6,4:6] <- Sigma.GS[4:6,4:6] + sd.id^2
+cov2cor(Sigma.GS)
+##           [,1]      [,2]      [,3]      [,4]      [,5]      [,6]
+## [1,] 1.0000000 0.0000000 0.0000000 0.4437602 0.0000000 0.0000000
+## [2,] 0.0000000 1.0000000 0.0000000 0.0000000 0.4437602 0.0000000
+## [3,] 0.0000000 0.0000000 1.0000000 0.0000000 0.0000000 0.4437602
+## [4,] 0.4437602 0.0000000 0.0000000 1.0000000 0.6923077 0.6923077
+## [5,] 0.0000000 0.4437602 0.0000000 0.6923077 1.0000000 0.6923077
+## [6,] 0.0000000 0.0000000 0.4437602 0.6923077 0.6923077 1.0000000
+## cor(dcast(df.L, id~time2)[,-1])
+##              1           2           3           4           5          6
+## 1  1.000000000 -0.05237788 -0.02684335  0.44774229 0.004389268 0.06020988
+## 2 -0.052377883  1.00000000  0.06204366 -0.01202896 0.504596466 0.03584304
+## 3 -0.026843354  0.06204366  1.00000000 -0.05860345 0.019500348 0.47095753
+## 4  0.447742292 -0.01202896 -0.05860345  1.00000000 0.652024959 0.70171094
+## 5  0.004389268  0.50459647  0.01950035  0.65202496 1.000000000 0.68454889
+## 6  0.060209882  0.03584304  0.47095753  0.70171094 0.684548892 1.00000000
+
+## ggplot(df.W, aes(x = X1, y = X2, group = id, color = id)) + geom_point() + guides(color = "none") + geom_smooth(method="lm", se = FALSE)
+
+
+test_that("estimate partial correlation via lmm (cluster)", {
+
+    ## eWrong.lmm <- lmm(value ~ variable, repetition = ~time+variable|id, data = df.L,
+    ##                   structure = CS(~variable, heterogeneous = TRUE), control = list(optimizer = "FS"))
+    ## eOK.lmm <- lmm(value ~ variable, repetition = ~time2|id, data = df.L,
+    ##                   structure = "UN", control = list(optimizer = "FS", trace = 2))
+
+    ## partialCor(c(X1,X2)~1, data = df.W, repetition = ~time|id, structure = "HLAG")
+    test.hetero <- partialCor(c(X1,X2)~1, data = df.W, repetition = ~time|id, structure = "LAG")
+    test.homo <- partialCor(c(X1,X2)~1, data = df.W, repetition = ~time|id, structure = "CS")
+    
+    ## eTopHetero2.lmm <- lmm(value ~ variable, repetition = ~time+variable|id, data = df.L,
+    ##                        structure = TOEPLITZ(list(~time+variable,~time+variable), add.time = FALSE, heterogeneous = "LAG"),
+    ##                        control = list(optimizer = "FS"))
+    eTopHetero.lmm <- lmm(value ~ variable, repetition = ~time+variable|id, data = df.L,
+                          structure = TOEPLITZ(heterogeneous = "LAG"),
+                          control = list(optimizer = "FS"))
+    eTopHomo.lmm <- lmm(value ~ variable, repetition = ~time+variable|id, data = df.L,
+                        structure = TOEPLITZ(heterogeneous = "CS"),
+                        control = list(optimizer = "FS"))
+
+    expect_equal(as.double(model.tables(eTopHetero.lmm, effects = "correlation")["rho(1.X1,1.X2)",]),
+                 as.double(test.hetero[,c("estimate","se","df","lower","upper","p.value")]), tol = 1e-6)
+    expect_equal(c(0.47388305, 0.04995313, 13.80173649, 0.36429768, 0.57052434, 9.8e-07),
+                 as.double(test.hetero[,c("estimate","se","df","lower","upper","p.value")]), tol = 1e-6)
+    expect_equal(as.double(model.tables(eTopHomo.lmm, effects = "correlation")["rho(1.X1,1.X2)",]),
+                 as.double(test.homo["marginal(1.X1,1.X2)",c("estimate","se","df","lower","upper","p.value")]), tol = 1e-6)
+    expect_equal(c(0.4732798, 0.04992003, 14.13096784, 0.36401686, 0.56969305, 8.3e-07),
+                 as.double(test.homo["marginal(1.X1,1.X2)",c("estimate","se","df","lower","upper","p.value")]), tol = 1e-6)
+    
 })
 
 

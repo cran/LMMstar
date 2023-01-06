@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt  7 2020 (11:12) 
 ## Version: 
-## Last-Updated: jun 30 2022 (15:25) 
+## Last-Updated: jan  3 2023 (18:41) 
 ##           By: Brice Ozenne
-##     Update #: 1996
+##     Update #: 2078
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -37,8 +37,10 @@
 ##'
 ##' @details \bold{Computation time} the \code{lmm} has not been developped to be a fast function as, by default, it uses REML estimation with the observed information matrix and uses a Satterthwaite approximation to compute degrees of freedom (this require to compute the third derivative of the log-likelihood which is done by numerical differentiation). The computation time can be substantially reduced by using ML estimation with the expected information matrix and no calculation of degrees of freedom: arguments \code{method.fit="ML"}, \code{type.information="expected"}, \code{df=FALSE}. This will, however, lead to less accurate p-values and confidence intervals in small samples.
 ##'
-##' By default, the estimation of the model parameters will be made using the \code{nlme::gls} function.
-##' See argument optimizer in \code{\link{LMMstar.options}}
+##' By default, the estimation of the model parameters will be made using a Newton Raphson algorithm.
+##' This algorithm does not ensure that the residual covariance matrix is positive definite and therefore may sometimes fail.
+##' When using an unstructured pattern, i.e. \code{structure="UN"} the \code{nlme::gls} may be preferable as it can ensures positve definitness.
+##' See argument optimizer in \code{\link{LMMstar.options}}.
 ##'
 ##' \bold{Argument control:} when using the optimizer \code{"FS"}, the following elements can be used
 ##' \itemize{
@@ -48,6 +50,11 @@
 ##' \item \code{tol.param}: difference in estimated parameters from two successive iterations below which convergence has been reached.
 ##' \item \code{trace}: display progress of the optimization procedure.
 ##' }
+##' 
+##' \bold{Argument repetition:} when numeric, it will be converted into a factor variable, possibly adding a leading 0 to preserve the ordering.
+##' This transformation may cause inconsistency when combining results between different \code{lmm} object. 
+##' This is why the grouping variable should preferably be of type character or factor.
+##' 
 ##' @seealso
 ##' \code{\link{summary.lmm}} for a summary of the model fit. \cr
 ##' \code{\link{model.tables.lmm}} for a data.frame containing estimates with their uncertainty. \cr
@@ -175,7 +182,7 @@ lmm <- function(formula, repetition, structure, data,
     }else{
         var.strata <- NA
     }
-
+    
     ## *** repetition 
     if(missing(repetition)){
         missing.repetition <- TRUE
@@ -192,6 +199,9 @@ lmm <- function(formula, repetition, structure, data,
         }
     }else{
         missing.repetition <- FALSE
+        if(inherits(try(repetition,silent=TRUE),"try-error")){
+            stop("Could not evaluate argument \'repetition\'. Maybe the symbol \'~\' is missing in the formula. \n")
+        }
         if(!inherits(repetition,"formula")){
             stop("Argument \'repetition\' must be of class formula, something like: ~ time|cluster or strata ~ time|cluster. \n")
         }
@@ -243,12 +253,20 @@ lmm <- function(formula, repetition, structure, data,
     
     ## *** objective function
     if(is.null(method.fit)){
-        method.fit <- options$method.fit
+        if(length(rhs.vars(formula))==0 && attr(stats::terms(formula), "intercept") == 0){
+            method.fit <- "ML"
+        }else{
+            method.fit <- options$method.fit
+        }
     }else{
         method.fit <- match.arg(method.fit, choices = c("ML","REML"))
+        if(length(rhs.vars(formula))==0 && method.fit == "REML"){
+            message("Revert back to ML estimation as there is no mean structure. \n")
+            method.fit <- "ML"
+        }
     }
     out$method.fit <- method.fit
-
+    
     ## *** degrees of freedom
     if(is.null(df)){
         df <- options$df
@@ -484,6 +502,7 @@ lmm <- function(formula, repetition, structure, data,
     }
     out$formula <- list(mean = formula,
                         mean.design = formula.design)
+
     if(trace>=2){cat("\n")}
 
     ## *** residual variance-covariance structure
@@ -516,8 +535,13 @@ lmm <- function(formula, repetition, structure, data,
     type.structure <- structure$type
     call.structure <- as.list(structure$call)
     args.structure <- call.structure[-1]
-    if("add.time" %in% names(args.structure) == FALSE && type.structure %in% c("IND","UN") && n.time>1){
-        args.structure$add.time <- var.time
+
+    if(("add.time" %in% names(args.structure) == FALSE || identical(args.structure$add.time,TRUE)) && type.structure %in% c("IND","UN","EXP","TOEPLITZ") && n.time>1){
+        if(type.structure == "TOEPLITZ" && ("heterogeneous" %in% names(args.structure) && is.null(args.structure$heterogeneous))){
+            args.structure$add.time <- "XXtimeXX"
+        }else{
+            args.structure$add.time <- var.time
+        }
     }
     if(is.na(structure$name$cluster)){
         args.structure$var.cluster <- "XXcluster.indexXX"
@@ -525,6 +549,7 @@ lmm <- function(formula, repetition, structure, data,
     if(is.na(structure$name$cluster)){
         args.structure$var.time <- "XXtime.indexXX"
     }
+
     ## add strata to the call
     if(update.strataStructure){
         if(is.list(args.structure$formula)){
@@ -534,7 +559,6 @@ lmm <- function(formula, repetition, structure, data,
             args.structure$formula <- stats::update(stats::as.formula(args.structure$formula), stats::as.formula(paste0(var.strata2,"~.")))
         }
     }
-
     if(inherits(call.structure[[1]], "function")){
         structure <- do.call(call.structure[[1]], args = args.structure)
     }else{
@@ -559,6 +583,14 @@ lmm <- function(formula, repetition, structure, data,
              sep = "")
     }
 
+    ## update transformation
+    if(structure$type=="CUSTOM" && (is.null(structure$d2FCT.sigma) || is.null(structure$d2FCT.rho)) && (df || method.fit=="REML" || type.information=="observed")){
+        ## need second derivative but transformation based on dJacobian not implemented!
+        options$transform.sigma <- "none"
+        options$transform.k <- "none"
+        options$transform.rho <- "none"
+    }
+    
     if(trace>=2){cat("\n")}
 
     ## *** missing values
@@ -566,6 +598,34 @@ lmm <- function(formula, repetition, structure, data,
     var.all <- unname(unique(stats::na.omit(c(var.strata,var.outcome,var.X,var.time,var.cluster,var.Z))))
     index.na <- which(rowSums(is.na(data[,var.all,drop=FALSE]))>0)
     data.save <- data
+
+    if(length(index.na) == NROW(data)){
+        var.na <- var.all[colSums(!is.na(data[,var.all,drop=FALSE]))==0]
+        if(length(var.na)==0){
+            stop("All observations have at least one missing data. \n")
+        }else if(length(var.na)==1){
+            stop("Variable \"",var.na,"\" contains only missing data. \n")
+        }else{
+            stop("Variables \"",paste(var.na, collapse="\" \""),"\" contain only missing data. \n")
+        }
+    }
+
+    test.naOutcome <- is.na(data[[var.outcome]])
+    test.naOther <- rowSums(is.na(data[setdiff(var.all,var.outcome)]))>0
+    if( any(test.naOther > test.naOutcome) ){
+        index.row <- which(test.naOther > test.naOutcome)
+        test.naOther2 <- colSums(is.na(data[index.row,setdiff(var.all,var.outcome),drop=FALSE]))
+        name.naOther2 <- names(test.naOther2)[test.naOther2>0]
+
+        if(length(name.naOther2)==1){
+            warning("Can only handle missing values in the outcome variable. \n",
+                    "Observation(s) with missing values in \"",name.naOther2,"\" will be removed. \n")
+        }else{
+            warning("Can only handle missing values in the outcome variable. \n",
+                    "Observation(s) with missing values in \"",paste(name.naOther2, collapse="\" \""),"\" will be removed. \n")
+        }
+    }
+
     if(length(index.na)>0){        
         attr(index.na, "cluster") <- data[index.na,var.cluster]
         attr(index.na, "cluster.index") <- data[index.na,"XXcluster.indexXX"]
@@ -582,6 +642,7 @@ lmm <- function(formula, repetition, structure, data,
         data$XXtime.indexXX <- NULL
         data$XXstrataXX <- NULL
         data$XXstrata.indexXX <- NULL
+
         data <- .prepareData(data[-index.na,, drop=FALSE],
                              var.cluster = attr(var.cluster,"original"),
                              var.time = attr(var.time,"original"),
@@ -603,7 +664,8 @@ lmm <- function(formula, repetition, structure, data,
                                     structure = structure,
                                     data = data, var.outcome = var.outcome, var.weights = out$weights$var,
                                     stratify.mean = optimizer=="gls",
-                                    precompute.moments = precompute.moments)
+                                    precompute.moments = precompute.moments,
+                                    drop.X = options$drop.X)
 
     if(!is.na(attr(var.cluster,"original"))){
         if(is.factor(data[[attr(var.cluster,"original")]])){
@@ -620,7 +682,7 @@ lmm <- function(formula, repetition, structure, data,
                 out$design$time$levels.original <- sort(unique(data.save[[attr(var.time,"original")]]))
             }
         }else{
-                out$design$time$levels.original <- as.character(interaction(data.save[,attr(var.time,"original")], drop = TRUE))
+            out$design$time$levels.original <- sort(unique(as.character(interaction(data.save[,attr(var.time,"original")], drop = TRUE))))
         }
     }
     ## note use model.frame to handline splines in the formula
@@ -662,7 +724,7 @@ lmm <- function(formula, repetition, structure, data,
 
 
     ## ** 3. Estimate model parameters
-    if(trace>=1){cat("3. Estimate model parameters\n")}
+    if(trace>=1){cat("3. Estimate model parameters")}
 
     if(optimizer=="gls"){
         name.var <- unlist(structure$name$var)
@@ -741,7 +803,11 @@ lmm <- function(formula, repetition, structure, data,
         }
         out$opt <- list(name = "gls")
     }else{
-
+        valid.control <- c("init","n.iter","tol.score","tol.param","trace")
+        if(any(names(control) %in% valid.control  == FALSE)){
+            stop("Incorrect elements in argument \'control\': \"",paste(names(control)[names(control) %in% valid.control  == FALSE], collapse = "\" \""),"\". \n",
+                 "Valid elements: \"",paste(valid.control, collapse = "\" \""),"\".\n")
+        }
         if(identical(control$init,"lmer")){
             ## check feasibility
             requireNamespace("lme4")
@@ -780,7 +846,6 @@ lmm <- function(formula, repetition, structure, data,
             
             control$init <- c(lmer.beta,init.sigma,init.tau)[out$design$param$name]
         }
-        
         outEstimate <- .estimate(design = out$design, time = out$time, method.fit = method.fit, type.information = type.information,
                                  transform.sigma = options$transform.sigma, transform.k = options$transform.k, transform.rho = options$transform.rho,
                                  precompute.moments = precompute.moments, 
@@ -795,7 +860,7 @@ lmm <- function(formula, repetition, structure, data,
     }
     out$param <- param.value
 
-    if(trace.control>=2){cat("\n")}
+    if(trace>=1){cat("\n")}
 
     ## ** 4. Compute likelihood derivatives
     if(trace>=1){cat("4. Compute likelihood derivatives \n")}

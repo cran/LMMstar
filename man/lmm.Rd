@@ -54,8 +54,10 @@ g
 \details{
 \bold{Computation time} the \code{lmm} has not been developped to be a fast function as, by default, it uses REML estimation with the observed information matrix and uses a Satterthwaite approximation to compute degrees of freedom (this require to compute the third derivative of the log-likelihood which is done by numerical differentiation). The computation time can be substantially reduced by using ML estimation with the expected information matrix and no calculation of degrees of freedom: arguments \code{method.fit="ML"}, \code{type.information="expected"}, \code{df=FALSE}. This will, however, lead to less accurate p-values and confidence intervals in small samples.
 
-By default, the estimation of the model parameters will be made using the \code{nlme::gls} function.
-See argument optimizer in \code{\link{LMMstar.options}}
+By default, the estimation of the model parameters will be made using a Newton Raphson algorithm.
+This algorithm does not ensure that the residual covariance matrix is positive definite and therefore may sometimes fail.
+When using an unstructured pattern, i.e. \code{structure="UN"} the \code{nlme::gls} may be preferable as it can ensures positve definitness.
+See argument optimizer in \code{\link{LMMstar.options}}.
 
 \bold{Argument control:} when using the optimizer \code{"FS"}, the following elements can be used
 \itemize{
@@ -65,6 +67,10 @@ See argument optimizer in \code{\link{LMMstar.options}}
 \item \code{tol.param}: difference in estimated parameters from two successive iterations below which convergence has been reached.
 \item \code{trace}: display progress of the optimization procedure.
 }
+
+\bold{Argument repetition:} when numeric, it will be converted into a factor variable, possibly adding a leading 0 to preserve the ordering.
+This transformation may cause inconsistency when combining results between different \code{lmm} object. 
+This is why the grouping variable should preferably be of type character or factor.
 }
 \examples{
 #### 1- simulate data in the long format ####

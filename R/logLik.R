@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (17:26) 
 ## Version: 
-## Last-Updated: jun 27 2022 (12:23) 
+## Last-Updated: jan  3 2023 (16:12) 
 ##           By: Brice Ozenne
-##     Update #: 307
+##     Update #: 316
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -18,7 +18,6 @@
 ## * logLik.lmm (documentation)
 ##' @title Extract The Log-Likelihood From a Linear Mixed Model
 ##' @description Extract or compute the log-likelihood of a linear mixed model.
-##' @name logLik
 ##' 
 ##' @param object a \code{lmm} object.
 ##' @param data [data.frame] dataset relative to which the log-likelihood should be computed. Only relevant if differs from the dataset used to fit the model.
@@ -26,20 +25,12 @@
 ##' @param p [numeric vector] value of the model coefficients at which to evaluate the log-likelihood. Only relevant if differs from the fitted values.
 ##' @param ... Not used. For compatibility with the generic method.
 ##'
-##' @details \bold{transform}: \cr
-##' \itemize{
-##' \item 0 means no transformation i.e. ouput stanrdard error, ratio of standard errors, and correlations.
-##' \item 1 means log/atanh transformation i.e. ouput log(stanrdard error), log(ratio of standard errors), and atanh(correlations).
-##' \item 2 ouput variance coefficients and correlations.
-##' }
-##'
 ##' @details \bold{indiv}: only relevant when using maximum likelihood. Must be \code{FALSE} when using restricted maximum likelihood.
 ##' 
 ##' @return A numeric value (total logLikelihood) or a vector of numeric values, one for each cluster (cluster specific logLikelihood).
 ##' 
 
 ## * logLik
-##' @rdname logLik
 ##' @export
 logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
 
@@ -119,7 +110,11 @@ logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
         ll <- 0
     }
     if(any(is.na(logdet.precision))){ ## non positive definite residual variance covariance
-        return(ll*NA)
+        if(indiv){
+            return(ll*NA)
+        }else{
+            return(NA)
+        }
     }
 
     ## ** compute log-likelihood
@@ -154,7 +149,11 @@ logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
             ll <- ll - 0.5 * unname(Upattern.ncluster[iPattern]) * (NCOL(iOmegaM1) * log2pi - logdet.precision[[iPattern]]) - 0.5 * sum(precompute$RR[[iPattern]] * iOmegaM1)
             if (REML) {
                 ## compute (unique contribution, i.e. only lower part of the matrix)
-                iContribution <- as.double(iOmegaM1) %*% precompute$XX$pattern[[iPattern]]
+                if(is.null(precompute$X.OmegaM1.X)){
+                    iContribution <- as.double(iOmegaM1) %*% precompute$XX$pattern[[iPattern]]
+                }else{
+                    iContribution <- precompute$X.OmegaM1.X[[iPattern]]
+                }
                 ## fill the matrix
                 REML.det <- REML.det + iContribution[as.vector(precompute$XX$key)]
             }

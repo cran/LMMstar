@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Apr 16 2021 (12:01) 
 ## Version: 
-## Last-Updated: May 31 2022 (23:37) 
+## Last-Updated: jan  3 2023 (16:34) 
 ##           By: Brice Ozenne
-##     Update #: 105
+##     Update #: 115
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -15,10 +15,8 @@
 ## 
 ### Code:
 
-## * Function LMMstar.options
-## * Documentation - BuyseTest.options
+## * LMMstar.options (documentation) 
 #' @title Global options for LMMstar package
-#' @name LMMstar.options
 #' @include 0-onload.R
 #'
 #' @description Update or select global options for the LMMstar package.
@@ -37,7 +35,7 @@
 #' \item min.df [integer]: minimum possible degree of freedom. Used by \code{confint}.
 #' \item method.fit [character]: objective function when fitting the Linear Mixed Model (REML or ML). Used by \code{lmm}.
 #' \item method.numDeriv [character]: type used to approximate the third derivative of the log-likelihood (when computing the degrees of freedom). Can be \code{"simple"} or \code{"Richardson"}. See \code{numDeriv::jacobian} for more details. Used by \code{lmm}.
-#' \item n.sampleCopula [integer]: number of samples used to compute confidence intervals and p-values adjusted for multiple comparisons via \code{"single-step2"}. Used by \code{confint.anova_lmm}.
+#' \item n.sampleCopula [integer]: number of samples used to compute confidence intervals and p-values adjusted for multiple comparisons via \code{"single-step2"}. Used by \code{confint.Wald_lmm}.
 #' \item optimizer [character]: method used to estimate the model parameters: can the \code{nlme::gls} (\code{"gls"}) or an algorithm combine fisher scoring for the variance parameters and generalized least squares for the mean parameters (\code{"FS"}).
 #' \item param.optimizer [numeric vector]: default option for the \code{FS} optimization routine: maximum number of gradient descent iterations (\code{n.iter}), maximum acceptable score value (\code{tol.score}), maximum acceptable change in parameter value (\code{tol.param}).
 #' \item precompute.moments [logical]: Should the cross terms between the residuals and design matrix be pre-computed. Useful when the number of subject is substantially larger than the number of mean paramters.
@@ -48,14 +46,16 @@
 #' }
 #'
 #' @return A list containing the default options.
-#' 
+
+ 
+## * LMMstar.options (code)
 #' @export
 LMMstar.options <- function(..., reinitialise = FALSE){
   
     if (reinitialise == TRUE) {
         assign(".LMMstar-options", 
                list(backtransform.confint = TRUE,
-                    columns.anova = c("estimate","se","df","lower","upper","p.value"),
+                    columns.anova = c("estimate","se","df","lower","upper","p.value",""),
                     columns.confint = c("estimate","lower","upper"),
                     columns.summary = c("estimate","se","df","lower","upper","p.value",""),
                     df = TRUE,
@@ -65,7 +65,7 @@ LMMstar.options <- function(..., reinitialise = FALSE){
                     n.sampleCopula = 1e5,
                     method.fit = "REML",
                     method.numDeriv = "simple",
-                    optimizer = "gls",
+                    optimizer = "FS",
                     param.optimizer = c(n.iter = 100, tol.score = 1e-4, tol.param = 1e-5, n.backtracking = 10),
                     precompute.moments = TRUE,
                     trace = FALSE,
@@ -91,7 +91,7 @@ LMMstar.options <- function(..., reinitialise = FALSE){
                    "Available elements: \"",paste0(setdiff(names(object),names(args)), collapse = "\" \""),"\"\n")
           }
 
-          ok.column <- c("estimate","se","statistic","df","lower","upper","null","p.value")
+          ok.column <- c("estimate","se","df","lower","upper","null","statistic","p.value")
           if("columns.anova" %in% names(args) && any(args$columns.confint %in% ok.column == FALSE)){
               stop("Argument \'columns.anova\' must be a character vector with values among \"",paste(ok.column, collapse = "\" \""),"\". \n")
           }

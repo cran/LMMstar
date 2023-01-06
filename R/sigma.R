@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (12:57) 
 ## Version: 
-## Last-Updated: jun 13 2022 (17:27) 
+## Last-Updated: nov 30 2022 (12:10) 
 ##           By: Brice Ozenne
-##     Update #: 512
+##     Update #: 552
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -18,13 +18,13 @@
 ## * sigma.lmm (documentation)
 ##' @title Extract The Residuals Variance-Covariance Matrix From a Linear Mixed Model
 ##' @description Extract the unique set of residuals variance-covariance matrices or the one relative to specific clusters.
-##' @name sigma
 ##' 
 ##' @param object a \code{lmm} object.
 ##' @param cluster [character, data.frame, NULL] identifier of the cluster(s) for which to extract the residual variance-covariance matrix.
 ##' For new clusters, a dataset containing the information (cluster, time, strata, ...) to be used to generate the residual variance-covariance matrices.
 ##' When \code{NULL}, will output complete data covariance patterns.
 ##' @param p [numeric vector] value of the model coefficients at which to evaluate the residual variance-covariance matrix. Only relevant if differs from the fitted values.
+##' @param chol [logical] Output the cholesky factorization of the variance-covariance matrix.
 ##' @param inverse [logical] Output the matrix inverse of the variance-covariance matrix.
 ##' @param simplifies [logical] When there is only one variance-covariance matrix, output a matrix instead of a list of matrices.
 ##' @param ... Not used. For compatibility with the generic method.
@@ -49,9 +49,8 @@
 ##' sigma(eUN.lmm, cluster = dL[1:7,,drop=FALSE]) ## new clusters
 
 ## * sigma.lmm
-##' @rdname sigma
 ##' @export
-sigma.lmm <- function(object, cluster = NULL, p = NULL, inverse = FALSE, simplifies = TRUE, ...){
+sigma.lmm <- function(object, cluster = NULL, p = NULL, chol = FALSE, inverse = FALSE, simplifies = TRUE, ...){
 
     ## ** extract from object
     param.name <- object$design$param$name
@@ -194,6 +193,9 @@ sigma.lmm <- function(object, cluster = NULL, p = NULL, inverse = FALSE, simplif
     }
 
     ## ** inverse
+    if(chol){
+        Omega <- lapply(Omega, chol)
+    }
     if(inverse){
         Omega <- lapply(Omega, solve)
     }
@@ -231,6 +233,16 @@ sigma.lmm <- function(object, cluster = NULL, p = NULL, inverse = FALSE, simplif
     }
 }
 
+## * sigma.clmm
+##' @export
+sigma.clmm <- function(object, ...){
+
+    object$Omega <- .calc_Omega(object$design$vcov, param = object$param, keep.interim = FALSE)
+    out <- sigma.lmm(object, ...)
+    return(out)
+
+}
+
 ## * getVarCov.lmm
 ##' @title Depreciated Extractor of the Residual Variance-Covariance Matrix
 ##' @description Depreciated extractor of the residual variance-covariance matrix.
@@ -266,20 +278,18 @@ getVarCov.lmm <- function(obj, ...) {
     formula <- object$design$vcov$formula
     Vindex.cluster <- attr(object$design$index.cluster, "vectorwise")
 
-    ## ** summary statistic of each pattern
-    XCpattern.var <- lapply(Xpattern.var, function(iVar){as.character(interaction(as.data.frame(iVar),sep=sep[1]))})
-    if(!is.null(object$design$vcov$X$Xpattern.cor)){
-        XCpattern.cor <- lapply(Xpattern.cor, function(iCor){as.character(interaction(as.data.frame(iCor),sep=sep[1]))})
-        XCpattern <- mapply(x = XCpattern.var[Upattern$var], y = XCpattern.cor[Upattern$cor], function(x,y){paste(x,y,sep=sep[2])}, SIMPLIFY = FALSE)
-    }else{
-        XCpattern <- XCpattern.var[Upattern$var]
+    ## ** special case (no covariance structure)
+    if(all(sapply(Upattern$param,length)==0)){
+        index.patternMax <- which.max(Upattern$n.time)
+        time.patternMax <- U.time[attr(Xpattern.var[[index.patternMax]],"index.time")]
+        OmegaMax <- Omega[index.patternMax]
+        dimnames(OmegaMax[[1]]) <- list(time.patternMax,time.patternMax)
+        return(OmegaMax)
     }
-    names(XCpattern) <- Upattern$name
 
-    labels <- unique(unlist(XCpattern))
-    table.Xpattern <- do.call(rbind,lapply(XCpattern, function(iPattern){table(factor(iPattern, levels = labels))}))
-    pcObs.Xpattern <- rowSums(table.Xpattern)/n.time
-    
+    ## ** percentage of repetitions at each pattern
+    pcObs.Xpattern <- stats::setNames(Upattern$n.time/n.time, Upattern$name)
+
     ## ** identify patterns with unique set of parameters
     all.param <- object$design$vcov$param$name
     table.param <- do.call(rbind,lapply(Upattern$param, function(iParam){table(factor(iParam, levels = all.param))}))
@@ -293,51 +303,13 @@ getVarCov.lmm <- function(obj, ...) {
         iTable.param <- table.param[setdiff(rownames(table.param),keep.pattern),colSums(table.param[keep.pattern,,drop=FALSE])==0,drop=FALSE]
         iter.max <- iter.max-1
     }
-    table.Xpattern.keep <- table.Xpattern[rownames(table.Xpattern) %in% keep.pattern,,drop=FALSE]
-
-    ## ** check whether other patterns are not nested in the set of unique patterns
-    ## if so add them
-    if(heterogeneous){
-        possibleNested.pattern <- setdiff(Upattern$name, keep.pattern)
-        if(length(possibleNested.pattern)>0 && any(Upattern[Upattern$name %in% possibleNested.pattern,"n.time"]==1)){
-            ## remove patterns with single observation whose variance is already covered by the kept patterns
-            pattern.singleton <- intersect(Upattern[Upattern$n.time==1,"name"], possibleNested.pattern)
-            covered.variance <- unlist(XCpattern.var[rownames(table.param) %in% keep.pattern])
-            possibleNested.pattern <- setdiff(possibleNested.pattern,
-                                              pattern.singleton[unlist(XCpattern.var[rownames(table.param) %in% pattern.singleton]) %in% covered.variance])
-            
-        }
-        if(length(possibleNested.pattern)>0){
-            for(iPattern in possibleNested.pattern){ ## iPattern <- possibleNested.pattern[1]
-                iTable <- table.Xpattern[rownames(table.Xpattern) == iPattern,,drop=FALSE]
-
-                iTest <- rowSums(sweep(table.Xpattern.keep, MARGIN = 2, FUN = "-", STATS = iTable)<0)
-                if(all(iTest>0)){
-                    keep.pattern <- c(keep.pattern, iPattern)
-                    table.Xpattern.keep <- table.Xpattern[rownames(table.Xpattern) %in% keep.pattern,,drop=FALSE]
-                }
-            }
-        }
-    }
 
     ## ** recover time
-    if(length(object$time$var)>1 || !is.numeric(data[[object$time$var]])){
-        
-        Upattern.var <- Upattern$var[match(keep.pattern,Upattern$name)]
-        iIndex.time <- lapply(Xpattern.var[Upattern.var], function(iX){
-            if(!is.null(attr(iX,"index.time"))){
-                return(attr(iX,"index.time"))
-            }else{
-                return(object$design$index.clusterTime[[attr(iX,"index.cluster")[1]]])
-            }
-        })
-        out <- mapply(x = Omega[keep.pattern], y = iIndex.time, function(x,y){
-            dimnames(x) <- list(U.time[y],U.time[y])
-            return(x)
-        }, SIMPLIFY = FALSE)
-    }else{
-        out <- Omega[keep.pattern]
-    }
+    out <- mapply(x = Omega[keep.pattern], y = Upattern$time[match(keep.pattern,Upattern$name)], function(x,y){
+        dimnames(x) <- list(U.time[y],U.time[y])
+        return(x)
+    }, SIMPLIFY = FALSE)
+
     ## ** rename patterns
     all.cov <- union(all.vars(formula$var), all.vars(formula$cor))
     if(length(all.cov)>0){

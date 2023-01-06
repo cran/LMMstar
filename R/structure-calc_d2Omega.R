@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: sep 16 2021 (13:18) 
 ## Version: 
-## Last-Updated: Jun 17 2022 (10:35) 
+## Last-Updated: okt 12 2022 (17:02) 
 ##           By: Brice Ozenne
-##     Update #: 178
+##     Update #: 181
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -123,6 +123,7 @@
         iPattern.cor <- Upattern[iPattern,"cor"]
         iNtime <- Upattern[iPattern,"n.time"]
         iName.param <- Upattern[iPattern,"param"][[1]]
+        if(is.null(iName.param)){return(NULL)}
 
         iOmega.sd <- attr(Omega[[iPattern]],"sd")
         iOmega.var <- tcrossprod(iOmega.sd)
@@ -236,9 +237,9 @@
             iHess <- iHess2
         }
 
-        return(iHess)
-        
+        return(iHess)        
     })
+    
     ## ** export
     out <- stats::setNames(out,Upattern$name)
     return(out)
@@ -249,6 +250,9 @@
 
 ## * calc_d2Omega.CS
 .calc_d2Omega.CS <- .calc_d2Omega.ID
+
+## * calc_d2Omega.TOEPLITZ
+.calc_d2Omega.TOEPLITZ <- .calc_d2Omega.ID
 
 ## * calc_d2Omega.UN
 .calc_d2Omega.UN <- .calc_d2Omega.ID
