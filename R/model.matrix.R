@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:50) 
 ## Version: 
-## Last-Updated: jan  3 2023 (18:39) 
+## Last-Updated: feb 27 2023 (16:20) 
 ##           By: Brice Ozenne
-##     Update #: 2385
+##     Update #: 2397
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -91,7 +91,7 @@ model.matrix.lmm <- function(object, data = NULL, effects = "mean", simplifies =
             ff.factor <- names(object$xfactor$mean)
             if(length(ff.factor)>0){
                 for(iVar in ff.factor){ ## iVar <- ff.factor[1]
-                    if(any(data[[iVar]] %in% object$xfactor$mean[[iVar]] == FALSE)){
+                    if(any(stats::na.omit(data[[iVar]]) %in% object$xfactor$mean[[iVar]] == FALSE)){
                         Wf <- setdiff(unique(data[[iVar]]), iLevel)
                         stop("Unknown factor(s) \"",paste0(Wf,collapse="\" \""),"\" for variable \"",iVar,"\".\n",
                              "Valid factors: \"",paste0(object$xfactor$mean[[iVar]], collapse="\" \""),"\".\n")
@@ -322,7 +322,7 @@ model.matrix.lmm <- function(object, data = NULL, effects = "mean", simplifies =
     dataCor <- data
     if(length(all.vars(formula.cor))>0 && structure$type %in% c("ID","IND","CS","UN","TOEPLITZ")){
         for(iVar in all.vars(formula.cor)){
-            if(structure$type=="TOEPLITZ" || heterogeneous == FALSE){
+            if(structure$type=="TOEPLITZ" || heterogeneous <= 0){
                 if(iVar == strata.var){
                     dataCor[[iVar]] <- as.factor(data[[iVar]])
                 }else if(is.logical(data[[iVar]])){
@@ -332,14 +332,17 @@ model.matrix.lmm <- function(object, data = NULL, effects = "mean", simplifies =
                 }else if(is.numeric(data[[iVar]])){
                     dataCor[[iVar]] <- data[[iVar]] - min(data[[iVar]]) + 1
                 }
-            }else if(heterogeneous){
+            }else if(heterogeneous>0){
                 dataCor[[iVar]] <- as.factor(data[[iVar]])
             }
         }
     }
     ## ** design matrix
     out <- list(var = NULL, cor = NULL, xfactor = list(var = NULL, cor = NULL))
-    if(is.null(structure$param)){ ## structure
+    if(inherits(structure,"CUSTOM")){
+        out$var <- dataVar[,all.vars(formula.var),drop=FALSE]
+        out$cor <- dataCor[,all.vars(formula.cor),drop=FALSE]
+    }else if(is.null(structure$param)){ ## structure
         out$var <- .colnameOrder(.model.matrix_regularize(formula.var, data = dataVar, augmodel = TRUE, type = "variance", drop.X = drop.X), strata.var = strata.var, n.strata = n.strata)
         out$xfactor$var <- stats::.getXlevels(stats::terms(formula.var),stats::model.frame(formula.var,dataVar))
         if(!is.null(formula.cor) && n.time>1 && any(sapply(index.cluster,length)>1)){  ## at least one individual with more than timepoint
