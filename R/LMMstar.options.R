@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Apr 16 2021 (12:01) 
 ## Version: 
-## Last-Updated: jan  3 2023 (16:34) 
+## Last-Updated: jul 21 2023 (09:48) 
 ##           By: Brice Ozenne
-##     Update #: 115
+##     Update #: 133
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -36,9 +36,10 @@
 #' \item method.fit [character]: objective function when fitting the Linear Mixed Model (REML or ML). Used by \code{lmm}.
 #' \item method.numDeriv [character]: type used to approximate the third derivative of the log-likelihood (when computing the degrees of freedom). Can be \code{"simple"} or \code{"Richardson"}. See \code{numDeriv::jacobian} for more details. Used by \code{lmm}.
 #' \item n.sampleCopula [integer]: number of samples used to compute confidence intervals and p-values adjusted for multiple comparisons via \code{"single-step2"}. Used by \code{confint.Wald_lmm}.
-#' \item optimizer [character]: method used to estimate the model parameters: can the \code{nlme::gls} (\code{"gls"}) or an algorithm combine fisher scoring for the variance parameters and generalized least squares for the mean parameters (\code{"FS"}).
+#' \item optimizer [character]: method used to estimate the model parameters. Either \code{"FS"}, an home-made fisher scoring algorithm, or a method from \code{optimx:optimx} like \code{"BFGS"}or \code{Nelder-Mead}.
 #' \item param.optimizer [numeric vector]: default option for the \code{FS} optimization routine: maximum number of gradient descent iterations (\code{n.iter}), maximum acceptable score value (\code{tol.score}), maximum acceptable change in parameter value (\code{tol.param}).
 #' \item precompute.moments [logical]: Should the cross terms between the residuals and design matrix be pre-computed. Useful when the number of subject is substantially larger than the number of mean paramters.
+#' \item sep [character vector]: character used to combined two strings of characters in various functions (lp: .vcov.model.matrix, k.cov/k.strata: .skeletonK, pattern: .findUpatterns, rho.name/rho.strata: .skeletonRho, reformat: .reformat ).
 #' \item trace [logical]: Should the progress of the execution of the \code{lmm} function be displayed?
 #' \item tranform.sigma, tranform.k, tranform.rho: transformation used to compute the confidence intervals/p-values for the variance and correlation parameters. See the detail section of the coef function for more information.
 #' Used by \code{lmm}, \code{anova} and \code{confint}.
@@ -46,6 +47,9 @@
 #' }
 #'
 #' @return A list containing the default options.
+#'
+#' @keywords utilities
+
 
  
 ## * LMMstar.options (code)
@@ -62,12 +66,13 @@ LMMstar.options <- function(..., reinitialise = FALSE){
                     drop.X = TRUE,
                     effects = "mean",
                     min.df = 1,
-                    n.sampleCopula = 1e5,
                     method.fit = "REML",
                     method.numDeriv = "simple",
+                    n.sampleCopula = 1e5,
                     optimizer = "FS",
                     param.optimizer = c(n.iter = 100, tol.score = 1e-4, tol.param = 1e-5, n.backtracking = 10),
                     precompute.moments = TRUE,
+                    sep = c(lp = ":", k.cov = ".", k.strata = ":", pattern = ":", rho.name = ".", rho.strata = ":", reformat = "_"),
                     trace = FALSE,
                     transform.sigma = "log",
                     transform.k = "log",
@@ -109,7 +114,7 @@ LMMstar.options <- function(..., reinitialise = FALSE){
           }
           if("optimizer" %in% names(args)){
               optimx.method <- c("BFGS", "CG", "Nelder-Mead", "nlminb", "bobyqa")
-              args$optimizer <- match.arg(args$optimizer, c("gls","FS",optimx.method)) ## FS = fisher scoring
+              args$optimizer <- match.arg(args$optimizer, c("FS",optimx.method)) ## FS = fisher scoring
               if(args$optimizer %in% optimx.method){
                   requireNamespace("optimx")
               }
@@ -143,6 +148,12 @@ LMMstar.options <- function(..., reinitialise = FALSE){
           }
           if("method.numDeriv" %in% names(args)){
               args$method.numDeriv <- match.arg(args$method.numDeriv, c("simple","Richardson","complex"))
+          }
+          if("sep" %in% names(args)){
+              sep.save <- args$sep
+              check <- match.arg(sort(names(sep.save)), c("lp","kname.cov","kname.strata","pattern","rho.name","reformat"), several.ok = TRUE)
+              args$sep <- object$sep
+              args$sep[names(sep.save)] <- sep.save              
           }
           if("transform.sigma" %in% names(args)){
               args$transform.sigma <- match.arg(args$transform.sigma, c("none","log","square","logsquare"))

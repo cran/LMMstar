@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:40) 
 ## Version: 
-## Last-Updated: jan 24 2023 (09:33) 
+## Last-Updated: aug  1 2023 (16:44) 
 ##           By: Brice Ozenne
-##     Update #: 740
+##     Update #: 1037
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -18,14 +18,21 @@
 ## * residuals.lmm (documentation)
 ##' @title Extract The Residuals From a Linear Mixed Model
 ##' @description Extract or compute the residuals of a linear mixed model.
+##' @name residuals
 ##' 
 ##' @param object a \code{lmm} object.
 ##' @param type [character] type of residual to output: raw residuals (\code{"response"}), Pearson residuals (\code{"pearson"}), normalized residuals (\code{"normalized"}, scaled residual \code{"scaled"}), or partial residuals (\code{"partial"} or \code{"partial-center"}). Can also be \code{"all"} to output all except partial residuals. See detail section.
 ##' @param var [character vector] name of the variable relative to which the partial residuals should be computed.
 ##' @param data [data.frame] dataset relative to which the residuals should be computed. Only relevant if differs from the dataset used to fit the model.
 ##' @param p [numeric vector] value of the model coefficients at which to evaluate the residuals. Only relevant if differs from the fitted values.
-##' @param format [character] Should the residuals be output relative as a vector (\code{"long"}), or as a matrix with in row the clusters and in columns the outcomes (\code{"wide"}).
-##' @param keep.data [logical] Should the argument \code{data} be output along side the residuals? Only possible in the long format.
+##' @param format [character] Should the residuals be output
+##' in a matrix format with clusters in row and timepoints in columns (\code{"wide"}),
+##' or in a data.frame/vector with as many rows as observations (\code{"long"})
+##' @param keep.data [logical] Should the dataset relative to which the residuals are evaluated be output along side the residual values?
+##' Only possible in the long format.
+##' @param simplify [logical] Simplify the data format (vector instead of data.frame) and column names (no mention of the time variable) when possible.
+##' Otherwise, information about the call and reference values used for partial residuals be added as an attribute.
+##' 
 ##' @param ... Not used. For compatibility with the generic method.
 ##'
 ##' @details The argument \code{type} defines how the residuals are computed:
@@ -35,10 +42,10 @@
 ##' \item \code{"pearson"}: each raw residual is divided by its modeled standard deviation \eqn{\varepsilon_{ij} = \frac{Y_{ij} - X_{ij} \hat{\beta}}{\sqrt{\hat{\omega}_{ij}}}}.
 ##' \item \code{"studentized"}: same as \code{"pearson"} but excluding the contribution of the cluster in the modeled standard deviation  \eqn{\varepsilon_{ij} = \frac{Y_{ij} - X_{ij} \hat{\beta}}{\sqrt{\hat{\omega}_{ij}-\hat{q}_{ij}}}}.
 ##' \item \code{"normalized"}: raw residuals are multiplied, within clusters, by the inverse of the (upper) Cholesky factor of the modeled residual variance covariance matrix \eqn{\varepsilon_{ij} = ( Y_{i} - X_{i} \hat{\beta} )\hat{C}^{-1}}.
-##' \item \code{"normalized2"}: same as \code{"normalized"} but excluding the contribution of the cluster in the modeled residual variance covariance matrix \eqn{\varepsilon_{ij} = ( Y_{i} - X_{i} \hat{\beta} ) \hat{D}_i^{-1}}.
+##' \item \code{"normalized2"}: raw residuals are multiplied, within clusters, by the inverse of the modeled residual variance covariance matrix \eqn{\varepsilon_{ij} = ( Y_{i} - X_{i} \hat{\beta} )\hat{Omega}^{-1}}.
 ##' \item \code{"scaled"}: scaled residuals (see PROC MIXED in SAS). Numerically identical to \code{"normalized"} but computed by sequentially scaling and centering the residuals, to make them conditionally independent of previous residuals from the same cluster at previous repetitions.
 ##' \item \code{"partial"}: partial residuals (\eqn{\gamma E + \hat{\varepsilon}}). A reference level can be also be specified via the attribute \code{"reference"} to change the absolute level of the partial residuals.
-##' \code{"partial-center"}: partial residuals with centered covariates (\eqn{\gamma E + \hat{\varepsilon}} where \eqn{E} has been centered, i.e., has 0-mean)
+##' \code{"partial-center"}: partial residuals with centered continuous covariates (\eqn{\gamma E + \hat{\varepsilon}} where \eqn{E} has been centered, i.e., has 0-mean)
 ##' }
 ##' where
 ##' \itemize{
@@ -52,9 +59,10 @@
 ##' }
 ##'
 ##' @return
-##' When argument format is \code{"long"} and type.oobject is \code{"lmm"}, a vector containing the value of the residual realtive to each observation.
-##' It is a matrix if the argument \code{type} contains several values.
-##' When argument format is \code{"wide"} and type.oobject is \code{"lmm"}, a data.frame with the value of the residual relative to each cluster (in rows) at each timepoint (in columns).
+##' \bold{lmm}: a vector or a data.frame when \code{format="long"} (one line per observation, one column per type of residual),
+##' a matrix when \code{format="wide"}  (one line per cluster, one column per timepoint).
+##' 
+##' @keywords methods
 ##' 
 ##' @examples
 ##' 
@@ -68,7 +76,7 @@
 ##' ## partial residuals
 ##' residuals(e.lm, type = "partial", var = "X6")
 ##' ## residuals(e.lm) + dL$X6 * coef(e.lm)["X6"]
-##' e.reslm <- residuals(e.lm, type = "partial", var = "X6", keep.data = TRUE)
+##' e.reslm <- residuals(e.lm, type = "partial", var = "X6", keep.data = TRUE, simplify = FALSE)
 ##' plot(e.reslm)
 ##'
 ##' ## partial residuals with specific reference
@@ -86,11 +94,13 @@
 ##'                repetition = ~visit|id, structure = "UN", data = dL)
 ##'
 ##' ## residuals
-##' e.reslmm <- residuals(eUN.lmm, type = "normalized", keep.data = TRUE)
-##' plot(e.reslmm)
-##' plot(e.reslmm, type = "correlation")
-##' plot(e.reslmm, type = "scatterplot", labeller = ggplot2::label_both)
-##' residuals(eUN.lmm, format = "wide", type = "normalized")
+##' e.resL <- residuals(eUN.lmm, type = "normalized",
+##'                     keep.data = TRUE, simplify = FALSE)
+##' plot(e.resL, type = "qqplot")
+##' plot(e.resL, type = "scatterplot", labeller = ggplot2::label_both)
+##' e.resW <- residuals(eUN.lmm, format = "wide", type = "normalized",
+##'                     simplify = FALSE)
+##' plot(e.resW, type = "correlation")
 ##'
 ##' ## residuals and predicted values
 ##' residuals(eUN.lmm, type = "all")
@@ -102,11 +112,14 @@
 
 ## * residuals.lmm (code)
 ##' @export
+##' @rdname residuals
 residuals.lmm <- function(object, type = "response", var = NULL, 
-                          data = NULL, p = NULL, format = "long", keep.data = FALSE, ...){
+                          data = NULL, p = NULL, format = "long", keep.data = FALSE, simplify = TRUE, ...){
 
+    mycall <- match.call()
     options <- LMMstar.options()
     type.residual <- type
+    sep <- options$sep["residuals"]
     
     ## ** extract from object
     xfactorMu <- object$xfactor$mean
@@ -118,17 +131,18 @@ residuals.lmm <- function(object, type = "response", var = NULL,
     param.type <- stats::setNames(object$design$param$type,param.name)
     param.value <- object$param
 
-    U.time <- object$time$levels
-    name.time <- object$time$var
     n.time <- object$time$n
     index.na <- object$index.na
     X.mean <- object$design$mean
-    object.residuals <- object$residuals
     object.Omega <- object$Omega
     object.OmegaM1 <- object$OmegaM1
 
-    cluster.levels.original <- object$design$cluster$levels.original
-    ## time.levels.original <- object$design$time$levels.original
+    object.cluster <- object$cluster
+    object.time <- object$time
+    object.index.na <- object$index.na
+    U.cluster <- object$cluster$levels
+    U.time <- object$time$levels
+    name.time <- object$time$var
     
     ## ** normalize user imput
     dots <- list(...)
@@ -136,7 +150,11 @@ residuals.lmm <- function(object, type = "response", var = NULL,
         stop("Unknown argument(s) \'",paste(names(dots),collapse="\' \'"),"\'. \n")
     }
     ## check format
-    format <- match.arg(format, c("wide","long"))
+    format[] <- match.arg(sort(unique(format)), c("wide","long"), several.ok = TRUE)  ## use 'format[] <-' instead of 'format <-' to keep the name that will be transferd to .reformat(
+    if(length(format)>1){
+        format <- format[1]
+        attr(format,"original") <- c("wide","long")
+    }
     if(format=="wide" && identical("all",tolower(type.residual))){
         message("Move to wide format to output all types of residuals. \n")
         format <- "long"
@@ -146,11 +164,19 @@ residuals.lmm <- function(object, type = "response", var = NULL,
     }
     ## check type.residuals
     if(identical("all",tolower(type.residual))){        
-        type.residual <- c("response","studentized","pearson","normalized","normalized2","scaled")
+        type.residual <- c("response","studentized","pearson","normalized")
     }
     attr.ref <- attr(type.residual,"reference")
-    type.residual <- match.arg(type.residual, c("response","studentized","pearson","normalized","normalized2","scaled","partial","partial-center"), several.ok = (format=="long"))
-    if(any(type.residual %in% c("studentized","pearson","normalized","normalized2","scaled"))){
+    valid.normresiduals  <- c("studentized","pearson","normalized","normalized2","normastudentized","scaled")
+    valid.residuals <- c("response",valid.normresiduals,"partial","partial-center")
+    if(any(grepl("-ci$", type.residual))){
+        type.residual <- gsub("-ci$","",type.residual)
+        ci <- TRUE ## hidden ci argument
+    }else{
+        ci <- FALSE
+    }
+    type.residual <- match.arg(type.residual, valid.residuals, several.ok = (format=="long"))
+    if(any(type.residual %in% valid.normresiduals)){
         effects <- c("mean","variance")
     }else{
         effects <- "mean"
@@ -165,6 +191,10 @@ residuals.lmm <- function(object, type = "response", var = NULL,
         if(is.null(var)){
             stop("Argument \'var\' should indicate the covariate effects to preserve when computing the partial residuals. \n")
         }
+        if(!is.null(attr.ref) && "partial-center" %in% type.residual){
+            message("Attribute \'attr.ref\' of argument \'type\' is ignored when \'type\' equals \"partial-center\". \n")
+            attr.ref <- NULL
+        }
         keep.intercept <- "(Intercept)" %in% var
         if(keep.intercept && "(Intercept)" %in%  param.name == FALSE){
             stop("Argument \'var\' cannot contain \"(Intercept)\" when the model does no include an intercept. \n")
@@ -175,11 +205,16 @@ residuals.lmm <- function(object, type = "response", var = NULL,
                  "Valid covariates: \"",paste(variableMu.name, collapse = "\" \""),"\". \n",
                  "Invalid covariates: \"",paste(var[var %in% variableMu.name == FALSE],collapse="\" \""),"\". \n")
         }
+        type.var <- c("numeric","categorical")[var %in% names(object$xfactor$mean) + 1]
+        type.fit <- ifelse(keep.intercept,"static","static0")
     }else{
         if(!is.null(var)){
             warning("Argument \'var\' ignored when computing residuals other than partial residuals. \n")
         }
         keep.intercept <- TRUE
+        type.var <- NULL        
+        var <- NULL
+        type.fit <- "static"
     }
 
     ## check agreement plot, format, type.residual
@@ -187,86 +222,93 @@ residuals.lmm <- function(object, type = "response", var = NULL,
         stop("Argument \'format\' must be \"long\" when exporting several types of residuals. \n")
     }
 
-    ## check data
-    if(keep.data && !is.null(data) && any(colnames(data) %in% name.residual)){
-        stop("Argument \'data\' should not contain a column named \"",paste(name.residual[name.residual %in% colnames(data)], collapse = "\" \""),"\". \n",
-             "This name is used to export the residuals. \n")
+    ## check data and create data.reference used for export and for partial residuals 
+    if(!is.null(data)){
+        data.reference <- as.data.frame(data)
+        if(keep.data && any(colnames(data.reference) %in% name.residual)){
+            stop("Argument \'data\' should not contain a column named \"",paste(name.residual[name.residual %in% colnames(data.reference)], collapse = "\" \""),"\". \n",
+                 "This name is used to export the residuals. \n")
+        }        
+    }else{
+        data.reference <- object$data.original
     }
 
     ## ** update design
-    if(any(c("partial","partial-center") %in% type.residual)){
+    if("partial" %in% type.residual || "partial-center" %in% type.residual){
         ## extract data and design matrix
         if(is.null(data)){
-            data <- stats::model.frame(object)
-            data <- data[,setdiff(colnames(data),c("XXindexXX",  "XXstrataXX", "XXstrata.indexXX", "XXtimeXX", "XXtime.indexXX", "XXclusterXX", "XXcluster.indexXX")),drop=FALSE]
-            design <- stats::model.matrix(object, effects = effects, simplifies = FALSE)
+            design <- stats::model.matrix(object, effects = effects, simplify = FALSE)
         }else{
-            design <- stats::model.matrix(object, data = data, effects = effects, simplifies = FALSE)
+            design <- stats::model.matrix(object, data = data, effects = effects, simplify = FALSE)
         }
 
-        ## design matrix relative to the data where the effect of variables no in var has been removed
-        reference <- NULL
-        centering <- NULL
-        if("partial" %in% type.residual){ 
-            ## set the dataset at the reference value for all variables not in var
-            if(is.null(attr.ref)){
-                if(length(variableMuFac.name)>0){
-                    reference <- c(reference, lapply(xfactorMu,function(iX){factor(iX[1], levels = iX)}))
-                }
-                if(length(variableMuNum.name)>0){
-                    reference <- c(reference, as.list(stats::setNames(rep(0, length(variableMuNum.name)), variableMuNum.name)))
-                }
-                reference <- data.frame(reference, stringsAsFactors = FALSE)
-            }else if(!is.data.frame(attr.ref)){
-                stop("Attribute \'reference\' must inherit from data.frame. \n")
+        ## *** design matrix relative to a reference value
+        reference <- stats::setNames(as.list(rep(NA, length = length(variableMu.name))), variableMu.name)
+        ## reference: reference level of all variables not in var
+        if(is.null(attr.ref)){
+            if(length(setdiff(variableMuFac.name,var))>0){
+                reference[setdiff(variableMuFac.name,var)] <- lapply(setdiff(variableMuFac.name,var),function(iName){factor(xfactorMu[[iName]][1], levels = xfactorMu[[iName]])})
+            }
+            if(length(setdiff(variableMuNum.name,var))>0){
+                reference[setdiff(variableMuNum.name,var)] <- as.list(stats::setNames(rep(0, length(setdiff(variableMuNum.name,var))), setdiff(variableMuNum.name,var)))
+            }
+            if("partial-center" %in% type.residual){
+                ## do nothing for categorical variables
+
+                ## center numeric variables
+                reference[intersect(variableMuNum.name, var)] <- lapply(intersect(variableMuNum.name, var), function(iName){mean(object$data[[iName]])})
+            }
+            reference <- data.frame(reference, stringsAsFactors = FALSE)
+        }else if(!is.data.frame(attr.ref)){
+            stop("Attribute \'reference\' form argument \'type\' must inherit from data.frame. \n")
+        }else{
+            reference <- attr.ref
+            if(NROW(reference)!=1){
+                stop("Attribute \'reference\' from argument \'type\' must be a single row data.frame. \n")
+            }
+            if(any(names(reference) %in% variableMu.name == FALSE)){
+                stop("Incorrect column names in attribute \'reference\' from argument \'type\'. \n",
+                     "Valid column names: \"",paste(variableMu.name, collapse = "\", \""),"\". \n")
+            }
+        }
+
+        ## apply reference
+        reference.effective <- lapply(reference, function(iRef){if(all(is.na(iRef))){NULL}else{iRef}})
+        reference.effective <- as.data.frame(reference.effective[lengths(reference.effective)>0])
+        for(iVar in names(reference.effective)){
+
+            if(is.factor(data.reference[[iVar]]) && !is.factor(reference[[iVar]])){
+                stop("The reference value of variable ",iVar," should be a factor. \n")
+            }
+            if(is.factor(data.reference[[iVar]]) && !identical(levels(reference[[iVar]]),levels(data.reference[[iVar]]))){
+                stop("Levels of the reference value of variable \'",iVar,"\' should match those of the original data. \n",
+                     "Levels: \"",paste(levels(data[[iVar]]), collapse = "\" \""),"\"\n")
+            }
+            if(iVar %in% var){
+                data.reference[[iVar]] <- data.reference[[iVar]] - reference[[iVar]]
             }else{
-                reference <- attr.ref
+                data.reference[[iVar]] <- reference[[iVar]]
             }
-            resdata <- data
-            if(length(setdiff(variableMu.name,var))>0){
-                for(iVar in setdiff(variableMu.name,var)){
-                    if(is.factor(data[[iVar]]) && !is.factor(reference[[iVar]])){
-                        stop("The reference value of variable ",iVar," should be a factor. \n")
-                    }
-                    if(is.factor(data[[iVar]]) && !identical(levels(reference[[iVar]]),levels(data[[iVar]]))){
-                        stop("Levels of the reference value of variable \'",iVar,"\' should match those of the original data. \n",
-                             "Levels: \"",paste(levels(data[[iVar]]), collapse = "\" \""),"\"\n")
-                    }
-                    data[[iVar]] <- reference[[iVar]]
-                }
-            }
-            ## build design matrix
-            design2 <- stats::model.matrix(object, data = data, effects = effects, simplifies = FALSE)
-            if(!is.null(index.na)){ 
-                design2$mean <- design2$mean[-index.na,,drop=FALSE]
-            }
-            ## handle intercept term
-            if(keep.intercept==FALSE && "(Intercept)" %in% colnames(design2$mean)){
-                design2$mean[,"(Intercept)"] <- 0
-            }
-        }else if("partial-center" %in% type.residual){
-            centering <- colMeans(X.mean)
-            design2 <- design
-            design2$mean <- sweep(design$mean, FUN = "-", MARGIN = 2, STATS = centering)
         }
         
-    }else{
-        design <- stats::model.matrix(object, data = data, effects = effects, simplifies = FALSE)
-        if(keep.data){
-            data <- stats::model.frame(object)
-            data <- data[,setdiff(colnames(data),c("XXindexXX", "XXstrata.indexXX", "XXvisit.indexXX")),drop=FALSE]
+        ## build design matrix
+        design.reference <- stats::model.matrix(object, data = data.reference, effects = effects, simplify = TRUE)
+        ## handle intercept term
+        if(keep.intercept==FALSE && "(Intercept)" %in% colnames(design.reference)){
+            design.reference[,"(Intercept)"] <- 0
         }
+    }else{
+        design <- stats::model.matrix(object, data = data, effects = effects, simplify = FALSE)
     }
     Y <- design$Y
     X <- design$mean
     structure <- design$vcov
-    n.cluster <- design$cluster$n
+    n.cluster <- length(design$index.cluster)
     precompute.XX <- design$precompute.XX
-    cluster.level <- design$cluster$levels
     index.cluster <- attr(design$index.cluster,"vectorwise")
     index.time <- attr(design$index.clusterTime,"vectorwise")
-    index.variance <- as.character(structure$X$pattern.cluster$pattern)
-    n.pattern <-  NROW(structure$X$Upattern)
+    pattern <- as.character(structure$pattern)
+    n.pattern <-  NROW(structure$Upattern)
 
     ## ** update Omega
     if(!is.null(p)){
@@ -277,13 +319,13 @@ residuals.lmm <- function(object, type = "response", var = NULL,
             stop("Incorrect argument \'p\': missing parameter(s) \"",paste(names(param.type)[names(param.type) %in% names(p) == FALSE], collapse = "\" \""),"\".\n")
         }
         beta <- p[names(which(param.type=="mu"))]
-        if(any(type.residual %in% c("studentized","pearson","normalized","normalized2","scaled"))){
+        if(any(type.residual %in% valid.normresiduals)){
             Omega <- .calc_Omega(object = structure, param = p)
             precision <- lapply(Omega, solve)
         }
     }else{
         beta <- param.value[param.type=="mu"]
-        if(any(type.residual %in% c("studentized","pearson","normalized","normalized2","scaled"))){
+        if(any(type.residual %in% valid.normresiduals)){
             Omega <- object.Omega
             precision <- object.OmegaM1
         }
@@ -294,7 +336,7 @@ residuals.lmm <- function(object, type = "response", var = NULL,
     if("pearson" %in% type.residual){
         sqrtPrecision$pearson <- lapply(Omega,function(iM){1/sqrt(diag(iM))})
     }
-    if("studentized" %in% type.residual || "normalized2" %in% type.residual){
+    if("studentized" %in% type.residual || "normastudentized" %in% type.residual){
         tX.precision.X <- matrix(0, nrow = NCOL(X), ncol = NCOL(X), dimnames = list(colnames(X),colnames(X)))
 
             if(!is.null(precompute.XX)){
@@ -311,7 +353,7 @@ residuals.lmm <- function(object, type = "response", var = NULL,
                     iIndex <- which(index.cluster==iId)
                     iOrder <- order(index.time[iIndex])
                     iX <- X[iIndex[iOrder],,drop=FALSE]
-                    tX.precision.X <- tX.precision.X + t(iX) %*% precision[[index.variance[iId]]] %*% iX
+                    tX.precision.X <- tX.precision.X + t(iX) %*% precision[[pattern[iId]]] %*% iX
                 }
             }
         ## equal if proper ordering
@@ -334,35 +376,40 @@ residuals.lmm <- function(object, type = "response", var = NULL,
     }
 
     ## ** raw residuals
-    if(!is.null(data) || !is.null(p) || "partial" %in% type.residual || "partial-center" %in% type.residual){
+    if(!is.null(data) || !is.null(p)){
         fitted <- (X %*% beta)[,1]
         res <-  as.vector(Y - fitted)
         M.res <- matrix(NA, nrow = NROW(X), ncol = length(type.residual), dimnames = list(NULL, name.residual))
     }else{
-        fitted <- stats::fitted(object)
-        if(!is.null(index.na)){ ## make sure to be consistent with X %*% beta
-            fitted <- fitted[-index.na]
+        fitted <- object$fitted
+        res <- object$residuals
+        M.res <- matrix(NA, nrow = length(res), ncol = length(type.residual), dimnames = list(NULL, name.residual))
+    }
+    if(ci || "partial" %in% type.residual || "partial-center" %in% type.residual){
+
+        df.fitted <- stats::predict(object, newdata = design.reference, type = type.fit, se = ifelse(ci,"estimation",FALSE),
+                             keep.newdata = FALSE, format = "long", simplify = FALSE)
+
+        if(ci){
+            fitted <- cbind(fitted = df.fitted$estimate,
+                            fitted.lower = df.fitted$lower,
+                            fitted.upper = df.fitted$upper)
+        }else{
+            fitted <- df.fitted$estimate
         }
-        res <- as.vector(object.residuals)
-        M.res <- matrix(NA, nrow = NROW(object.residuals), ncol = length(type.residual), dimnames = list(NULL, name.residual))
     }
 
     ## ** normalization
     if ("response" %in% type.residual) {
         M.res[,"r.response"] <- res
     }
-    if ("partial" %in% type.residual){
-        M.res[,"r.partial"] <- design2$mean %*% beta + res
+    if ("partial" %in% type.residual || "partial-center" %in% type.residual){
+        M.res[,"r.partial"] <- design.reference %*% beta + res
         attr(M.res,"reference") <- reference
     }
-    if ("partial-center" %in% type.residual){
-        index.var <- which(attr(X.mean,"variable") %in% var)
-        index.col <- which(attr(X.mean,"assign") %in% index.var)
-        M.res[,"r.partial"] <- design2$mean[,index.col,drop=FALSE] %*% beta[index.col] + res
-        attr(M.res,"centering") <- centering
-    }
-    if (any(type.residual %in% c("studentized", "pearson", "normalized", "normalized2", "scaled"))) {
+    if (any(type.residual %in% valid.normresiduals)) {
         for(iId in 1:n.cluster){ ## iId <- 7
+            
             iIndex <- which(index.cluster==iId)
             iOrder <- order(index.time[iIndex])
             iResidual <- res[iIndex[iOrder]]
@@ -370,34 +417,38 @@ residuals.lmm <- function(object, type = "response", var = NULL,
 
             for(iType in type.residual){
                 if("pearson" %in% type.residual){
-                    resnorm <- iResidual * sqrtPrecision$pearson[[index.variance[iId]]]
-                    M.res[iIndex,"r.pearson"] <- resnorm[order(iOrder)]
+                    resnorm <- iResidual * sqrtPrecision$pearson[[pattern[iId]]]
+                    M.res[iIndex[iOrder],"r.pearson"] <- resnorm
                 }
                 if("studentized" %in% type.residual){
                     iX <- X[iIndex[iOrder],,drop=FALSE]
                     iQ <- iX %*% tX.precision.X.M1 %*% t(iX)
-                    resnorm <- iResidual / sqrt(diag(Omega[[index.variance[iId]]] - iQ))
-                    M.res[iIndex,"r.studentized"] <- resnorm[order(iOrder)]
+                    resnorm <- iResidual / sqrt(diag(Omega[[pattern[iId]]] - iQ))
+                    M.res[iIndex[iOrder],"r.studentized"] <- resnorm
                 }
                 if("normalized" %in% type.residual){
-                    ## resnorm <- as.double(sqrtPrecision$normalized[[index.variance[iId]]] %*% iResidual)
-                    resnorm <- as.double(iResidual %*% sqrtPrecision$normalized[[index.variance[iId]]])
-                    M.res[iIndex,"r.normalized"] <- resnorm[order(iOrder)]
+                    ## resnorm <- as.double(sqrtPrecision$normalized[[pattern[iId]]] %*% iResidual)
+                    resnorm <- as.double(iResidual %*% sqrtPrecision$normalized[[pattern[iId]]])
+                    M.res[iIndex[iOrder],"r.normalized"] <- resnorm
                 }
                 if("normalized2" %in% type.residual){
+                    resnorm <- as.double(iResidual %*% precision[[pattern[iId]]])
+                    M.res[iIndex[iOrder],"r.normalized2"] <- resnorm
+                }
+                if("normastudentized" %in% type.residual){
                     iX <- X[iIndex[iOrder],,drop=FALSE]
                     iQ <- iX %*% tX.precision.X.M1 %*% t(iX)
-                    resnorm <- as.double(iResidual %*% solve(chol(Omega[[index.variance[iId]]] - iQ)))
-                    M.res[iIndex,"r.normalized2"] <- resnorm[order(iOrder)]
+                    resnorm <- as.double(iResidual %*% solve(chol(Omega[[pattern[iId]]] - iQ)))
+                    M.res[iIndex[iOrder],"r.normalized2"] <- resnorm
                 }
                 if("scaled" %in% type.residual){
-                    M.res[iIndex[iOrder][1],"r.scaled"] <- iResidual[1]/attr(Omega[[index.variance[iId]]],"sd")[1]
+                    M.res[iIndex[iOrder][1],"r.scaled"] <- iResidual[1]/attr(Omega[[pattern[iId]]],"sd")[1]
                     if(iN.time>1){
                         for(iTime in 2:iN.time){ ## iTime <- 2
-                            iVar <- Omega[[index.variance[iId]]][iTime,iTime]
-                            iPrecision_kk <- solve(Omega[[index.variance[iId]]][1:(iTime-1),1:(iTime-1),drop=FALSE])
-                            iOmega_lk <- Omega[[index.variance[iId]]][iTime,1:(iTime-1),drop=FALSE]
-                            iOmega_kl <- Omega[[index.variance[iId]]][1:(iTime-1),iTime,drop=FALSE]
+                            iVar <- Omega[[pattern[iId]]][iTime,iTime]
+                            iPrecision_kk <- solve(Omega[[pattern[iId]]][1:(iTime-1),1:(iTime-1),drop=FALSE])
+                            iOmega_lk <- Omega[[pattern[iId]]][iTime,1:(iTime-1),drop=FALSE]
+                            iOmega_kl <- Omega[[pattern[iId]]][1:(iTime-1),iTime,drop=FALSE]
                                 
                             num <- iResidual[iTime] - iOmega_lk %*% as.double(iPrecision_kk %*% iResidual[1:(iTime-1)])
                             denom <- iVar - as.double(iOmega_lk %*% iPrecision_kk %*% iOmega_kl)
@@ -410,82 +461,106 @@ residuals.lmm <- function(object, type = "response", var = NULL,
     }
 
     ## ** restaure NA
-    if(is.null(match.call()$data) && length(index.na)>0){
-        n.allobs <- NROW(M.res)+length(index.na)
-
-        Msave.res <- M.res
-        M.res <- matrix(NA, nrow = n.allobs, ncol = NCOL(Msave.res), dimnames = list(NULL, colnames(Msave.res)))
-        M.res[-index.na,] <- Msave.res
-        attr(M.res,"centering") <- attr(Msave.res,"centering")
-        attr(M.res,"reference") <- attr(Msave.res,"reference")
-
-        Msave.fit <- fitted
-        fitted <- matrix(NA, nrow = n.allobs, ncol = NCOL(Msave.fit), dimnames = list(NULL, colnames(Msave.fit)))
-        fitted[-index.na,] <- Msave.fit
-
-        if(is.null(cluster.levels.original)){
-            level.cluster <- levels(attr(index.na,"cluster"))
-        }else{
-            level.cluster <- rep(NA, n.allobs)
-            level.cluster[index.na] <- factor(attr(index.na,"cluster"), levels = cluster.levels.original)
-            level.cluster[-index.na] <- factor(index.cluster, levels = 1:length(cluster.levels.original), labels = cluster.levels.original)
-        }
-
-        if(is.null(cluster.levels.original)){
-            level.time <- levels(attr(index.na,"time"))
-        }else{
-            level.time <- rep(NA, n.allobs)
-            if(NCOL(attr(index.na,"time"))>1){
-                level.time[index.na] <- factor(interaction(attr(index.na,"time")), levels = U.time)
-                level.time[-index.na] <- factor(index.time, levels = 1:length(U.time), labels = U.time) ## time.levels.original
-            }else{
-                level.time[index.na] <- factor(attr(index.na,"time"), levels = U.time)
-                level.time[-index.na] <- factor(index.time, levels = 1:length(U.time), labels = U.time) ## time.levels.original
-            }
-            
-        }
-    }else{
-        level.cluster <- index.cluster
-        level.time <- index.time
-    }
-
-    ## ** export
-    if(format=="wide"){
-        dfL.res <- data.frame(residuals = as.vector(M.res), cluster = level.cluster, time = factor(U.time[level.time], U.time), stringsAsFactors = FALSE)
-        out <- stats::reshape(data = dfL.res[,c("cluster","time","residuals"),drop=FALSE], 
-                              direction = "wide", timevar = "time", idvar = "cluster", v.names = "residuals")
-        colnames(out)[-1] <- gsub("^residuals.","",colnames(out)[-1])
-        if(n.time==1){
-            names(out)[-1] <- name.residual
-        }else{
-            names(out)[-1] <- paste0(name.residual,".",names(out)[-1])
-        }
-    }else if(format == "long"){
-
+    if(is.null(mycall$data)){
+               
+        M.res <- addNA(M.res, index.na = index.na,
+                       level = "obs", cluster = object$cluster)
+        
         if(keep.data){
-            out <- cbind(data, fitted = fitted, M.res)
-        }else if(length(type.residual)==1){
-            out <- as.vector(M.res)
-        }else{
-            out <- M.res
-        }
 
+            if(format == "long"){
+                fitted <- addNA(fitted, index.na = index.na, 
+                                level = "obs", cluster = object$cluster)
+
+                if(is.matrix(fitted)){ ## when using partial residuals with ci for the fitted values
+                    data.reference <- cbind(data.reference, fitted)
+                }else{ ## normal case
+                    data.reference <- cbind(data.reference, fitted = fitted)
+                }
+            }
+        }
 
     }
 
     ## ** export
-    attr(out,"reference") <- attr(M.res,"reference")
-    attr(out,"centering") <- attr(M.res,"centering")
-    attr(out,"args") <- list(type = type, format = format, keep.data = keep.data, var = var, n.time = n.time, name.time = name.time)
-    if(format == "long"){
-        attr(out,"args")$name.colres <- colnames(M.res)
-    }else if(format == "wide"){
-        attr(out,"args")$name.colres <- names(out)[-1]
+    out <- .reformat(M.res, name = names(format), format = format, simplify = simplify,
+                     keep.data = keep.data, data = data.reference, index.na = object.index.na,
+                     object.cluster = object.cluster, index.cluster = index.cluster,
+                     object.time = object.time, index.time = index.time,                     
+                     call = mycall)
+
+
+    if(!simplify){
+        
+        attr(out,"reference") <- attr(M.res,"reference")
+        attr(out,"centering") <- attr(M.res,"centering")
+        attr(out,"args") <- list(type = type, format = format, keep.data = keep.data, var = var, type.var = type.var, n.time = n.time, name.time = name.time,
+                                 outcome = object$outcome$var, intercept = "(Intercept)" %in% names(object$param))
+        if(keep.intercept){
+            attr(out,"args")$var <- c("(Intercept)",attr(out,"args")$var)
+        }
+        if(all(is.na(attr(object.time$var,"original")))){
+            attr(out,"index.time") <- addNA(as.character(index.time), index.na = index.na,
+                                            level = "obs", cluster = object$cluster)
+        }
+        attr(out,"args")$nameL.colres <- colnames(M.res)
+        if(format == "wide"){
+            attr(out,"args")$nameW.colres <- stats::setNames(names(out)[-1], object.time$levels)
+
+        }else if(format == "long" && !is.null(attr(format,"original"))){
+            attr(out,"wide") <- .reformat(M.res, name = names(format), format = "wide", simplify = simplify,
+                                          keep.data = FALSE, data = data, index.na = object.index.na,
+                                          object.cluster = object.cluster, index.cluster = index.cluster,
+                                          object.time = object.time, index.time = index.time,                     
+                                          call = mycall)
+            attr(out,"args")$nameW.colres <- stats::setNames(names(attr(out,"wide"))[-1], object.time$levels)
+        }
     }
     class(out) <- append("residuals_lmm",class(out))
     return(out)
 }
 
+## * residuals.clmm (code)
+##' @export
+##' @rdname residuals
+residuals.clmm <- function(object, ...){
+
+    object$residuals <- object$design$Y - stats::predict(object, newdata = object$data.original, se = FALSE)$estimate
+    object$Omega <- .calc_Omega(object$design$vcov, param = object$param, keep.interim = FALSE)
+    object$OmegaM1 <- lapply(object$Omega, solve)
+    out <- residuals.lmm(object, ...)
+    return(out)
+
+}
+
+## * residuals.mlmm (code)
+##' @export
+##' @rdname residuals
+residuals.mlmm <- function(object, simplify = TRUE, ...){
+
+    ## ** extract
+    ls.out <- lapply(names(object$model), function(iBy){ ## iBy <- "A"
+        residuals(object$model[[iBy]], simplify = simplify, ...)
+    })
+
+    ## ** reshape
+    test.2D <- any(sapply(ls.out, inherits, "data.frame")) || any(sapply(ls.out, inherits, "matrix"))
+    if(test.2D){
+        out <- do.call(rbind,ls.out)
+        if(simplify && is.data.frame(out)){
+            object.manifest <- manifest(object)
+            rm.manifest <- attributes(object.manifest)[setdiff(names(attributes(object.manifest)),c("by","cluster","time"))]
+            out[unique(unlist(rm.manifest))] <- NULL
+        }
+    }else{
+        out <- do.call(c,ls.out)
+    }
+
+    ## ** export
+    return(out)
+}
+
+## * Note about normalizing the residuals
 ## NOTE: normalizing the residuals can be done by inverting, taking the cholesky transform, possibly transpose
 ##       but it is not clear in which order to do that
 ##       here is a small simulation study indicating the "best" solution
@@ -514,16 +589,6 @@ residuals.lmm <- function(object, type = "response", var = NULL,
 ## 
 ## quantile(var(t(SigmaM12 %*% t(X))) - diag(1,4))
 
-## * residuals.clmm
-##' @export
-residuals.clmm <- function(object, ...){
 
-    object$residuals <- object$design$Y - stats::predict(object, newdata = object$data.original, se = FALSE)$estimate
-    object$Omega <- .calc_Omega(object$design$vcov, param = object$param, keep.interim = FALSE)
-    object$OmegaM1 <- lapply(object$Omega, solve)
-    out <- residuals.lmm(object, ...)
-    return(out)
-
-}
 ##----------------------------------------------------------------------
 ### residuals.R ends here

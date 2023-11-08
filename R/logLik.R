@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (17:26) 
 ## Version: 
-## Last-Updated: jan  3 2023 (16:12) 
+## Last-Updated: aug  1 2023 (14:25) 
 ##           By: Brice Ozenne
-##     Update #: 316
+##     Update #: 350
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -29,8 +29,9 @@
 ##' 
 ##' @return A numeric value (total logLikelihood) or a vector of numeric values, one for each cluster (cluster specific logLikelihood).
 ##' 
+##' @keywords methods
 
-## * logLik
+## * logLik.lmm (code)
 ##' @export
 logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
 
@@ -40,9 +41,9 @@ logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
         out <- object$logLik
     }else{
         test.precompute <- !is.null(object$design$precompute.XX) && !indiv
-            
+
         if(!is.null(data)){
-            design <- stats::model.matrix(object, data = data, effects = "all", simplifies = FALSE)
+            design <- stats::model.matrix(object, data = data, effects = "all", simplify = FALSE)
         }else{
             design <- object$design
         }
@@ -58,36 +59,38 @@ logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
         }else{
             p <- object$param
         }
-        out <- .moments.lmm(value = p, design = design, time = object$time, method.fit = object$method.fit,
+        out <- .moments.lmm(value = p, design = design, time = object$time, method.fit = object$args$method.fit,
                             transform.sigma = "none", transform.k = "none", transform.rho = "none",
                             logLik = TRUE, score = FALSE, information = FALSE, vcov = FALSE, df = FALSE, indiv = indiv, 
                             trace = FALSE, precompute.moments = test.precompute)$logLik
     } 
 
-    ## ** restaure NAs and name
+    ## ** name and restaure NAs
     if(indiv){
-        if(is.null(data) && length(object$index.na)>0 && any(is.na(attr(object$index.na,"cluster.index")))){
-            names(out) <- object$design$cluster$levels
-            out.save <- out
-            out <- stats::setNames(rep(NA, times = object$cluster$n), object$cluster$levels)
-            out[rownames(out.save)] <- out.save
 
-            if(is.numeric(design$cluster$levels.original)){
-                names(out) <- NULL
-            }
-        }else if(!is.numeric(design$cluster$levels.original)){
-            names(out) <- design$cluster$levels.original
+        if(!is.numeric(object$cluster$levels)){
+            names(out) <- object$cluster$levels[match(1:length(out),object$cluster$index)]
         }
+        out <- addNA(out, index.na = object$index.na,
+                     level = "cluster", cluster = object$cluster)        
+
     }
 
     ## ** export
     return(out)
 }
 
+## * logLik.mlmm (code)
+##' @export
+logLik.mlmm <- function(object, ...){
+
+    return(lapply(object$model, logLik, ...))
+
+}
+
 ## * .logLik
 .logLik <- function(X, residuals, precision, Upattern.ncluster, weights, scale.Omega,
-                    index.variance, time.variance, index.cluster,
-                    indiv, REML, precompute){
+                    pattern, index.cluster, indiv, REML, precompute){
 
     ## ** extract information
     if(indiv && REML){##  https://towardsdatascience.com/maximum-likelihood-ml-vs-reml-78cf79bef2cf
@@ -96,11 +99,13 @@ logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
     test.loopIndiv <- indiv || is.null(precompute)
 
     n.obs <- length(index.cluster)
-    n.cluster <- length(index.variance)
+    n.cluster <- length(pattern) ## number of clusters, may different from Upattern.ncluster which is the weight of each cluster
     n.mucoef <- NCOL(X)
     name.mucoef <- colnames(X)
     log2pi <- log(2*pi)
-    REML.det <- matrix(0, nrow = n.mucoef, ncol = n.mucoef, dimnames = list(name.mucoef, name.mucoef))
+    if(REML){
+        REML.det <- matrix(0, nrow = n.mucoef, ncol = n.mucoef, dimnames = list(name.mucoef, name.mucoef))
+    }
     logdet.precision <- attr(precision, "logdet")
 
     ## ** prepare output
@@ -125,13 +130,13 @@ logLik.lmm <- function(object, data = NULL, p = NULL, indiv = FALSE, ...){
             iIndex <- index.cluster[[iId]]
             iResidual <- residuals[iIndex, , drop = FALSE]
             iX <- X[iIndex, , drop = FALSE]
-            iOmegaM1 <- precision[[index.variance[iId]]] * scale.Omega[iId]
+            iOmegaM1 <- precision[[pattern[iId]]] * scale.Omega[iId]
             iWeight <- weights[iId]
-            ll[iId] <- - iWeight * (NCOL(iOmegaM1) * (log2pi-log(scale.Omega[iId])) - logdet.precision[[index.variance[iId]]] + t(iResidual) %*% iOmegaM1 %*% iResidual)/2
+            ll[iId] <- - iWeight * (NCOL(iOmegaM1) * (log2pi-log(scale.Omega[iId])) - logdet.precision[[pattern[iId]]] + t(iResidual) %*% iOmegaM1 %*% iResidual)/2
             if (REML) {
                 REML.det <- REML.det + iWeight * (t(iX) %*% iOmegaM1 %*% iX)
             }
-            ## log(det(iOmegaM1)) - NCOL(iOmegaM1)*log(scale.Omega[iId])+logdet.precision[[index.variance[iId]]]
+            ## log(det(iOmegaM1)) - NCOL(iOmegaM1)*log(scale.Omega[iId])+logdet.precision[[pattern[iId]]]
         }
         if(!indiv){
             ll <- sum(ll)

@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Jun  4 2021 (10:04) 
 ## Version: 
-## Last-Updated: mar  8 2023 (09:56) 
+## Last-Updated: Jul 29 2023 (21:24) 
 ##           By: Brice Ozenne
-##     Update #: 30
+##     Update #: 35
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -15,6 +15,7 @@
 ## 
 ### Code:
 
+## * iid.lmm (documentation)
 ##' @title Extract the Influence Function From a Linear Mixed Model
 ##' @description Extract the influence function from a linear mixed model.
 ##' 
@@ -31,7 +32,10 @@
 ##' @param transform.rho [character] Transformation used on the correlation coefficients. One of \code{"none"}, \code{"atanh"}, \code{"cov"} - see details.
 ##' @param transform.names [logical] Should the name of the coefficients be updated to reflect the transformation that has been used?
 ##' @param ... Not used. For compatibility with the generic method.
+##'
+##' @keywords methods
 
+## * iid.lmm (code)
 ##' @export
 iid.lmm <- function(x,
                     effects = "mean",
@@ -55,7 +59,7 @@ iid.lmm <- function(x,
     effects <- match.arg(effects, c("mean","variance","correlation"), several.ok = TRUE)
 
     if(is.null(type.information)){
-        type.information <- attr(x$information,"type.information")
+        type.information <- x$args$type.information
     }else{
         type.information <- match.arg(type.information, c("expected","observed"))
     }
@@ -82,5 +86,20 @@ iid.lmm <- function(x,
     ## ** export
     return(out)
 }
+
+## * iid.Wald_lmm (code)
+##' @export
+iid.Wald_lmm <- function(x, ...){
+
+    ## ** normalize user imput
+    dots <- list(...)
+    if(length(dots)>0){
+        stop("Unknown argument(s) \'",paste(names(dots),collapse="\' \'"),"\'. \n")
+    }
+
+    ## ** export
+    return(x$iid)
+}
+
 ##----------------------------------------------------------------------
 ### iid.R ends here

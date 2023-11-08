@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt  7 2020 (11:12) 
 ## Version: 
-## Last-Updated: dec  7 2022 (19:11) 
+## Last-Updated: nov  8 2023 (15:07) 
 ##           By: Brice Ozenne
-##     Update #: 266
+##     Update #: 304
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -56,7 +56,9 @@
 ##' Correlation can be assessed when a grouping and ordering variable are given in the formula interface , e.g. Y ~ time|id.
 ##' 
 ##' @return A data frame containing summary statistics (in columns) for each outcome and value of the grouping variables (rows). It has an attribute \code{"correlation"} when it was possible to compute the correlation matrix for each outcome with respect to the grouping variable.
-
+##' 
+##' @keywords utilities
+ 
 ## * summarize (examples)
 ##' @examples
 ##' ## simulate data in the wide format
@@ -97,7 +99,7 @@
 ## * summarize (code)
 ##' @export
 summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, level = 0.95,
-                      columns = c("observed","missing","mean","sd","min","q1","median","q3","max","correlation"),
+                      columns = c("observed","missing","pc.missing","mean","sd","min","q1","median","q3","max","correlation"),
                       FUN = NULL,
                       which = NULL,
                       skip.reference = TRUE,
@@ -105,6 +107,7 @@ summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, 
                       ...){
 
     data <- as.data.frame(data)
+    mycall <- match.call()
 
     ## ** check and normalize user imput
     name.all <- all.vars(formula)
@@ -120,43 +123,44 @@ summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, 
              "Variable(s) \"",paste(invalid, collapse = "\" \""),"\" could not be found in the dataset. \n",
              sep = "")
     }
-
-    name.Y <- lhs.vars(formula)
+    detail.formula <- formula2var(formula)
+    name.Y <- detail.formula$var$response
     n.Y <- length(name.Y)
     if(n.Y==0){
         stop("Wrong specification of argument \'formula\'. \n",
              "There need to be at least one variable in the left hand side of the formula. \n")
     }
-    if(length(grep("|",deparse(formula), fixed = TRUE))>1){
+    name.id <- detail.formula$var$cluster
+    if(length(name.id)==0){
+        name.X <- detail.formula$var$regressor
+        formula <- detail.formula$formula$all
+    }else if("ranef" %in% names(detail.formula$vars)){
         stop("Wrong specification of argument \'formula\'. \n",
-             "There should at most one symbol |. \n")
-    }else if(length(grep("|",deparse(formula), fixed = TRUE))==1){
-        formula.split <- strsplit(split = "|",deparse(formula),fixed=TRUE)
-        formula2 <- stats::as.formula(formula.split[[1]][1])
-        name.X <- rhs.vars(formula2)
-        if(length(setdiff(name.all,c(name.Y,name.X)))!=1){
-            stop("Wrong specification of argument \'formula\'. \n",
-                 "There should be exactly one variable on the right hand side of the formula after the symbol |. \n")
+             "Should be something like Y ~ time or Y ~ time + G | cluster. \n")
+    }else if(length(name.id)==1){
+        name.X <- detail.formula$var$time
+        if(is.null(name.X)){
+            formula <- stats::as.formula(paste(paste(name.Y, collapse = "+"), "~1"))
+        }else{
+            formula <- stats::as.formula(paste(paste(name.Y, collapse = "+"), "~", paste(name.X, collapse = "+")))
         }
-        name.id <- trimws(formula.split[[1]][2], which = "both")
 
         test.between <- stats::setNames(sapply(name.X, function(iXvar){
             max(tapply(data[[iXvar]],data[[name.id]], FUN = function(x){sum(!duplicated(x))}), na.rm = TRUE)
         })==1,name.X)
-        
         if(any(test.between)){
-            vec.split <- interaction(data[names(which(test.between))], drop = TRUE)
+            vec.split <- nlme::collapse(data[names(which(test.between))], as.factor = TRUE)
             ls.id <- tapply(as.character(data[[name.id]]), vec.split, unique)
         }else{
             ls.id <- list(unique(as.character(data[[name.id]])))
         }
     }else{
-        name.X <- rhs.vars(formula)
-        name.id <- NULL
-        formula2 <- formula
+        stop("Wrong specification of argument \'formula\'. \n",
+             "There should be exactly one variable on the right hand side of the formula after the symbol |. \n",
+             "Something like Y ~ time + G | cluster. \n")
     }
     n.X <- length(name.Y)
-    
+
     if("which" %in% names(match.call())){
         warning("Argument \'which\' is deprecated. Consider using argument \'columns\' instead. \n")
         columns <- which
@@ -215,13 +219,14 @@ summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, 
                                                            c(name.id,name.X)))
         }
     }else{
+        time <- NULL
         table.id.time <- NULL
     }
         
     
     ## ** compute summary statistics
     out <- NULL
-    iFormula <- stats::update(formula2, paste0("XXindexXX~."))
+    iFormula <- stats::update(formula, paste0("XXindexXX~."))
     iData <- cbind(XXindexXX = 1:NROW(data), data)
     for(iY in 1:n.Y){ ## iY <- 1
 
@@ -235,7 +240,7 @@ summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, 
             if(!is.null(table.id.time) && all(table.id.time %in% 0:1) && ("missing" %in% columns || "pc.missing" %in% columns)){
 
                 if(any(test.between)){
-                    iIndex <- which(names(ls.id)==levels(interaction(data[x,names(which(test.between))], drop = TRUE)))
+                    iIndex <- which(names(ls.id)==unique(nlme::collapse(data[x,names(which(test.between)),drop=FALSE], as.factor = FALSE)))
                     n.missing <- n.missing + sum(ls.id[[iIndex]] %in% unique(as.character(data[x,name.id])) == FALSE)
                 }else{
                     n.missing <- n.missing + sum(ls.id[[1]] %in% unique(as.character(data[x,name.id])) == FALSE)
@@ -254,7 +259,11 @@ summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, 
                 tty <- list(estimate = NA, parameter = NA, stderr = NA, conf.int = c(NA, NA))
             }
             if(("median.lower" %in% columns || "median.upper" %in% columns) && requireNamespace("asht") && !all(y %in% 0:1)){
-                wty <- asht::medianTest(y, conf.level = level, alternative = "two.sided")
+                if(na.rm){
+                    wty <- asht::medianTest(stats::na.omit(y), conf.level = level, alternative = "two.sided")
+                }else{
+                    wty <- asht::medianTest(y, conf.level = level, alternative = "two.sided")
+                }
             }else{
                 wty <- list(estimate = NA, parameter = NA, stderr = NA, conf.int = c(NA, NA))
             }
@@ -330,7 +339,7 @@ summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, 
                 attr(out,"correlation")[[iY]] <- stats::setNames(lapply(ls.id, function(iId){ ## iId <- ls.id[[1]]
                     iDataL <- data[data[[name.id]] %in% iId,,drop = FALSE]
                     if(length(time)>1){
-                        iDataL[[paste(time, collapse = "_X_XX_X_")]] <- interaction(iDataL[,time, drop=FALSE])
+                        iDataL[[paste(time, collapse = "_X_XX_X_")]] <- nlme::collapse(iDataL[,time, drop=FALSE], as.factor = TRUE)
                         Utime <- paste(time, collapse = "_X_XX_X_")
                     }else{
                         Utime <- time
@@ -358,8 +367,11 @@ summarize <- function(formula, data, na.action = stats::na.pass, na.rm = FALSE, 
     if(!is.null(digits)){
         attr(out,"digits") <- digits
     }
+    attr(out,"call") <- mycall
     attr(out,"name.Y") <- name.Y
     attr(out,"name.X") <- name.X
+    attr(out,"name.time") <- time
+    attr(out,"name.id") <- name.id
     class(out) <- append("summarize",class(out))
     return(out)
 }

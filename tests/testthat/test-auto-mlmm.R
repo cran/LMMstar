@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: May 31 2021 (15:20) 
 ## Version: 
-## Last-Updated: aug 31 2022 (17:18) 
+## Last-Updated: jul 31 2023 (18:10) 
 ##           By: Brice Ozenne
-##     Update #: 55
+##     Update #: 57
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -39,8 +39,9 @@ test_that("mlmm: pool",{
     GS <- summary(pool(with(dfA, lm(Y~X))))
 
     e.mlmm <- mlmm(Y~X, by = ".imp", data = complete(dfA, action = "long"),
-                   effects = c("X=0"))
+                   effects = c("X=0"), trace = FALSE)
     test <- model.tables(e.mlmm, method = "pool.rubin")
+    ## confint(e.mlmm, method = "pool.rubin", columns = c("estimate", "se", "df", "lower", "upper", "p.value" ))
 
     expect_equal(as.double(GS[GS$term=="X",c("estimate","std.error","df","p.value")]),
                  as.double(test[c("estimate","se","df","p.value")]), tol = 1e-4)

@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: feb 16 2023 (09:39) 
 ## Version: 
-## Last-Updated: mar  8 2023 (14:35) 
+## Last-Updated: nov  8 2023 (15:18) 
 ##           By: Brice Ozenne
-##     Update #: 687
+##     Update #: 699
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -38,6 +38,7 @@
 ##' @param alpha.area [numeric, 0-1] the transparency level used to display the area under the density curve or histogram.
 ##' @param method.cor [character] estimator of the correlation. Argument passed to \code{stats::cor}.
 ##' When \code{NA}, the correlation is not displayed.
+##' @param name.cor [character] character used to represent the correlation. By default \code{"r"} but can be changed to \code{"\u03C1"} to display the greek letter \eqn{\rho}.
 ##' @param size.cor [numeric,>0] size of the font used to display the correlation or information about missing values.
 ##' @param digits [numeric of length 2] number of digits used to display the correlation or round the percentage of missing values.
 ##' @param display.NA [0:2 or "only"] Should the number of missing values be displayed. When taking value 2, will also display the percentage of missing values.
@@ -53,6 +54,8 @@
 ##' The identifier links the outcome values across time.
 ##' 
 ##' @return a list of ggplot objects (\code{facet="grid"}) or a ggplot object (\code{facet="grid2"})
+##' 
+##' @keywords utilities
 ##' 
 ##' @examples
 ##' data(gastricbypassL, package = "LMMstar")
@@ -81,7 +84,7 @@
 ##' ## coloring per group
 ##' scatterplot(gastricbypassL, formula = weight~time|id, group = "group")
 ##' 
-##' ## only display percentage of NAs
+##' ## only display NAs
 ##' scatterplot(gastricbypassL, formula = glucagonAUC~time|id,
 ##'             display.NA = "only", group = "group")
 ##' scatterplot(gastricbypassL, formula = glucagonAUC~time|id,
@@ -95,7 +98,7 @@ scatterplot <- function(data, formula, columns, format = NULL, group = NULL, tra
                         facet = "grid", 
                         alpha.point = 1,
                         type.diag = "boxplot", bins = NULL, position.bar = "identity", linewidth.density = NULL, alpha.area = NULL,
-                        method.cor = "pearson", size.cor = NULL, digits = c(3,2), display.NA = NULL,
+                        method.cor = "pearson", name.cor = "r", size.cor = NULL, digits = c(3,2), display.NA = NULL,
                         color = NULL, xlim = NULL, ylim = NULL, size.axis = NULL, size.legend = NULL, size.facet = NULL){
 
     ## ** normalize user input
@@ -183,32 +186,31 @@ scatterplot <- function(data, formula, columns, format = NULL, group = NULL, tra
             warning("Argument \'columns\' is ignored when using the wide format. \n")
         }
 
-        name.all <- all.vars(formula)
+        detail.formula <- formula2var(formula)
+        name.all <- detail.formula$vars$all
         if(any(name.all %in% names(dataL) == FALSE)){
             invalid <- name.all[name.all %in% names(dataL) == FALSE]
             stop("Argument \'formula\' is inconsistent with argument \'data\'. \n",
                  "Variable(s) \"",paste(invalid, collapse = "\" \""),"\" could not be found in the dataset. \n",
                  sep = "")
         }
-        name.Y <- lhs.vars(formula)
+        name.Y <- detail.formula$var$response
         n.Y <- length(name.Y)
         if(n.Y!=1){
             stop("Wrong specification of argument \'formula\'. \n",
                  "There need to be exactly one variable in the left hand side of the formula. \n")
         }
-        index.bar <- grep("|",deparse(formula), fixed = TRUE)
-        if(length(index.bar)>1){
+
+        name.id <- detail.formula$var$cluster
+        if(length(detail.formula$var$ranef)>0){
             stop("Wrong specification of argument \'formula\'. \n",
-                 "There should at most one symbol |. \n")
-        }else if(length(index.bar)==1){
-            formula.split <- strsplit(split = "|",deparse(formula),fixed=TRUE)
-            formula2 <- stats::as.formula(formula.split[[1]][1])
-            name.time <- rhs.vars(formula2)            
-            name.id <- trimws(formula.split[[1]][2], which = "both")
-        }else{
+                 "Should be something like Y ~ time|id. \n")
+        }else if(length(name.id)==0){
             dataL$XXindexXX <- 1:NROW(dataL)
             name.id <- "XXindexXX"
-            name.time <- rhs.vars(formula)
+            name.time <- detail.formula$var$regressor
+        }else{
+            name.time <- detail.formula$var$time
         }
         
         if(length(name.time)==0){
@@ -230,7 +232,7 @@ scatterplot <- function(data, formula, columns, format = NULL, group = NULL, tra
                      "Consider renaming the variable in the dataset. \n",
                      sep = "")
             }
-            dataL$XXtimeXX <- interaction(dataL[name.time], drop = TRUE)
+            dataL$XXtimeXX <- nlme::collapse(dataL[name.time], as.factor = TRUE)
             name.time <- "XXtimeXX"
         }
         if(!is.factor(dataL[[name.time]])){
@@ -297,7 +299,7 @@ scatterplot <- function(data, formula, columns, format = NULL, group = NULL, tra
     dataGrid$position[dataGrid$time1==dataGrid$time2] <- "diag"
     dataGrid$position[as.numeric(dataGrid$time1)>as.numeric(dataGrid$time2)] <- "lower"
     dataGrid$position[as.numeric(dataGrid$time1)<as.numeric(dataGrid$time2)] <- "upper"
-    dataGrid$time <- interaction(dataGrid$time1,dataGrid$time2)
+    dataGrid$time <- as.factor(paste(dataGrid$time1,dataGrid$time2, sep ="."))
 
     ## ** prepare outcome
     n.time <- length(level.time)
@@ -356,7 +358,8 @@ scatterplot <- function(data, formula, columns, format = NULL, group = NULL, tra
     }
 
     if(!is.na(method.cor)){
-        dataCor$label <- paste0("\u03C1=",round(dataCor$cor, digits[1]))
+        dataCor$label <- paste0(name.cor,"=",round(dataCor$cor, digits[1]))
+        ## dataCor$label <- paste0("\u03C1=",round(dataCor$cor, digits[1])) ## NOT DONE BY DEFAULT DUE TO ERROR RUNNING CRAN CHECK ON LINUX
         if(display.NA==1){
             dataCor$label <- paste0(dataCor$label, "; ",n.NA," NA")
         }else if(display.NA>1){
@@ -375,7 +378,7 @@ scatterplot <- function(data, formula, columns, format = NULL, group = NULL, tra
     }else{
         size.cor <- 10
     }
-    
+
     if(facet=="grid"){
         gg <- .ggscatterplot(dataGrid.diag = dataGrid.diag, dataGrid.lower = dataGrid.lower, dataCor = dataCor,
                              bins = bins, level.time = level.time, n.time = n.time, group = group, 

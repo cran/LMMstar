@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (12:59) 
 ## Version: 
-## Last-Updated: okt 12 2022 (17:43) 
+## Last-Updated: jul 26 2023 (11:08) 
 ##           By: Brice Ozenne
-##     Update #: 572
+##     Update #: 592
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -37,7 +37,8 @@
 ##' @return
 ##' When argument indiv is \code{FALSE}, a vector with the value of the score relative to each coefficient.
 ##' When argument indiv is \code{TRUE}, a matrix with the value of the score relative to each coefficient (in columns) and each cluster (in rows).
-##' 
+##'
+##' @keywords methods
 
 ## * score.lmm (code)
 ##' @export
@@ -79,7 +80,7 @@ score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE,
         test.precompute <- !is.null(x$design$precompute.XX) && !indiv
 
         if(!is.null(data)){
-            design <- stats::model.matrix(x, data = data, effects = "all", simplifies = FALSE)
+            design <- stats::model.matrix(x, data = data, effects = "all", simplify = FALSE)
         }else{
             design <- x$design
         }
@@ -95,27 +96,21 @@ score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE,
         }else{
             p <- x$param
         }
-        out <- .moments.lmm(value = p, design = design, time = x$time, method.fit = x$method.fit,
+        out <- .moments.lmm(value = p, design = design, time = x$time, method.fit = x$args$method.fit,
                             transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho,
                             logLik = FALSE, score = TRUE, information = FALSE, vcov = FALSE, df = FALSE, indiv = indiv, effects = effects,
                             trace = FALSE, precompute.moments = test.precompute, transform.names = transform.names)$score
     }
 
-    ## ** restaure NAs and name
+    ## ** name and restaure NAs
     if(indiv){
-        if(is.null(data) && length(x$index.na)>0 && any(is.na(attr(x$index.na,"cluster.index")))){
-            rownames(out) <- x$design$cluster$levels
-            out.save <- out
-            out <- matrix(NA, nrow = x$cluster$n, ncol = NCOL(out),
-                          dimnames = list(x$cluster$levels, colnames(out)))
-            out[rownames(out.save),] <- out.save
 
-            if(is.numeric(design$cluster$levels)){
-                rownames(out) <- NULL
-            }
-        }else if(!is.numeric(design$cluster$levels)){
-            rownames(out) <- design$cluster$levels
+        if(!is.numeric(x$cluster$levels)){
+            rownames(out) <- x$cluster$levels[match(1:NROW(out),x$cluster$index)]
         } 
+        out <- addNA(out, index.na = x$index.na,
+                     level = "cluster", cluster = x$cluster)        
+        
     }
 
     ## ** export
@@ -125,7 +120,7 @@ score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE,
 ## * .score
 .score <- function(X, residuals, precision, dOmega,
                    Upattern.ncluster, weights, scale.Omega,
-                   index.variance, time.variance, index.cluster, name.allcoef,
+                   pattern, index.cluster, name.allcoef,
                    indiv, REML, effects,
                    precompute){
 
@@ -133,11 +128,11 @@ score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE,
     ## ** extract information
     test.loopIndiv <- indiv || is.null(precompute)
     n.obs <- length(index.cluster)
-    n.cluster <- length(index.variance)
+    n.cluster <- length(pattern)
     name.mucoef <- colnames(X)
     n.mucoef <- length(name.mucoef)
     name.varcoef <- lapply(dOmega,names)
-    n.varcoef <- lapply(name.varcoef, length)
+    n.varcoef <- lengths(name.varcoef)
     name.allvarcoef <- unique(unlist(name.varcoef))
     U.pattern <- names(dOmega)
     n.pattern <- length(U.pattern)
@@ -166,7 +161,7 @@ score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE,
         if(("variance" %in% effects == FALSE) || ("correlation" %in% effects == FALSE)){
             name.varcoef <- stats::setNames(lapply(U.pattern,function(iPattern){intersect(name.effects,name.varcoef[[iPattern]])}),
                                      U.pattern)
-            n.varcoef <- lapply(name.varcoef, length)
+            n.varcoef <- lengths(name.varcoef)
             name.allvarcoef <- unique(unlist(name.varcoef))
         }
         if("mean" %in% effects == FALSE){ ## compute score only for variance and/or correlation parameters
@@ -174,12 +169,12 @@ score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE,
                 stop("Not possible to compute individual score for variance and/or correlation coefficients when using REML.\n")
             }
 
-            test.vcov <- any(unlist(n.varcoef)>0)
+            test.vcov <- any(n.varcoef>0)
             test.mean <- FALSE
 
         }else{ ## compute score all parameters
      
-            test.vcov <- any(unlist(n.varcoef)>0)
+            test.vcov <- any(n.varcoef>0)
             test.mean <- n.mucoef>0
         }
     }
@@ -207,12 +202,10 @@ score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE,
         
         ## loop
         for(iId in 1:n.cluster){ ## iId <- 7
-            iPattern <- index.variance[iId]
+            iPattern <- pattern[iId]
             iIndex <- index.cluster[[iId]]
             iWeight <- weights[iId]
-            iOmegaM1 <- precision[[index.variance[iId]]] * scale.Omega[iId]
-            ## iIndex <- which(index.cluster==iId)
-            ## iIndex <- iIndex[order(time.variance[iIndex])] ## re-order observations according to the variance-covariance matrix
+            iOmegaM1 <- precision[[pattern[iId]]] * scale.Omega[iId]
 
             iResidual <- residuals[iIndex,,drop=FALSE]
             iX <- X[iIndex,,drop=FALSE]
@@ -236,6 +229,7 @@ score.lmm <- function(x, effects = "mean", data = NULL, p = NULL, indiv = FALSE,
                 }
             }
         }
+
         if(!indiv){
             Score <- colSums(Score)
         }

@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:39) 
 ## Version: 
-## Last-Updated: jan 23 2023 (17:50) 
+## Last-Updated: jul 25 2023 (10:05) 
 ##           By: Brice Ozenne
-##     Update #: 215
+##     Update #: 243
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -41,42 +41,59 @@ print.lmm <- function(x, ...){
         }else{
             cat("\t\tLinear regression with heterogeneous residual variance \n")
         }
+    }else if(inherits(structure,"RE")){
+        structure.ranef <- structure$ranef
+        if(structure.ranef$crossed==FALSE && structure.ranef$nested==FALSE){
+            cat("\t\tLinear Mixed Model with a random intercept \n", sep = "")
+        }else if(structure.ranef$crossed==FALSE && structure.ranef$nested==TRUE){
+            cat("\t\tLinear Mixed Model with nested random intercepts \n", sep = "")
+        }else if(structure.ranef$crossed==TRUE && structure.ranef$nested==FALSE){
+            cat("\t\tLinear Mixed Model with cross random intercepts \n", sep = "")
+        }else{
+            cat("\t\tLinear Mixed Model with random effects \n", sep = "")
+        }        
     }else{
-        if(structure$type=="UN"){
+        if(inherits(structure,"UN")){
             if(is.na(structure$name$strata)){
                 txt.strata <- "an"
             }else{
                 txt.strata <- "a stratified"
             }
             cat("\t\tLinear Mixed Model with ",txt.strata," unstructured covariance matrix \n", sep = "")
-        }else if(structure$type=="CS"){
+        }else if(inherits(structure,"CS")){
             if(is.na(structure$name$strata)){
                 txt.strata <- "a"
             }else{
                 txt.strata <- "a stratified"
             }
-            if(!structure$block){
+            if(all(is.na(structure$name$cor))){
                 cat("\t\tLinear Mixed Model with ",txt.strata," compound symmetry covariance matrix \n", sep = "")
-            }else if(structure$heterogeneous){
+            }else if(structure$type == "heterogeneous"){
                 cat("\t\tLinear Mixed Model with ",txt.strata," block unstructured covariance matrix \n", sep = "")
-            }else{
+            }else if(structure$type == "homogeneous"){
                 cat("\t\tLinear Mixed Model with ",txt.strata," block compound symmetry covariance matrix \n", sep = "")
+            }else if(structure$type == "heterogeneous0"){
+                cat("\t\tLinear Mixed Model with ",txt.strata," crossed unstructured covariance matrix \n", sep = "")
+            }else if(structure$type == "homogeneous0"){
+                cat("\t\tLinear Mixed Model with ",txt.strata," crossed compound symmetry covariance matrix \n", sep = "")
             }
-        }else if(structure$type=="TOEPLITZ"){
+        }else if(inherits(structure,"TOEPLITZ")){
             if(is.na(structure$name$strata)){
                 txt.strata <- "a"
             }else{
                 txt.strata <- "a stratified"
             }
-            if(!structure$block){
+            if(all(is.na(structure$name$cor))){
                 cat("\t\tLinear Mixed Model with ",txt.strata," Toeplitz covariance matrix \n", sep = "")
-            }else if(structure$heterogeneous == "UN"){
-                cat("\t\tLinear Mixed Model with ",txt.strata," unstructured covariance matrix with constant subdiagonal \n", sep = "")
-            }else if(structure$heterogeneous == "LAG"){
+            }else if(structure$type == "heterogeneous"){
+                cat("\t\tLinear Mixed Model with ",txt.strata," unstructured covariance matrix with constant subdiagonal \n", sep = "")                
+            }else if(structure$type == "lag"){
                 cat("\t\tLinear Mixed Model with ",txt.strata," block Toeplitz covariance matrix \n", sep = "")
-            }else if(structure$heterogeneous == "CS"){
+            }else if(structure$type == "homogeneous"){
                 cat("\t\tLinear Mixed Model with ",txt.strata," block compound symmetry covariance matrix with specific subdiagonal \n", sep = "")
             }
+        }else if(inherits(structure,"CUSTOM")){
+            cat("\t\tLinear Mixed Model with user-defined covariance matrix \n", sep = "")
         }
     }
 
@@ -98,7 +115,7 @@ print.lmm <- function(x, ...){
 
     ## ** dataset
     M.print <- rbind(M.print,
-                     cbind("data",": ",paste(nobs["obs"], " observations and distributed in ", nobs["cluster"], " clusters",sep="")))
+                     cbind("data",": ",paste(nobs["obs"], " observations from ", nobs["cluster"], " clusters",sep="")))
 
     ## ** parameters
     ls.printparam <- list(c("parameter",": "),
@@ -124,26 +141,24 @@ print.lmm <- function(x, ...){
     }
 
     ## ** log-likelihood
-    if(x$method.fit=="ML"){
+    if(x$args$method.fit=="ML"){
         M.print <- rbind(M.print,
                          cbind("log-likelihood",": ",as.double(logLik)))
-    }else if(x$method.fit=="REML"){
+    }else if(x$args$method.fit=="REML"){
         M.print <- rbind(M.print,
                          cbind("log-restr.likelihood",": ",as.double(logLik)))
     }
 
     ## ** optimisation
-    if(x$opt$name!="gls"){
-        if(!is.na(x$opt$n.iter)){
-            M.print <- rbind(M.print,
-                             cbind("convergence",": ",paste0(x$opt$cv>0," (",x$opt$n.iter," iterations)")))
-        }else if(!is.null(attr(x$opt$n.iter,"eval"))){
-            M.print <- rbind(M.print,
-                             cbind("convergence",": ",paste0(x$opt$cv>0," (evaluations: ",attr(x$opt$n.iter,"eval")["logLik"]," likelihood, ",attr(x$opt$n.iter,"eval")["score"]," score)")))
-        }else{
-            M.print <- rbind(M.print,
-                             cbind("convergence",": ",x$opt$cv>0))
-        }
+    if(!is.na(x$opt$n.iter)){
+        M.print <- rbind(M.print,
+                         cbind("convergence",": ",paste0(x$opt$cv>0," (",x$opt$n.iter," iterations)")))
+    }else if(!is.null(attr(x$opt$n.iter,"eval"))){
+        M.print <- rbind(M.print,
+                         cbind("convergence",": ",paste0(x$opt$cv>0," (evaluations: ",attr(x$opt$n.iter,"eval")["logLik"]," likelihood, ",attr(x$opt$n.iter,"eval")["score"]," score)")))
+    }else{
+        M.print <- rbind(M.print,
+                         cbind("convergence",": ",x$opt$cv>0))
     }
 
     ## ** print
@@ -297,6 +312,9 @@ print.summarize <- function(x,...){
         x$outcome <- NULL
     }else{
         x$outcome[duplicated(x$outcome)] <- ""
+    }
+    if("pc.missing" %in% attr(x,"call")$columns == FALSE){
+        x$pc.missing <- NULL
     }
     name.X <-  attr(x,"name.X")
     if(length(name.X)>0){

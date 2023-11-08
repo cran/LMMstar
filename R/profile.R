@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: jun 16 2022 (15:19) 
 ## Version: 
-## Last-Updated: jan 23 2023 (15:36) 
+## Last-Updated: jul 27 2023 (16:45) 
 ##           By: Brice Ozenne
-##     Update #: 300
+##     Update #: 314
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -42,6 +42,8 @@
 ##' }
 ##'
 ##' @return A data.frame object containing the log-likelihood for various parameter values.
+##' 
+##' @keywords htest
 ##' 
 ##' @examples
 ##' data(gastricbypassW, package = "LMMstar")
@@ -105,7 +107,7 @@ profile.lmm <- function(fitted, effects = NULL, profile.likelihood = FALSE,
     }
     n.effects <- length(effects)
 
-    if(fitted$opt$name!="FS" && profile.likelihood>0){
+    if(fitted$args$control$optimizer!="FS" && profile.likelihood>0){
         stop("Argument \'profile.likelihood\' can only be TRUE when \"FS\" optimizer is used. \n",
              "Consider adding the argument control = list(optimizer = \"FS\") when fitting the mixed model with lmm. \n")
     }
@@ -180,23 +182,26 @@ profile.lmm <- function(fitted, effects = NULL, profile.likelihood = FALSE,
                 iOut[iIndex.center,name.p] <- p[,"estimate"]
             }
 
-            for(iPts in 1:iMaxpts){ ## iPts <- 15 
-
+            for(iPts in 1:iMaxpts){ ## iPts <- 13
                 if(iIndex.center-iPts>0){
-                    iResInf <- .constrain.lmm(fitted, effects = stats::setNames(seqValue[iIndex.center-iPts], effects[iParam]), init = iInitInf, trace = FALSE)
-                    iOut[iIndex.center-iPts, c("logLik","cv")] <- c(logLik = iResInf$logLik, cv = iResInf$opt$cv)
-                    iInitInf <- iResInf$param
-                    if(profile.likelihood>1){
-                        iOut[iIndex.center-iPts, name.p] <- iResInf$param
+                    iResInf <- try(.constrain.lmm(fitted, effects = stats::setNames(seqValue[iIndex.center-iPts], effects[iParam]), init = iInitInf, trace = FALSE))
+                    if(!inherits(iResInf,"try-error")){
+                        iOut[iIndex.center-iPts, c("logLik","cv")] <- c(logLik = iResInf$logLik, cv = iResInf$opt$cv)
+                        iInitInf <- iResInf$param
+                        if(profile.likelihood>1){
+                            iOut[iIndex.center-iPts, name.p] <- iResInf$param
+                        }
                     }
                 }
                 
                 if(iIndex.center+iPts<=length(seqValue)){
-                    iResSup <- .constrain.lmm(fitted, effects = stats::setNames(seqValue[iIndex.center+iPts], effects[iParam]), init = iInitSup, trace = FALSE)
-                    iOut[iIndex.center+iPts, c("logLik","cv")] <- c(logLik = iResSup$logLik, cv = iResSup$opt$cv)
-                    iInitSup <- iResSup$param
-                    if(profile.likelihood>1){
-                        iOut[iIndex.center+iPts, name.p] <- iResSup$param
+                    iResSup <- try(.constrain.lmm(fitted, effects = stats::setNames(seqValue[iIndex.center+iPts], effects[iParam]), init = iInitSup, trace = FALSE))
+                    if(!inherits(iResSup,"try-error")){
+                        iOut[iIndex.center+iPts, c("logLik","cv")] <- c(logLik = iResSup$logLik, cv = iResSup$opt$cv)                    
+                        iInitSup <- iResSup$param
+                        if(profile.likelihood>1){
+                            iOut[iIndex.center+iPts, name.p] <- iResSup$param
+                        }
                     }
                 }
             }

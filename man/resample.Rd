@@ -2,24 +2,32 @@
 % Please edit documentation in R/resample.R
 \name{resample}
 \alias{resample}
+\alias{resample.lmm}
 \title{Inference via Resampling for Linear Mixed Model}
 \usage{
-resample(
+resample(object, type, ...)
+
+\method{resample}{lmm}(
   object,
   type,
   effects,
   n.sample = 1000,
   studentized = TRUE,
   level = 0.95,
+  correction = TRUE,
   trace = TRUE,
   seed = NULL,
-  cpus = 1
+  cpus = 1,
+  export.cpus = NULL,
+  ...
 )
 }
 \arguments{
 \item{object}{a \code{lmm} object.}
 
 \item{type}{[character] should permutation test (\code{"perm-var"} or \code{"perm-res"}) or non-parametric bootstrap (\code{"boot"}) be used?}
+
+\item{...}{Not used. For compatibility with the generic method.}
 
 \item{effects}{[character vector] the variable(s) to be permuted or the effect(s) to be tested via non-parametric bootstrap.}
 
@@ -29,11 +37,16 @@ resample(
 
 \item{level}{[numeric,0-1] the confidence level of the confidence intervals.}
 
+\item{correction}{[logical] correction to ensure non-0 p-values, e.g. with permutations the p.value is evaluated as (#more extreme + 1)/(n.sample + 1) instead of (#more extreme)/(n.sample).}
+
 \item{trace}{[logical] should the execution of the resampling be traced?}
 
-\item{seed}{[integer] Random number generator (RNG) state used when starting resampling.}
+\item{seed}{[integer, >0] Random number generator (RNG) state used when starting resampling.}
 
-\item{cpus}{[integer] number of child-processes for parallel evaluation.}
+\item{cpus}{[integer, >0] number of child-processes for parallel evaluation.
+If \code{NULL} no state is set.}
+
+\item{export.cpus}{[character vector] name of the variables to export to each cluster.}
 }
 \description{
 Non-parametric bootstrap or permutation test for Linear Mixed Models.
@@ -64,10 +77,10 @@ e.lm <- lmm(weight2~weight1+glucagonAUC1, data = gastricbypassW)
 model.tables(e.lm)
 
 ## non-parametric bootstrap
-resample(e.lm, type = "boot", effects = c("weight1","glucagonAUC1"))
+resample(e.lm, type = "boot", effects = c("weight1","glucagonAUC1"), seed = 10)
 ## permutation test
-resample(e.lm, type = "perm-var", effects = "weight1") 
-resample(e.lm, type = "perm-var", effects = "glucagonAUC1")
+resample(e.lm, type = "perm-var", effects = "weight1", seed = 10) 
+resample(e.lm, type = "perm-var", effects = "glucagonAUC1", seed = 10)
 ## using multiple cores
 resample(e.lm, type = "boot", effects = c("weight1","glucagonAUC1"), cpus = 4)
 
@@ -83,13 +96,14 @@ eCS.lmm <- lmm(weight~glucagonAUC+gender, data = gastricbypassLR,
 model.tables(eCS.lmm)
 
 ## non-parametric bootstrap
-resample(eCS.lmm, type = "boot", effects = c("glucagonAUC","gender"))
+resample(eCS.lmm, type = "boot", effects = c("glucagonAUC","gender"), seed = 10, trace = FALSE)
 ## permutation test
-resample(eCS.lmm, type = "perm-var", effects = "gender")
-resample(eCS.lmm, type = "perm-res", effects = "glucagonAUC") 
+resample(eCS.lmm, type = "perm-var", effects = "gender", seed = 10)
+resample(eCS.lmm, type = "perm-res", effects = "glucagonAUC", seed = 10) 
 }
 
 }
 \references{
-Oliver E. Lee and Thomas M. Braun (2012), Permutation Tests for Random Effects in Linear Mixed Models. Biometrics, Journal 68(2).
+Oliver E. Lee and Thomas M. Braun (2012), \bold{Permutation Tests for Random Effects in Linear Mixed Models}. \emph{Biometrics}, Journal 68(2).
 }
+\keyword{htest}

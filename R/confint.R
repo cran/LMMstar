@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: feb  9 2022 (14:51) 
 ## Version: 
-## Last-Updated: Feb 26 2023 (11:50) 
+## Last-Updated: nov  8 2023 (15:59) 
 ##           By: Brice Ozenne
-##     Update #: 583
+##     Update #: 672
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -51,6 +51,8 @@
 ##' @seealso
 ##' \code{\link{coef.lmm}} for a simpler output (e.g. only estimates). \cr
 ##' \code{\link{model.tables.lmm}} for a more detailed output (e.g. with p-value). \cr
+##'
+##' @keywords methods
 ##' 
 ##' @examples
 ##' #### simulate data in the long format ####
@@ -132,7 +134,7 @@ confint.lmm <- function (object, parm = NULL, level = 0.95, effects = NULL, robu
     transform <- init$transform
 
     if(is.null(type.information)){
-        type.information <- attr(object$information,"type.information")
+        type.information <- object$args$type.information
     }else{
         type.information <- match.arg(type.information, c("expected","observed"))
     }
@@ -170,7 +172,7 @@ confint.lmm <- function (object, parm = NULL, level = 0.95, effects = NULL, robu
     if(df){
         df <- pmax(attr(vcov.beta,"df"), options$min.df)
         attr(vcov.beta,"df") <- NULL
-        if((object$method.fit=="REML") && (type.information != "observed") && ("mean" %in% effects)){
+        if((object$args$method.fit=="REML") && (type.information != "observed") && ("mean" %in% effects)){
             warning("when using REML with expected information, the degree of freedom of the mean parameters may depend on the parametrisation of the variance parameters. \n")
         }
     }else{
@@ -259,6 +261,34 @@ confint.lmm <- function (object, parm = NULL, level = 0.95, effects = NULL, robu
     return(out)
 }
 
+## * confint.lmmCC (code)
+##' @export
+confint.lmmCC <- function(object, parm = NULL, level = 0.95, effects = NULL, columns = NULL, ...){
+
+    if(object$time$n==4 && (is.null(effects) || effects == "change")){
+
+        Mcon <- cbind(c(-1,1,0,0),c(0,0,-1,1))
+        out.estimate <- estimate(object, function(p){
+            Sigma.change <- t(Mcon) %*% sigma(object, p = p) %*% Mcon
+            c(cor = stats::cov2cor(Sigma.change)[1,2],
+              beta = Sigma.change[1,2]/Sigma.change[1,1])
+        }, level = level, ...)
+        if(!is.null(columns)){
+            out <- out.estimate[,intersect(names(out.estimate),columns)]
+        }else{
+            out <- out.estimate[,c("estimate","lower","upper")]
+        }
+        
+    }else{
+        class(object) <- setdiff(class(object),"lmmCC")
+        out <- confint(object, parm = parm, effects = effects, level = level, columns = columns, ...)
+    }
+
+    ## ** export
+    return(out)
+
+}
+
 ## * confint.Wald_lmm (documentation)
 ##' @title Confidence Intervals for Multivariate Wald Tests
 ##' @description Compute confidence intervals for linear hypothesis tests, possibly with adjustment for multiple comparisons.
@@ -279,7 +309,7 @@ confint.lmm <- function (object, parm = NULL, level = 0.95, effects = NULL, robu
 ##'  \item \code{"holm"}, \code{"hochberg"}, \code{"hommel"}, \code{"BH"}, \code{"BY"}, \code{"fdr"}: adjustment performed by [stats::p.adjust()], no confidence interval is computed.
 ##'  \item \code{"single-step"}, \code{"free"}, \code{"Westfall"}, \code{"Shaffer"}: adjustment performed by [multcomp::glht()],  for all but the first method no confidence interval is computed.
 ##' }
-##' Note: method \code{"single-step"} adjust for multiple comparisons using quantiles of the multivariate Student's t-distribution, assuming equal degrees of freedom in the marginal.
+##' Note: method \code{"single-step"} adjust for multiple comparisons using equicoordinate quantiles of the multivariate Student's t-distribution over all tests, instead of the univariate quantiles. It assumes equal degrees of freedom in the marginal and is described in section 7.1 of Dmitrienko et al. (2013) under the name single-step Dunnett procedure. The name \code{"single-step"} is borrowed from the multcomp package. In the book Bretz et al. (2010) written by the authors of the package, the procedure is refered to as max-t tests which is the terminology adopted in the LMMstar package.  \cr
 ##' When degrees of freedom differs between individual hypotheses, method \code{"single-step2"} is recommended. It simulates data using copula whose marginal distributions are Student's t-distribution (with possibly different degrees of freedom) and elliptical copula with parameters the estimated correlation between the test statistics (via the copula package). It then computes the frequency at which the simulated maximum exceed the observed maximum and appropriate quantile of simulated maximum for the confidence interval.
 ##'
 ##'  \bold{Pooling estimates}: available methods are:
@@ -292,7 +322,11 @@ confint.lmm <- function (object, parm = NULL, level = 0.95, effects = NULL, robu
 ##'  \item \code{"pool.rubin"}: average of the estimates and compute the uncertainty according to Rubin's rule (Barnard et al. 1999).
 ##' }
 ##'
-##' @references Barnard and Rubin, Small-sample degrees of freedom with multiple imputation. Biometrika (1999), 86(4):948-955.
+##' @references Barnard and Rubin, \bold{Small-sample degrees of freedom with multiple imputation}. \emph{Biometrika} (1999), 86(4):948-955. \cr
+##' Dmitrienko, A. and D'Agostino, R., Sr (2013), \bold{Traditional multiplicity adjustment methods in clinical trials}. \emph{Statist. Med.}, 32: 5172-5218.
+##' Frank Bretz, Torsten Hothorn and Peter Westfall (2010), \bold{Multiple Comparisons Using R}, \emph{CRC Press}, Boca Raton.
+##' 
+##' @keywords methods
 
 ## * confint.Wald_lmm (code)
 ##' @export
@@ -308,10 +342,10 @@ confint.Wald_lmm <- function(object, parm, level = 0.95, method = NULL, columns 
         stop("Unknown argument(s) \'",paste(names(dots),collapse="\' \'"),"\'. \n")
     }
     alpha <- 1-level
-    method.fit <- object$object$method.fit
     pool.method <- c("average","pool.fixse","pool.se","pool.gls","pool.gls1","pool.rubin")
     adj.method <- c(stats::p.adjust.methods,"single-step", "Westfall", "Shaffer", "free", "single-step2")
 
+    ## handle multiple types of adjustment for multiplicty
     if(!is.null(method)){
         if(length(method)>1){
             method <- match.arg(method, c(pool.method,adj.method), several.ok = TRUE)
@@ -379,14 +413,16 @@ confint.Wald_lmm <- function(object, parm, level = 0.95, method = NULL, columns 
     }else if(is.numeric(backtransform)){
         backtransform <- as.logical(backtransform)
     }
-    if((is.null(backtransform) || is.logical(backtransform)) && (is.na(transform.sigma) && is.na(transform.k) && is.na(transform.rho))){
-        backtransform <- FALSE
-    }else if(is.null(backtransform)){
-        if(all(object$univariate$type %in% c("mu","all"))){
-            backtransform <- FALSE ## no need for back-transformation
+
+    test.backtransform <- stats::na.omit(c(sigma = transform.sigma, k = transform.k, rho = transform.rho))    
+    if(is.null(backtransform)){            
+        if(options$backtransform.confint==FALSE || length(test.backtransform[test.backtransform != "none"])==0){
+            backtransform <- FALSE
         }else{
-            backtransform <- options$backtransform.confint
+            backtransform <- object$args$backtransform
         }
+    }else if(is.logical(backtransform) && length(test.backtransform[test.backtransform != "none"])==0){
+        backtransform <- FALSE
     }
     n.model <- length(object$model)
 
@@ -418,10 +454,10 @@ confint.Wald_lmm <- function(object, parm, level = 0.95, method = NULL, columns 
         if(is.null(method)){
             if(NROW(iTable$df)==1){
                 iMethod  <- "none"
-            }else if(length(unique(round(iTable$df)))>1){
-                iMethod <- "single-step2"
-            }else{
+            }else if(df == FALSE || all(abs(iTable$df - round(mean(iTable$df)))<0.1)){
                 iMethod <- "single-step"
+            }else{
+                iMethod <- "single-step2"
             }
         }else{
             if(NROW(iTable$df)==1){
@@ -460,10 +496,10 @@ confint.Wald_lmm <- function(object, parm, level = 0.95, method = NULL, columns 
             pool.splitname <- strsplit(pool.name, split = sep, fixed = TRUE)
             if(!is.null(name.method)){
                 rownames(out)[iIndex.table[1]] <- name.method
-            }else if(all(sapply(pool.splitname,length)==2)){
+            }else if(all(lengths(pool.splitname)==2)){
                 Mpool.splitname <- do.call(rbind,pool.splitname)
                 pool.splitname2 <- strsplit(Mpool.splitname[,1],split="=", fixed = TRUE)
-                if(all(sapply(pool.splitname2,length)==2)){
+                if(all(lengths(pool.splitname2)==2)){
                     Mpool.splitname2 <- do.call(rbind,pool.splitname2)
                     if(length(unique(Mpool.splitname2[,1]))==1){
                         rownames(out)[iIndex.table[1]] <- paste0(Mpool.splitname2[1,1],"=<",paste(Mpool.splitname2[1,2],Mpool.splitname2[NROW(Mpool.splitname2),2],sep=":"),">",sep,Mpool.splitname[1,2])                   
@@ -535,7 +571,7 @@ confint.Wald_lmm <- function(object, parm, level = 0.95, method = NULL, columns 
                     iVcov.vcov <- attr(out.save$df,"vcov")
                     iPair <- expand.grid(names(iCvar.pool),names(iCvar.pool))
 
-                    idXTX.dT <- matrix(NA, nrow = 1, ncol = NROW(iPair), dimnames = list(NULL,interaction(iPair,sep=".")))
+                    idXTX.dT <- matrix(NA, nrow = 1, ncol = NROW(iPair), dimnames = list(NULL,nlme::collapse(iPair,sep=".")))
                     for(iP in 1:NROW(iPair)){ ## iP <- 35
                         idXTX.dT[,iP] <- iCvar.pool[iPair[iP,1]] * iCvar.pool[iPair[iP,2]]
                     }
@@ -564,7 +600,7 @@ confint.Wald_lmm <- function(object, parm, level = 0.95, method = NULL, columns 
                 iLS.tCoriginal <- lapply(iLS.Coriginal,t)
                 iVEC.beta <- cbind(out.save[iIndex.table,"estimate"]-out.save[iIndex.table,"null"])
 
-                if(all(sapply(iLS.meancoef,length) == sapply(iLS.Coriginal,NCOL))){
+                if(all(lengths(iLS.meancoef) == sapply(iLS.Coriginal,NCOL))){
                     effects.vcov <- "mean"
                 }else{
                     effects.vcov <- "all"
@@ -701,6 +737,18 @@ confint.Wald_lmm <- function(object, parm, level = 0.95, method = NULL, columns 
                                   transform.k = object$args$transform.k,
                                   transform.rho = object$args$transform.rho)
 
+            vec.backtransform <- attr(object$univariate,"backtransform")
+            if(!is.null(vec.backtransform)){
+                ## case where a contrast is performed on transformed coefficients (e.g. sigma:male vs sigma:female)
+                ## the back transformed version exp(log(sigma:male) - log(sigma:female)) differs from the original version sigma:male - sigma:female
+                ## thus without further indication the original version is output
+                out[names(vec.backtransform),"estimate"] <- unname(vec.backtransform)
+                out[names(vec.backtransform),"se"] <- NA
+                out[names(vec.backtransform),"df"] <- NA
+                out[names(vec.backtransform),"lower"] <- NA
+                out[names(vec.backtransform),"upper"] <- NA
+            }
+
         }
     }
 
@@ -731,45 +779,44 @@ confint.LRT_lmm <- function(object, parm, level = 0.95, ...){
 ##' @param parm Not used. For compatibility with the generic method.
 ##' @param level [numeric,0-1] the confidence level of the confidence intervals.
 ##' @param method [character] type of adjustment for multiple comparisons: one of \code{"none"}, \code{"bonferroni"}, \code{"single-step"}, \code{"single-step2"}, or \code{"pool"}.
+##' @param ordering [character] should the output be ordered by type of parameter (\code{parameter}) or by model (\code{by}).
+##' Only relevant for \code{mlmm} objects.
 ##' @param ... other arguments are passed to \code{\link{confint.Wald_lmm}}.
 ##'
 ##' @details Statistical inference following pooling is performed according to Rubin's rule whose validity requires the congeniality condition of Meng (1994).
 ##'
 ##' @references
 ##' Meng X. L.(1994). Multiple-imputation inferences with uncongenial sources of input. Statist. Sci.9, 538–58.
+##' 
+##' @keywords methods
 
 ## * confint.mlmm (code)
 ##' @export
-confint.mlmm <- function(object, parm = NULL, level = 0.95, method = NULL, ...){
+confint.mlmm <- function(object, parm = NULL, level = 0.95, method = NULL, ordering = "parameter", ...){
 
+    ## ** normalize user input
     if(is.null(method)){
         method <- "none"
     }
-    object$univariate
-    if(is.null(attr(object,"call")$effects) && length(unique(object$univariate$by))>1){
-        Uparameter <- unique(object$univariate$parameter)
-        ls.out <- lapply(Uparameter, function(iParam){ ## iParam <- Uparameter[1]
-            iObject <- object
-            iObject$univariate <- object$univariate[object$univariate$parameter==iParam,,drop=FALSE]
-            confint.Wald_lmm(iObject, parm = parm, level = level, method = method, ...)
-        })
-        out <- do.call(rbind,ls.out)
-        attr(out, "error") <- do.call(c, lapply(ls.out, "attr", "error"))
-        attr(out, "contrast") <- do.call(rbind, lapply(ls.out, "attr", "contrast"))
-        attr(out, "Madjust-within") <- TRUE
+    ordering <- match.arg(ordering, c("by","parameter"))
+    table.transform <- attr(object$confint.nocontrast,"backtransform")
+
+    ## ** extract confidence intervals
+    out.confint <- confint.Wald_lmm(object, parm = parm, level = level, method = method, backtransform = object$args$backtransform, ...)
+    if(all(method %in% c("average","pool.se","pool.gls","pool.gls1","pool.rubin") == FALSE)){
+        if(ordering=="by"){
+            reorder <- order(object$univariate$by)
+        }else if(is.list(object$univariate$parameter)){
+            reorder <- order(object$univariate$type,sapply(object$univariate$parameter, paste, collapse = ";"))
+        }else{
+            reorder <- order(object$univariate$type,object$univariate$parameter)
+        }
+        out <- out.confint[reorder,,drop=FALSE]
     }else{
-        out <- confint.Wald_lmm(object, parm = parm, level = level, method = method, ...)
+        out <- out.confint
     }
-    contrast <- object$glht$all[[1]]$linfct
-    if(any(object$glht$all[[1]]$linfct %in% 0:1 == FALSE) || any(rowSums(object$glht$all[[1]]$linfct==1)!=1)){
-        out$estimate <- as.double(contrast %*% object$confint.nocontrast$estimate)
-        out$se <- NA
-        out$df <- NA
-        out$lower <- NA
-        out$upper <- NA
-        attr(out,"backtransform") <- attr(object$confint.nocontrast,"backtransform")
-        attr(out,"backtransform")[,c("se","lower","upper")] <- FALSE
-    }
+
+    ## ** export
     return(out)
 }
 

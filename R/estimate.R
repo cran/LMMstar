@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Jun 20 2021 (23:25) 
 ## Version: 
-## Last-Updated: jan  3 2023 (17:10) 
+## Last-Updated: aug  1 2023 (15:39) 
 ##           By: Brice Ozenne
-##     Update #: 932
+##     Update #: 1036
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -15,7 +15,7 @@
 ## 
 ### Code:
 
-## * estimate.lmm
+## * estimate.lmm (documentation)
 ##' @title Delta Method for Mixed Models
 ##' @description Perform a first order delta method
 ##'
@@ -34,15 +34,17 @@
 ##' @param transform.rho [character] Transformation used on the correlation coefficients. One of \code{"none"}, \code{"atanh"}, \code{"cov"} - see details.
 ##' @param ... extra arguments passed to \code{f}.
 ##'
+##' @keywords mhtest
+##' 
 ##' @examples
-##' if(require(lava)){
+##' if(require(lava) && require(nlme)){
 ##' 
 ##' #### Random effect ####
 ##' set.seed(10)
 ##' dL <- sampleRem(1e2, n.times = 3, format = "long")
-##' e.lmm1 <- lmm(Y ~ X1+X2+X3, repetition = ~visit|id, structure = "CS", data = dL)
-##' coef(e.lmm1, effects = "ranef")
-##' e.ranef <- estimate(e.lmm1, f  = function(p){coef(e.lmm1, p = p, effects = "ranef")})
+##' e.lmm1 <- lmm(Y ~ X1+X2+X3 + (1|id), repetition = ~visit|id, data = dL)
+##' nlme::ranef(e.lmm1)
+##' e.ranef <- estimate(e.lmm1, f  = function(p){nlme::ranef(e.lmm1, p = p)$estimate})
 ##' e.ranef
 ##'
 ##' if(require(ggplot2)){
@@ -71,6 +73,9 @@
 ##' }
 ##'
 ##' }
+
+
+## * estimate.lmm (code)
 ##' @export
 estimate.lmm <- function(x, f, df = !is.null(x$df), robust = FALSE, type.information = NULL, level = 0.95,
                          method.numDeriv = NULL, average = FALSE,
@@ -184,6 +189,71 @@ estimate.lmm <- function(x, f, df = !is.null(x$df), robust = FALSE, type.informa
     return(out)
 }
 
+## * estimate.lmm (code)
+##' @export
+estimate.rbindWald_lmm <- function(x, f, robust = FALSE, level = 0.95,
+                                   method.numDeriv = NULL, average = FALSE, ...){
+
+    ## ** normalize arguments
+    if(is.null(method.numDeriv)){
+        method.numDeriv <- LMMstar.options()$method.numDeriv
+    }
+
+    ## ** estimate
+    beta <- coef(x)
+    
+    ## ** partial derivative
+    f.formals <- names(formals(f))
+    if(length(f.formals)==1){
+        if(average){
+            fbeta.indiv <- f(beta) 
+            fbeta <- mean(fbeta.indiv)
+            grad <- numDeriv::jacobian(func = function(x){mean(f(x))}, x = beta, method = method.numDeriv)
+        }else{
+            fbeta <- f(beta)
+            grad <- numDeriv::jacobian(func = f, x = beta, method = method.numDeriv)
+        }
+        
+    }else{
+        if(average){
+            fbeta.indiv <- f(beta, ...)
+            fbeta <- mean(fbeta.indiv)
+            grad <- numDeriv::jacobian(func = function(x, ...){mean(f(x, ...))}, x = beta, method = method.numDeriv)
+        }else{
+            fbeta <- f(beta, ...)
+            grad <- numDeriv::jacobian(func = f, x = beta, method = method.numDeriv, ...)
+        }
+    }
+    colnames(grad) <- names(beta)
+    
+    ## ** extract variance-covariance
+    Sigma <- vcov(x)
+
+    ## ** delta-method
+    C.Sigma.C <- grad %*% Sigma %*% t(grad)
+
+    if(average){
+        C.sigma.C <- sqrt(diag(C.Sigma.C) + sum((fbeta.indiv - fbeta)^2)/(length(fbeta.indiv)-1))
+    }else{
+        C.sigma.C <- sqrt(diag(C.Sigma.C))
+    }
+    
+    ## ** export
+    alpha <- 1-level
+    out <- data.frame(estimate = as.double(fbeta),
+                      se = as.double(C.sigma.C),
+                      df = Inf,
+                      lower = as.double(fbeta + stats::qnorm(alpha/2) * C.sigma.C),
+                      upper = as.double(fbeta + stats::qnorm(1-alpha/2) * C.sigma.C),
+                      p.value = as.double(2*(1-stats::pnorm(abs(fbeta/C.sigma.C)))))
+    attr(out,"gradient") <- grad
+    if(!is.null(names(fbeta))){
+        rownames(out) <- names(fbeta)
+        rownames(attr(out,"gradient")) <- names(fbeta)
+    }
+    colnames(attr(out,"gradient")) <- names(beta)
+    return(out)
+}
 
 ## * .estimate (documentation)
 ##' @title Optimizer for mixed models
@@ -210,7 +280,7 @@ estimate.lmm <- function(x, f, df = !is.null(x$df), robust = FALSE, type.informa
 ##' dL <- sampleRem(100, n.times = 3, format = "long")
 ##' 
 ##' ## fit Linear Mixed Model
-##' LMMstar.options(optimizer = "gls")
+##' LMMstar.options(optimizer = "BFGS")
 ##' eUN.gls <- lmm(Y ~ X1 + X2 + X5, repetition = ~visit|id, structure = "UN", data = dL, df = FALSE)
 ##' 
 ##' LMMstar.options(optimizer = "FS")
@@ -242,10 +312,10 @@ estimate.lmm <- function(x, f, df = !is.null(x$df), robust = FALSE, type.informa
     if(is.null(trace)){
         trace <- FALSE
     }
-
+    
     ## ** prepare
     index.cluster <- design$index.cluster
-    
+
     param.mu <- design$param[design$param$type=="mu","name"]
     param.sigma <- design$param[design$param$type=="sigma","name"]
     param.k <- design$param[design$param$type=="k","name"]
@@ -253,16 +323,15 @@ estimate.lmm <- function(x, f, df = !is.null(x$df), robust = FALSE, type.informa
     param.Omega <- c(param.sigma,param.k,param.rho)
     param.name <- c(param.mu,param.Omega)
 
-    param.fixed <- design$param[design$param$fixed,"name"]
+    param.fixed <- design$param[!is.na(design$param$constraint),"name"]
     param.Omega2 <- setdiff(param.Omega,param.fixed)
     param.mu2 <- setdiff(param.mu,param.fixed)
     param.fixed.mu <- setdiff(param.mu,param.mu2)
     design.param2 <- design$param[match(param.Omega2, design$param$name),,drop=FALSE]
     
     n.param <- length(param.name)
-    Upattern <- design$vcov$X$Upattern
+    Upattern <- design$vcov$Upattern
     n.Upattern <- NROW(Upattern)
-
 
     if(length(param.fixed.mu)>0){
         partialHat <- design$mean[,param.fixed.mu,drop=FALSE] %*% init[param.fixed.mu]
@@ -285,9 +354,9 @@ estimate.lmm <- function(x, f, df = !is.null(x$df), robust = FALSE, type.informa
             ## update XY with X(Y-Xb(fixed))
             precompute.Xfixed <- .precomputeXR(X = precompute.XXpattern,
                                                residuals = partialHat,
-                                               pattern = design$vcov$X$Upattern$name,
-                                               pattern.ntime = stats::setNames(design$vcov$X$Upattern$n.time, design$vcov$X$Upattern$name),
-                                               pattern.cluster = design$vcov$X$Upattern$index.cluster, index.cluster = design$index.cluster)
+                                               pattern = design$vcov$Upattern$name,
+                                               pattern.ntime = stats::setNames(design$vcov$Upattern$n.time, design$vcov$Upattern$name),
+                                               pattern.cluster = attr(design$vcov$pattern,"list"), index.cluster = design$index.cluster)
             precompute.XY <- mapply(x = design$precompute.XY, y = precompute.Xfixed, FUN = function(x,y){x[,,param.mu2,drop=FALSE]-y}, SIMPLIFY = FALSE)
         }else{
             precompute.XY <- NULL
@@ -305,32 +374,73 @@ estimate.lmm <- function(x, f, df = !is.null(x$df), robust = FALSE, type.informa
     effects <- c("variance","correlation")
 
     ## ** intialization
+    if(!is.null(init)){
+
+        if(is.matrix(init)){
+            if(NROW(init)!=time$n || NCOL(init)!=time$n){
+                stop("When a matrix, initialization should be a square matrix with dimensions compatible with time (",time$n,"x",time$n,"). \n")
+            }
+            init.mu <- NULL
+            init.Omega <- init
+            init <- NULL
+        }else if(!is.vector(init)){
+            stop("Initialization should either be a vector containing value for all, or only mean parameters, \n",
+                 "or be a full data variance-covariance matrix. \n")
+        }else if(any(param.mu2 %in% names(init) == FALSE)){
+            stop("Initialization does not contain value for all mean parameters. \n",
+                 "Missing parameters: \"",paste(param.mu[param.mu %in% names(init) == FALSE], collapse = "\" \""),"\". \n")
+        }else if(all(names(init) %in% param.mu)){
+            init.mu <- init
+            init.Omega <- NULL
+            init <- NULL
+        }else if(any(param.Omega %in% names(init) == FALSE)){
+            stop("Initialization does not contain value for all variance-covariance parameters. \n",
+                 "Missing parameters: \"",paste(param.Omega[param.Omega %in% names(init) == FALSE], collapse = "\" \""),"\". \n")
+        }
+
+    }else{
+        init.mu <- NULL
+        init.Omega <- NULL
+    }
+
     if(is.null(init)){
 
         param.value <- stats::setNames(rep(NA, n.param),param.name)
-        if(trace>1){
-            cat("\n\nInitialization:\n")
-        }
 
         ## mean value
-        start.OmegaM1 <- stats::setNames(lapply(1:n.Upattern, function(iPattern){ ## iPattern <- 1
-            diag(1, nrow = Upattern[iPattern,"n.time"], ncol = Upattern[iPattern,"n.time"])
-        }), Upattern$name)
-        if(length(param.mu2)>0){
+        if(!is.null(init.mu)){
+            param.value[param.mu2] <- init.mu[param.mu2]
+        }else if(length(param.mu2)>0){
+
+            if(!is.null(init.Omega)){
+                start.OmegaM1 <- stats::setNames(lapply(Upattern$name, function(iPattern){ ## iPattern <- 1
+                    iCluster <- attr(design$vcov$pattern,"list")[[iPattern]][1]
+                    iTime <- design$index.clusterTime[[iCluster]]
+                    return(solve(init.Omega[iTime,iTime,drop=FALSE]))
+                }), Upattern$name)
+            }else{
+                start.OmegaM1 <- stats::setNames(lapply(1:n.Upattern, function(iPattern){ ## iPattern <- 1
+                    diag(1, nrow = Upattern[iPattern,"n.time"], ncol = Upattern[iPattern,"n.time"])
+                }), Upattern$name)
+            }
             param.value[param.mu2] <- .estimateGLS(OmegaM1 = start.OmegaM1, pattern = Upattern$name, precompute.XY = precompute.XY, precompute.XX = precompute.XX, key.XX = key.XX,
                                                    Y = partialY, design = design, param.mu = param.mu2)
         }
         ## vcov values
         iResiduals.long <- partialY - design$mean[,param.mu2,drop=FALSE] %*% param.value[param.mu2]
         if(length(param.Omega2)>0){
-            outInit <- .initialize(design$vcov, residuals = iResiduals.long, Xmean = design$mean, index.cluster = index.cluster)
+            if(is.null(init.Omega)){
+                outInit <- .initialize(design$vcov, method.fit = method.fit, residuals = iResiduals.long, Xmean = design$mean, index.cluster = index.cluster)
+            }else{
+                outInit <- .initialize2(design$vcov, index.clusterTime = design$index.clusterTime, Omega = init.Omega)
+            }
         }else{
             outInit <- NULL
         }
 
         ## check initialization leads to a positive definite matrix 
         initOmega <- .calc_Omega(object = design$vcov, param = outInit, keep.interim = TRUE)        
-test.npd <- sapply(initOmega,function(iOmega){any(eigen(iOmega)$values<0)})
+        test.npd <- sapply(initOmega,function(iOmega){any(eigen(iOmega)$values<0)})
         if(any(test.npd)){ ## otherwise initialize as compound symmetry
             param.value[setdiff(param.sigma,param.fixed)] <- outInit[setdiff(param.sigma,param.fixed)]
             param.value[setdiff(param.k,param.fixed)] <- outInit[setdiff(param.k,param.fixed)]
@@ -338,24 +448,12 @@ test.npd <- sapply(initOmega,function(iOmega){any(eigen(iOmega)$values<0)})
         }else{        
             param.value[names(outInit)] <- outInit
         }
-
-        if(trace>1){
-            print(param.value)
-        }
     }else{
-        ## if(length(param.Omega2)==0){
-        ##     stop("No initialization is needed when there are only mean parameters. \n")
-        ## }
-        if(any(param.name %in% names(init) == FALSE)){
-            stop("Initialization does not contain value for all parameters. \n",
-                 "Missing parameters: \"",paste(param.name[param.name %in% names(init) == FALSE], collapse = "\" \""),"\". \n")
-        }
         param.value <- init[param.name]     
-     
-        if(trace>1){
-            cat("\n\nInitialization:\n")
-            print(param.value)
-        }
+    }
+    if(trace>1){
+        cat("Initialization:\n")
+        print(param.value)
     }
 
     ## ** loop
@@ -420,7 +518,7 @@ test.npd <- sapply(initOmega,function(iOmega){any(eigen(iOmega)$values<0)})
             }else if(iiIter == 0 && is.na(logLik.value)){
                 cv <- -2
                 break
-            }else if(is.na(logLik.value) || (logLik.value < logLik.valueM1)){ ## decrease in likelihood - try partial update
+            }else if(is.na(logLik.value) || (logLik.value < logLik.valueM1)){ ## decrease in likelihood - try partial update                
                 outMoments <- .backtracking(valueM1 = param.valueM1, update = update.value, n.iter = n.backtracking,
                                             design = design, time = time, method.fit = method.fit, type.information = type.information,
                                             transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho,
@@ -464,7 +562,7 @@ test.npd <- sapply(initOmega,function(iOmega){any(eigen(iOmega)$values<0)})
                                                        Y = partialY, design = design,
                                                        param.mu = param.mu2)
             }
-            
+     
             ## *** display
             iIter <- iIter+1
             if(trace > 0 && trace < 3){
@@ -503,9 +601,7 @@ test.npd <- sapply(initOmega,function(iOmega){any(eigen(iOmega)$values<0)})
         }else if(cv==-2){
             attr(cv,"message") <- "Stop optimization before convergence (log-likelihood=NA based on the initial values)"
         }
-        if(trace==1){
-            cat("\n")
-        }else if(trace>1){
+        if(trace>1){
             if(trace %in% 2:3){
                 cat("\n")
                 print(param.value)
@@ -582,7 +678,7 @@ test.npd <- sapply(initOmega,function(iOmega){any(eigen(iOmega)$values<0)})
         if(trace<=0){trace <- 0}
         res.optim <- optimx::optimx(par = param.value.trans, fn = warper_obj, gr = warper_grad, hess = warper_hess,
                                     method = optimizer, itnmax = n.iter, control = list(trace = trace))
-        ## solution <- setNames(as.double(res.optim[1,1:length(param.value.trans)]), names(param.value.trans))
+        ## solution <- stats::setNames(as.double(res.optim[1,1:length(param.value.trans)]), names(param.value.trans))
         ## warper_obj(solution)
         ## warper_grad(solution)
 
@@ -635,6 +731,7 @@ test.npd <- sapply(initOmega,function(iOmega){any(eigen(iOmega)$values<0)})
     if(!is.null(key.XX)){
         max.key <- key.XX[n.param,n.param]
     }
+
     for(iPattern in pattern){ ## iPattern <- pattern[1]
         if(!is.null(precompute.XX) && !is.null(precompute.XY)){
             iVec.Omega <- as.double(OmegaM1[[iPattern]])
@@ -643,7 +740,7 @@ test.npd <- sapply(initOmega,function(iOmega){any(eigen(iOmega)$values<0)})
             denominator  <- denominator + as.double(iVec.Omega %*%  matrix(precompute.XX[[iPattern]], nrow = iTime2, ncol = max.key))[key.XX]
         }else{
             iOmegaM1 <- OmegaM1[[iPattern]]
-            iIndexCluster <- design$index.cluster[which(design$vcov$X$pattern.cluster$pattern==iPattern)]
+            iIndexCluster <- design$index.cluster[design$vcov$pattern == which(pattern==iPattern)]
             for(iId in 1:length(iIndexCluster)){ ## iId <- 2
                 iX <- design$mean[iIndexCluster[[iId]],param.mu,drop=FALSE]
                 if(is.null(design$weight)){
@@ -661,6 +758,7 @@ test.npd <- sapply(initOmega,function(iOmega){any(eigen(iOmega)$values<0)})
         }
 
     }
+
     out <- solve(denominator, numerator)    
     return(stats::setNames(as.double(out), name.param))
 }
@@ -736,7 +834,7 @@ test.npd <- sapply(initOmega,function(iOmega){any(eigen(iOmega)$values<0)})
         ## update mean parameters
         if(length(param.mu)>0){
             valueNEW[param.mu] <- .estimateGLS(OmegaM1 = stats::setNames(lapply(iOmega, solve), names(iOmega)),
-                                               pattern = design$vcov$X$Upattern$name,
+                                               pattern = design$vcov$Upattern$name,
                                                precompute.XY = precompute.XY,
                                                precompute.XX = precompute.XX,
                                                key.XX = key.XX,

@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Jul 13 2022 (13:55) 
 ## Version: 
-## Last-Updated: okt 12 2022 (18:16) 
+## Last-Updated: aug  1 2023 (12:00) 
 ##           By: Brice Ozenne
-##     Update #: 45
+##     Update #: 51
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -25,7 +25,9 @@ if(FALSE){
     library(LMMstar)
 }
 
-context("Check anova method")
+context("Check LRT and Wald tests")
+LMMstar.options(optimizer = "FS", precompute.moments = TRUE,
+                columns.confint = c("estimate","se","df","lower","upper","p.value"))
 
 ## * Simulate data
 set.seed(10)
@@ -35,20 +37,18 @@ dL$X1 <- as.factor(dL$X1)
 dL$X2 <- as.factor(dL$X2)
 
 ## * Likelihood ratio tests
-
-
 test_that("LRT", {
 
     ## remove variance factor
-    e0 <- suppressMessages(anova(lmm(Y ~ X1 + X2, data = dL),
-                                 lmm(Y ~ X1 + X2, repetition = ~visit, structure = "IND", data = dL)))
+    e0 <- anova(lmm(Y ~ X1 + X2, data = dL),
+                lmm(Y ~ X1 + X2, repetition = ~visit, structure = "IND", data = dL))
     expect_equal(list(e0[,c("null")], e0[,c("df")], e0[,c("statistic")], e0[,c("p.value")]),
                  list("k.2==0, k.3==0", 2, 0.1421563, 0.9313891), tol = 1e-4)
 
     dL$id2 <- 1:NROW(dL)
     dL$time2 <- 1
-    e00 <- suppressMessages(anova(lmm(Y ~ X1 + X2, data = dL),
-                                  lmm(Y ~ X1 + X2, repetition = ~time2|id2, structure = IND(visit~1), data = dL, control = list(optimizer = "FS"))))
+    e00 <- anova(lmm(Y ~ X1 + X2, data = dL),
+                 lmm(Y ~ X1 + X2, repetition = ~time2|id2, structure = ID(visit~1), data = dL, control = list(optimizer = "FS")))
     expect_equal(list(e00[,c("null")], e00[,c("df")], e00[,c("statistic")], e00[,c("p.value")]),
                  list("sigma:1==sigma, sigma:2==sigma, sigma:3==sigma", 2, 0.1421563, 0.9313891), tol = 1e-4)
 
@@ -85,7 +85,6 @@ test_that("LRT", {
 })
 
 ## * Wald test (single model)
-
 e.lmm1 <- lmm(Y ~ X1+X2+X3, repetition = ~visit|id, data = dL,
               structure = "UN", df = FALSE)
 
@@ -204,7 +203,7 @@ test_that("Rubin's rule", {
     ## lmm
     df.NNA <- complete(df.NA, action = "long")
     e.lmm <- mlmm(chl~bmi, by = ".imp", data = df.NNA,
-                  effects = "bmi=0")
+                  effects = "bmi=0", trace = FALSE)
     test <- model.tables(e.lmm, method = "pool.rubin")
 
     expect_equal(as.double(GS[GS$term=="bmi",c("estimate","std.error")]),

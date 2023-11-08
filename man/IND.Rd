@@ -20,7 +20,7 @@ using either as a multiplicative factor (right hand side) or stratification (lef
 An object of class \code{IND} that can be passed to the argument \code{structure} of the \code{lmm} function.
 }
 \description{
-Variance-covariance structure where the residuals are independent.
+Variance-covariance structure where the residuals are independent but may have different variance.
 Can be stratified on a categorical variable.
 }
 \details{
@@ -31,8 +31,8 @@ or \code{~time} indicating a time dependent variance.
 IND(NULL, var.cluster = "id", var.time = "time", add.time = TRUE)
 IND(~1, var.cluster = "id", var.time = "time")
 IND(gender~1, var.cluster = "id", var.time = "time")
-
-IND(~time, var.cluster = "id", var.time = "time")
 IND(gender~time, var.cluster = "id", var.time = "time")
-IND(~time+gender, var.cluster = "id", var.time = "time")
+IND(~gender+time, var.cluster = "id", var.time = "time")
+
 }
+\keyword{multivariate}

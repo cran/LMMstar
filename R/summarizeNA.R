@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: dec  7 2022 (17:13) 
 ## Version: 
-## Last-Updated: jan 23 2023 (18:25) 
+## Last-Updated: jul 10 2023 (18:16) 
 ##           By: Brice Ozenne
-##     Update #: 47
+##     Update #: 51
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -28,6 +28,8 @@
 ##' @param keep.data [logical] should the indicator of missing data per variable in the original dataset per pattern be output.
 ##'
 ##' @return a data frame
+##' 
+##' @keywords utilities
 ##'
 ##' @seealso
 ##' \code{\link{autoplot.summarizeNA}} for a graphical display.
@@ -69,17 +71,8 @@ summarizeNA <- function(data, repetition = NULL, sep = "",
     ## *** handle repetition
     if(!is.null(repetition)){
 
-        if(!inherits(repetition,"formula")){
-            stop("Argument \'repetition\' should be a formula. \n",
-                 "Typcally ~time|cluster. \n")
-        }
-
-        res.split <- strsplit(deparse(repetition),"|", fixed = TRUE)[[1]]
-        if(length(res.split)!=2){
-            stop("Incorrect specification of argument \'repetition\'. \n",
-                 "The symbol | should only exacly once, something like: ~ time|cluster. \n")
-        }
-        var.time <- all.vars(stats::as.formula(paste("~",trimws(res.split[1], which = "both"))))
+        detail.formula <- formula2var(repetition, name.argument = "repetition")
+        var.time <- detail.formula$var$time
         if(length(var.time)==0){
             stop("Missing time variable in argument \'repetition\'. \n",
                  "Should be something like: ~time|cluster. \n")
@@ -89,7 +82,7 @@ summarizeNA <- function(data, repetition = NULL, sep = "",
                  "Could not find the time variable in the dataset.\n")
         }
 
-        var.cluster <- all.vars(stats::as.formula(paste("~",trimws(res.split[2], which = "both"))))
+        var.cluster <- detail.formula$var$cluster
         if(length(var.cluster)==0){
             stop("Missing cluster variable in argument \'repetition\'. \n",
                  "Should be something like: ~time|cluster. \n")
@@ -122,7 +115,7 @@ summarizeNA <- function(data, repetition = NULL, sep = "",
 
     warper.pattern <- function(iData, sep){ ## iData <- ls.data[[1]]
         iMtest <- is.na(iData)*1.0
-        iVtest <- interaction(as.data.frame(iMtest), sep = sep, drop = TRUE)
+        iVtest <- nlme::collapse(iMtest, sep = sep, as.factor = TRUE)
         iUpattern <- levels(iVtest)
         iUpattern.nobs <- unname(table(iVtest))
     

@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Jun 18 2021 (10:34) 
 ## Version: 
-## Last-Updated: Nov 14 2022 (10:15) 
+## Last-Updated: aug  1 2023 (16:45) 
 ##           By: Brice Ozenne
-##     Update #: 202
+##     Update #: 211
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -18,10 +18,13 @@
 ## * df.residual
 ##' @title Residuals Degrees of Freedom
 ##' @description Residuals degrees of freedom. Computed as the sum of squared normalized residuals
+##' 
 ##' @param object a \code{lmm} object.
 ##' @param ... Passed to \code{residuals.lmm}.
 ##'
 ##' @return A numeric value
+##' 
+##' @keywords methods
 ##' @export
 df.residual.lmm <- function(object, ...){
 
@@ -32,17 +35,17 @@ df.residual.lmm <- function(object, ...){
 
 ## * .df_analytic
 .df_analytic <- function(residuals, precision, dOmega, d2Omega, vcov, Upattern.ncluster,
-                         index.variance, time.variance, index.cluster, name.varcoef, name.allcoef,
+                         pattern, index.cluster, name.varcoef, name.allcoef,
                          pair.meanvarcoef, pair.varcoef, indiv, REML, type.information, name.effects, robust, diag,
                          precompute){
     
+    ## ** extract information
     if(is.null(precompute)){
         stop("Cannot compute degrees of freedom analytically when \'precompute.moments\' is set to FALSE. \n",
              "Use the function LMMstar.options to update \'precompute.moments\'. \n")
     }
     n.obs <- length(index.cluster)
-    n.cluster <- length(index.variance)
-    n.varcoef <- lapply(name.varcoef, length)
+    n.cluster <- length(pattern)
     n.allcoef <- length(name.allcoef)
     name.allvarcoef <- name.allcoef[name.allcoef %in% unique(unlist(name.varcoef))] ## make sure the ordering is correct
     n.allvarcoef <- length(name.allvarcoef)
@@ -51,6 +54,13 @@ df.residual.lmm <- function(object, ...){
     U.pattern <- names(dOmega)
     n.pattern <- length(U.pattern)
 
+    ## ** prepare
+    ## *** third derivative of Omega
+    if(type.information == "observed" || REML){
+        browser()
+    }
+
+    ## *** sets of parameters
     if(type.information == "expected"){
         triplet.meanvarcoef <- stats::setNames(lapply(U.pattern, function(iPattern){ ## iPattern <- "1.1"
             iGrid <- expand.grid(1:NCOL(pair.varcoef[[iPattern]]),name.allcoef)
@@ -121,6 +131,7 @@ df.residual.lmm <- function(object, ...){
             }
         }
     }
+    
     ## ** derivative of the variance covariance matrix
     n.effects <- length(name.effects)
     vcov.effects <- vcov[name.effects,name.effects,drop=FALSE]

@@ -8,14 +8,14 @@
 \method{autoplot}{lmm}(
   object,
   type = "fit",
-  type.residual = "normalized",
+  type.residual = NULL,
   obs.alpha = 0,
   obs.size = c(2, 0.5),
   at = NULL,
   time.var = NULL,
   color = TRUE,
   ci = TRUE,
-  ci.alpha = 0.25,
+  ci.alpha = NULL,
   ylim = NULL,
   mean.size = c(3, 1),
   size.text = 16,
@@ -38,7 +38,8 @@
 }}
 
 \item{type.residual}{[character] the type of residual to be used. Not relevant for \code{type="fit"}.
-By default, normalized residuals are used except when requesting a partial residual plot.}
+By default, normalized residuals are used except when requesting a partial residual plot
+where this argument specify the variable relative to which the partial residuals are computed (argument \code{var} in \code{\link{residuals.lmm}}).}
 
 \item{obs.alpha}{[numeric, 0-1] When not NA, transparency parameter used to display the original data by cluster.}
 
@@ -88,7 +89,7 @@ dL <- sampleRem(100, n.times = 3, format = "long")
 dL$X1 <- as.factor(dL$X1)
 
 #### fit Linear Mixed Model ####
-eCS.lmm <- lmm(Y ~ visit + X1,
+eCS.lmm <- lmm(Y ~ visit + X1 + X6,
                repetition = ~visit|id, structure = "CS", data = dL, df = FALSE)
 
 plot(eCS.lmm, type = "fit")
@@ -100,8 +101,10 @@ plot(eCS.lmm, type = "scatterplot")
 plot(eCS.lmm, type = "scatterplot2") 
 plot(eCS.lmm, type = "partial", type.residual = "visit") 
 plot(eCS.lmm, type = "partial", type.residual = "X1") 
+plot(eCS.lmm, type = "partial", type.residual = "X6") 
 }
 }
 \seealso{
 \code{\link{plot.lmm}} for other graphical display (residual plots, partial residual plots).
 }
+\keyword{hplot}

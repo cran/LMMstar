@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: sep 15 2022 (14:09) 
 ## Version: 
-## Last-Updated: sep 16 2022 (12:13) 
+## Last-Updated: nov  8 2023 (16:02) 
 ##           By: Brice Ozenne
-##     Update #: 33
+##     Update #: 36
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -23,9 +23,11 @@
 #' @param n.sample [numeric,>=0] number of bootstrap sample used to assess the uncertainty.
 #' If 0, then only the point estimate is computed.
 #' @param trace [logical] shoudl the execution of the boostrap be trace.
-#' @param ... additional arguments passed to code{confint.Wald_lmm}
+#' @param ... additional arguments passed to \code{confint.Wald_lmm}
 #'
 #' @return a data.frame with the estimated proportion (estimate column), standard error and confidence interval (when boostrap is used).
+#' 
+#' @keywords utilities
 #' 
 #' @export
 `proportion` <-
@@ -46,7 +48,7 @@ proportion.mlmm <- function(object, n.sample = 100, trace = TRUE, ...){
         cluster.var <- attr(object$object$cluster.var,"original")
         cluster <- object$object$cluster
         n.cluster <- length(cluster)
-        index.cluster <- tapply(1:NROW(data),data[[cluster.var]],function(x){x})
+        index.cluster <- split(1:NROW(data),data[[cluster.var]])
     }else if(n.sample < 0){
         stop("Argument \'n.sample\' must be a non-negative integer. \n")
     }else{

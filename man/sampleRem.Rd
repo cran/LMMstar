@@ -31,7 +31,8 @@ sampleRem(
 
 \item{gamma}{[numeric matrix with n.times rows and 10 columns] regression coefficient specific to each timepoint (i.e. interaction with time).}
 
-\item{format}{[character] Return the data in the wide format (\code{"wide"}) or long format (\code{"long"})}
+\item{format}{[character] Return the data in the wide format (\code{"wide"}) or long format (\code{"long"}).
+Can also be \code{"wide+"} or \code{"long+"} to export as attributes the function arguments and the latent variable model used to generate the data.}
 
 \item{latent}{[logical] Should the latent variable be output?}
 }
@@ -54,3 +55,4 @@ dW <- sampleRem(100, n.times = 3, format = "wide")
 set.seed(10)
 dL <- sampleRem(100, n.times = 3, format = "long")
 }
+\keyword{datagen}

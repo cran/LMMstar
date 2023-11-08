@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt 20 2021 (11:08) 
 ## Version: 
-## Last-Updated: jan  3 2023 (16:09) 
+## Last-Updated: jul 10 2023 (18:04) 
 ##           By: Brice Ozenne
-##     Update #: 41
+##     Update #: 44
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -26,7 +26,8 @@
 ##' 
 ##' @return A data.frame containing the level for which the means have been computed (if more than one),
 ##' the estimated mean (\code{estimate}), standard error (\code{se}), degree of freedom (\code{df}), and 95\% confidence interval (\code{lower} and \code{upper}).
-##' 
+##'
+##' @keywords methods
 
 
 
@@ -59,8 +60,8 @@ dummy.coef.lmm <- function(object, drop = TRUE,...){
         if(drop){
             var.ff <- attr(out,"pri.vars")
             data.original <- as.data.frame(object$data.original)
-            existing.levels <- unique(as.character(interaction(data.original[,var.ff,drop=FALSE])))
-            out <- out[as.character(interaction(out[,var.ff,drop=FALSE])) %in% existing.levels,,drop=FALSE]
+            existing.levels <- unique(nlme::collapse(data.original[,var.ff,drop=FALSE], as.factor = FALSE))
+            out <- out[nlme::collapse(out[,var.ff,drop=FALSE], as.factor = FALSE) %in% existing.levels,,drop=FALSE]
         }
 
         attr(out,"estName") <- NULL

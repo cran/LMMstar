@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:30) 
 ## Version: 
-## Last-Updated: jan  3 2023 (16:03) 
+## Last-Updated: aug  1 2023 (15:03) 
 ##           By: Brice Ozenne
-##     Update #: 568
+##     Update #: 674
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -68,6 +68,8 @@
 ##' @seealso
 ##' \code{\link{confint.lmm}} or \code{\link{model.tables.lmm}} for a data.frame containing estimates with their uncertainty. \cr
 ##' 
+##' @keywords methods
+##' 
 ##' @examples
 ##' ## simulate data in the long format
 ##' set.seed(10)
@@ -91,28 +93,12 @@ coef.lmm <- function(object, effects = NULL, p = NULL,
     param.type <- stats::setNames(object$design$param$type,param.name)
     param.level <- stats::setNames(object$design$param$level,param.name)
     param.sigma <- stats::setNames(object$design$param$sigma,param.name)
-    param.strata <- stats::setNames(object$design$param$strata,param.name)
     param.k.x <- stats::setNames(object$design$param$k.x,param.name)
     param.k.y <- stats::setNames(object$design$param$k.y,param.name)
 
     object.reparametrize.name <- names(object$reparametrize$p)
     object.reparametrize.value <- object$reparametrize$p
     object.reparametrize.newname <- object$reparametrize$newname
-
-    index.na <- object$index.na
-    type.pattern <- object$design$vcov$type
-    
-    U.strata <- object$strata$levels
-    strata.var <- object$strata$var
-    n.strata <- object$strata$n
-    U.cluster.original <- object$design$cluster$levels.original
-    cluster.var <- object$cluster$var
-    n.cluster <- object$cluster$n
-    X.cor <- object$design$vcov$X$cor
-    Xpattern.cor <- object$design$vcov$X$Xpattern.cor
-    index.cluster <- object$design$index.cluster
-    pattern.cluster <- object$design$vcov$X$pattern.cluster$pattern
-    Upattern <- object$design$vcov$X$Upattern
 
     ## ** normalize user imput
     dots <- list(...)
@@ -134,11 +120,11 @@ coef.lmm <- function(object, effects = NULL, p = NULL,
         if(length(effects)>1){
             stop("Argument \'effects\' should be of length 1 when it contains \"ranef\". \n")
         }
-        return(.ranef(object, p = p))
+        return(ranef(object, p = p))
     }
     effects <- match.arg(effects, c("mean","fixed","variance","correlation","ranef"), several.ok = TRUE)
     effects[effects== "fixed"] <- "mean"
-    
+
     init <- .init_transform(transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, 
                             x.transform.sigma = object$reparametrize$transform.sigma, x.transform.k = object$reparametrize$transform.k, x.transform.rho = object$reparametrize$transform.rho)
     transform.sigma <- init$transform.sigma
@@ -187,10 +173,6 @@ coef.lmm <- function(object, effects = NULL, p = NULL,
     out <- NULL
     if("mean" %in% effects2){
         out <- c(out, p[param.type=="mu"])
-    }
-
-    if("ranef" %in% effects2){
-        return(.ranef(object, p = p))
     }
     if(any(c("variance","correlation") %in% effects2)){
         pVar <- NULL
@@ -256,16 +238,67 @@ coef.lmm <- function(object, effects = NULL, p = NULL,
     return(out)
 }
 
+## * coef.lmmCC (code)
+##' @export
+coef.lmmCC <- function(object, effects = NULL, ...){
+
+    if(object$time$n==4 && (is.null(effects) || effects == "change")){
+
+        dots <- list(...)
+        if(length(dots)>0){
+            stop("Unknown argument(s) \'",paste(names(dots),collapse="\' \'"),"\'. \n")
+        }
+    
+        Mcon <- cbind(c(-1,1,0,0),c(0,0,-1,1))
+        Sigma.change <- t(Mcon) %*% stats::sigma(object) %*% Mcon
+        out <- c(cor = stats::cov2cor(Sigma.change)[1,2],
+                 beta = Sigma.change[1,2]/Sigma.change[1,1])
+        
+    }else{
+
+        class(object) <- setdiff(class(object),"lmmCC")
+        out <- coef(object, effects = effects, ...)
+
+    }
+
+    ## ** export
+    return(out)
+
+}
+
 ## * coef.Wald_lmm
 ##' @export
-coef.Wald_lmm <- function(object, ...){
+coef.Wald_lmm <- function(object, backtransform = object$args$backtransform, ...){
 
-    if(is.null(object$univariate)){
-        return(NULL)
-    }else{
-        return(stats::setNames(object$univariate$estimate, rownames(object$univariate)))
+    dots <- list(...)
+    if(length(dots)>0){
+        stop("Unknown argument(s) \'",paste(names(dots),collapse="\' \'"),"\'. \n")
     }
-    
+    table.univariate <- object$univariate
+
+    if(is.null(table.univariate)){
+        return(NULL)
+    }else if(!backtransform){
+        return(stats::setNames(table.univariate$estimate, rownames(table.univariate)))
+    }else{ ## backtransformation
+        tableBack.univariate <- .backtransform(table.univariate, type.param = table.univariate$type,  
+                                               backtransform = TRUE, backtransform.names = object$args$backtransform.names[[1]],
+                                               transform.mu = "none",
+                                               transform.sigma = object$args$transform.sigma,
+                                               transform.k = object$args$transform.k,
+                                               transform.rho = object$args$transform.rho)
+
+        vec.backtransform <- attr(table.univariate,"backtransform")
+        if(!is.null(vec.backtransform)){
+            ## case where a contrast is performed on transformed coefficients (e.g. sigma:male vs sigma:female)
+            ## the back transformed version exp(log(sigma:male) - log(sigma:female)) differs from the original version sigma:male - sigma:female
+            ## thus without further indication the original version is output
+            tableBack.univariate[names(vec.backtransform),"estimate"] <- unname(vec.backtransform)
+        }
+
+
+        return(stats::setNames(tableBack.univariate$estimate, rownames(tableBack.univariate)))
+    }
 }
 ## * coef.LRT_lmm
 ##' @export
@@ -273,14 +306,49 @@ coef.LRT_lmm <- function(object, ...){
     message("No effect size available for likelihood ratio tests.")
     return(NULL)
 }
-## * coef.mlmm
-##' @export
-coef.mlmm <- function(object, effects = "contrast", ...){
 
-    if(!is.null(effects) && effects=="contrast"){
-        return(stats::setNames(object$univariate$estimate,rownames(object$univariate)))
+## * coef.mlmm
+##' @title Extract Coefficients From a Linear Mixed Model
+##' @description Extract coefficients from a linear mixed model.
+##'
+##' @param object a \code{mlmm} object.
+##' @param effects [character] By default will output the estimate for the hypothesis being tests.
+##' But can also output all model coefficients (\code{"all"}),
+##' or only coefficients relative to the mean (\code{"mean"} or \code{"fixed"}),
+##' or only coefficients relative to the variance structure (\code{"variance"}),
+##' or only coefficients relative to the correlation structure (\code{"correlation"}).
+##' @param ordering [character] should the output be ordered by type of parameter (\code{parameter}) or by model (\code{by}).
+##' @param ... passed to \code{coef.Wald_lmm}.
+##' @export
+coef.mlmm <- function(object, effects = "contrast", ordering = "parameter", ...){
+
+    ordering <- match.arg(ordering, c("by","parameter"))
+
+    if(!is.null(effects) && length(effects)==1 && effects=="contrast"){
+
+        out <- coef.Wald_lmm(object, backtransform = object$args$backtransform, ...)
+        
+        if(ordering=="by"){
+            return(out[order(object$univariate[["by"]])])
+        }else if(is.list(object$univariate$parameter)){
+            return(out[order(object$univariate$type,sapply(object$univariate$parameter, paste, collapse=";"))])
+        }else{
+            return(out[order(object$univariate$type,object$univariate$parameter)])
+
+        }
+        
+        
     }else{
-        return(lapply(object$model, coef, effects = effects, ...))
+        ls.out <- lapply(object$model, coef, effects = effects, ...)
+        if(ordering == "by"){
+            return(ls.out)
+        }else if(ordering == "parameter"){
+            Uname <- unique(unlist(lapply(ls.out,names)))
+            ls.out2 <- stats::setNames(lapply(Uname, function(iName){ ## iName <- "X1"
+                unlist(lapply(ls.out,function(iVec){unname(iVec[iName])}))
+            }), Uname)
+            return(ls.out2)
+        }
     }
     
 }

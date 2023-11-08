@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:38) 
 ## Version: 
-## Last-Updated: jan  3 2023 (17:56) 
+## Last-Updated: aug  1 2023 (15:45) 
 ##           By: Brice Ozenne
-##     Update #: 1247
+##     Update #: 1346
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -56,6 +56,8 @@
 ##' 
 ##' @references Dmitrienko, A. and D'Agostino, R., Sr (2013), Traditional multiplicity adjustment methods in clinical trials. Statist. Med., 32: 5172-5218. https://doi.org/10.1002/sim.5990.
 ##'  
+##' @keywords htest
+##' 
 ##' @examples
 ##' #### simulate data in the long format ####
 ##' set.seed(10)
@@ -133,8 +135,11 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
                         transform.sigma, transform.k, transform.rho, transform.names){
 
     options <- LMMstar.options()
-    type.information <- attr(object$information,"type.information")    
-
+    type.information <- object$args$type.information
+    original.transform.sigma <- transform.sigma
+    original.transform.k <- transform.k
+    original.transform.rho <- transform.rho
+    
     ## ** normalized user input
     terms.mean <- attr(stats::terms(object$formula$mean.design),"term.labels")
     subeffect <- NULL
@@ -147,13 +152,13 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
                 subeffect <- iLabels[effects == paste0("mean_",iLabels)]
                 effects <- "mean"
             }
-        }else if(grepl("^variance_",effects) && !is.null(object$design$vcov$X$var)){
+        }else if(grepl("^variance_",effects) && !is.null(object$design$vcov$var$X)){
             iLabels <- attr(stats::terms(object$formula$var.design),"term.labels")
             if(any(effects == paste0("variance_",iLabels))){
                 subeffect <- iLabels[effects == paste0("variance_",iLabels)]
                 effects <- "variance"
             }
-        }else if(grepl("^cor_",effects) && !is.null(object$design$vcov$X$cor.pairwise)){
+        }else if(grepl("^cor_",effects) && !is.null(object$design$vcov$cor$X)){
             iLabels <- attr(stats::terms(object$formula$cor.design),"term.labels")
             if(any(effects == paste0("correlation_",iLabels))){
                 subeffect <- iLabels[effects == paste0("correlation_",iLabels)]
@@ -172,7 +177,7 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
     name.coef <- names(stats::coef(object, effects = "all"))
     out <- list(multivariate = NULL, univariate = NULL, glht = NULL)
 
-    if(inherits(effects,"mcp")){        
+    if(inherits(effects,"mcp")){
         out.glht <- try(multcomp::glht(object, linfct = effects), ## only used for generating contrast matrix
                         silent = TRUE)
         if(inherits(out.glht,"try-error")){
@@ -256,8 +261,8 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
         }
         if("variance" %in% effects){
             type <- c(type, "variance")
-            ls.assign$variance <- attr(object$design$vcov$X$var,"assign")            
-            ls.nameTerms$variance <- attr(stats::terms(object$formula$var.design),"term.labels")
+            ls.assign$variance <- attr(object$design$vcov$var$X,"assign")            
+            ls.nameTerms$variance <- attr(stats::terms(object$formula$var),"term.labels")
             if(!is.na(object$design$vcov$name$strata)){
                 ls.assign$variance[ls.nameTerms$variance[ls.assign$variance]==object$design$vcov$name$strata] <- 0
             }
@@ -361,7 +366,7 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
     }
 
     ## ** prepare
-    if(robust && object$method.fit=="REML"){
+    if(robust && object$args$method.fit=="REML"){
         name.mean <- names(coef(object, effects = "mean"))
         if(all(effects %in% c("mean","variance","correlation"))){
             if(all(effects %in% c("variance","correlation"))){
@@ -391,7 +396,7 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
     vcov.param <- vcov(object, df = df*2, effects = effects, robust = robust,
                        transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = FALSE)
     dVcov.param <- attr(vcov.param,"dVcov")
-    if(df>0 && object$method.fit=="REML" && type.information == "expected"){
+    if(df>0 && object$args$method.fit=="REML" && type.information == "expected"){
         warning("when using REML with expected information, the degree of freedom of the F-statistic may depend on the parametrisation of the variance parameters. \n")
     }
     if(any(sapply(ls.contrast, function(iC){is.null(iC) || identical(colnames(iC), names(param))}) == FALSE)){
@@ -401,7 +406,7 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
     ## ** F-tests
     out$glht <- stats::setNames(vector(mode = "list", length = length(type)), type)
 
-    for(iType in type){ ## iType <- "correlation"
+    for(iType in type){ ## iType <- "variance"
         ## skip empty type
         if(length(ls.nameTerms.num[[iType]])==0 || (is.null(ls.contrast[[iType]]) && (all(ls.assign[[iType]]==0)))){ next }
 
@@ -543,10 +548,10 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
     ## ** save some of the objects for possible use of rbind.Wald_lmm
     if(ci > 0.5){
         out$object <- list(outcome = object$outcome$var,
-                           method.fit = object$method.fit,
+                           method.fit = object$args$method.fit,
                            type.information = type.information,
                            cluster.var = object$cluster$var,
-                           structure = c(type = object$design$vcov$type, heterogeneous = object$design$vcov$heterogeneous))
+                           structure = c(type = object$design$vcov$type, class = object$design$vcov$class))
         if(!is.na(attr(object$cluster$var,"original"))){
             out$object$cluster <- object$cluster$levels
         }
@@ -562,44 +567,75 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
                                          transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = FALSE) %*% t(globalC)
             robust2 <- TRUE
         }
-        if(object$method.fit == "ML"){
+        if(object$args$method.fit == "ML"){
             out$iid <- iid(object, effects = effects, robust = robust2, 
                            transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = transform.names) %*% t(globalC)
-        }else if(object$method.fit == "REML" && all(type.param[which(colSums(globalC!=0)>0)]=="mu")){
+        }else if(object$args$method.fit == "REML" && all(type.param[which(colSums(globalC!=0)>0)]=="mu")){
             globalC <- globalC[,name.param[type.param=="mu"],drop=FALSE]
             out$iid <- iid(object, effects = "mean", robust = robust2, 
                            transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = transform.names) %*% t(globalC)
         }
     }
 
-    ## ** export
+    ## ** prepare for back-transformation
     out$args <- data.frame(type = NA, robust = robust, df = df, ci = ci,
                            transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho,
                            transform.names = transform.names)
-    if(ci && transform.names && is.null(names(effects))){
-            backtransform.names <- names(coef(object,
-                                              effects = effects, 
-                                              transform.sigma = gsub("log","",transform.sigma),
-                                              transform.k = gsub("log","",transform.k),
-                                              transform.rho = gsub("atanh","",transform.rho),
-                                              transform.names = transform.names))
-        
-            out$args$backtransform.names <- list(stats::setNames(rownames(out$univariate),rownames(out$univariate)))
-            index <- match(newname,out$args$backtransform.names[[1]])
-            out$args$backtransform.names[[1]][stats::na.omit(index)] <- backtransform.names[which(!is.na(index))]
+
+    if(all(name.paramSigma %in% colnames(globalC) == FALSE) || all(globalC[,name.paramSigma,drop=FALSE]==0)){
+        out$args$transform.sigma <- NA
     }
-    if(ci){
-        if(all(name.paramSigma %in% colnames(globalC) == FALSE) || all(globalC[,name.paramSigma,drop=FALSE]==0)){
-            out$args$transform.sigma <- NA
-        }
-        if(all(name.paramK %in% colnames(globalC) == FALSE) || all(globalC[,name.paramK,drop=FALSE]==0)){
-            out$args$transform.k <- NA
-        }
-        if(all(name.paramRho %in% colnames(globalC) == FALSE) || all(globalC[,name.paramRho,drop=FALSE]==0)){
-            out$args$transform.rho <- NA
-        }
+    if(all(name.paramK %in% colnames(globalC) == FALSE) || all(globalC[,name.paramK,drop=FALSE]==0)){
+        out$args$transform.k <- NA
+    }
+    if(all(name.paramRho %in% colnames(globalC) == FALSE) || all(globalC[,name.paramRho,drop=FALSE]==0)){
+        out$args$transform.rho <- NA
     }
 
+    test.original <- is.null(original.transform.sigma) && is.null(original.transform.k) && is.null(original.transform.rho)
+    test.backtransform <- stats::na.omit(c(sigma = out$args$transform.sigma, k = out$args$transform.k, rho = out$args$transform.rho))
+    ## should back transformation be performed when latter calling coef/confint?
+    ## - no if no sigma/k/rho parameters in the linear hypotheses
+    ## - no for the p-value, yes for the estimate, and NA for CI when evaluating a contrast on a tranformed scaled
+    out$args$backtransform <- length(test.backtransform[test.backtransform != "none"])>0
+    
+    if(test.original && out$args$backtransform){ 
+
+        ## find parameters subject to backtransformation
+        param.with.backtransform <- object$design$param[object$design$param$type %in% names(test.backtransform)[test.backtransform!="none"],"name"]
+
+        ## restrict contrast matrix to hypotheses with backtransformation
+        M.allContrast <- do.call(rbind,lapply(out$glht[lengths(out$glht)>0], function(iLs){do.call(rbind,lapply(iLs,"[[","linfct"))}))
+        col.with.backtransform <- intersect(colnames(M.allContrast),param.with.backtransform)
+        row.with.backtransform <- rowSums(M.allContrast[,col.with.backtransform,drop=FALSE]!=0)>0
+        Mback.allContrast <- M.allContrast[row.with.backtransform,,drop=FALSE]
+
+        ## sanity check
+        if(any(rowSums(M.allContrast[row.with.backtransform,setdiff(colnames(M.allContrast),param.with.backtransform),drop=FALSE]!=0)>0)){
+            warning("Hypothesis with mean and variance-covariance parameter(s): possible misleading results due to transformation of the variance-covariance parameter(s). \n")
+        }
+
+        ## evaluate un-transformed value
+        paramMback.allContrast <- rowSums(Mback.allContrast!=0)
+        if(any(paramMback.allContrast>1)){
+            param.untransformed <- coef(object, effects = effects, transform.sigma = "none", transform.k = "none", transform.rho = "none")
+            attr(out$univariate,"backtransform") <- (Mback.allContrast[paramMback.allContrast>1,,drop=FALSE] %*% param.untransformed)[,1]
+        }        
+    }
+
+    ## nice naming
+    if(transform.names && is.null(names(effects))){
+        backtransform.names <- names(coef(object,
+                                          effects = effects, 
+                                          transform.sigma = gsub("log","",transform.sigma),
+                                          transform.k = gsub("log","",transform.k),
+                                          transform.rho = gsub("atanh","",transform.rho),
+                                          transform.names = transform.names))
+        out$args$backtransform.names <- list(stats::setNames(rownames(out$univariate),rownames(out$univariate)))
+        index <- match(newname,out$args$backtransform.names[[1]])
+        out$args$backtransform.names[[1]][stats::na.omit(index)] <- backtransform.names[which(!is.na(index))]
+    }
+    
     if(identical(type,"all")){
         out$args$type <- list("all")
     }else{
@@ -644,10 +680,10 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
     current.mismatchH1 <- mismatchH1
 
     ## *** objective function
-    if(object1$method.fit!=object2$method.fit){
+    if(object1$args$method.fit!=object2$args$method.fit){
         stop("The two models should use the same type of objective function for the likelihood ratio test to be valid. \n")
     }
-    if(objectH1$method.fit=="REML" && (any(type.paramH1[mismatchH1]=="mu") || any(type.paramH0[mismatchH0]=="mu"))){
+    if(objectH1$args$method.fit=="REML" && (any(type.paramH1[mismatchH1]=="mu") || any(type.paramH0[mismatchH0]=="mu"))){
         objectH0$call$method.fit <- "ML"
         objectH1$call$method.fit <- "ML"
         message("Cannot use a likelihood ratio test to compare mean parameters when the objective function is REML. \n",
@@ -734,8 +770,8 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
              
             if(identical(objectH1$design$vcov$name$strata,objectH0$design$vcov$name$strata)){
                 
-                XH0ksigma <- model.matrix(objectH0, effects = "variance")$X$var
-                XH1ksigma <- model.matrix(objectH1, effects = "variance")$X$var
+                XH0ksigma <- model.matrix(objectH0, effects = "variance")$var$X
+                XH1ksigma <- model.matrix(objectH1, effects = "variance")$var$X
                 H.X0ksigma <- XH0ksigma %*% solve(crossprod(XH0ksigma)) %*% t(XH0ksigma)
                 H.X1ksigma <- XH1ksigma %*% solve(crossprod(XH1ksigma)) %*% t(XH1ksigma)
 
@@ -778,12 +814,12 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
             if(identical(objectH1$design$vcov$name$strata,objectH0$design$vcov$name$strata)){
                 ## no strata or same strata: effect of the type of  structure
                 n.strata <- objectH1$strata$n
-                test.nested1 <- objectH1$design$vcov$type=="UN" && objectH0$design$vcov$type=="CS" && is.na(objectH0$design$vcov$name$var) && is.na(objectH0$design$vcov$name$cor)
+                test.nested1 <- objectH1$design$vcov$class=="UN" && objectH0$design$vcov$class=="CS" && is.na(objectH0$design$vcov$name$var) && is.na(objectH0$design$vcov$name$cor)
                 if(test.nested1){
                     mismatchH0 <- setdiff(mismatchH0,mismatchH0.rho)                
                     for(iS in 1:n.strata){
-                        iRhoH0 <- table.paramH0[which((table.paramH0$type=="rho")*(table.paramH0$strata==1)==1),"name"]
-                        iRhoH1 <- table.paramH1[which((table.paramH1$type=="rho")*(table.paramH1$strata==1)==1),"name"]
+                        iRhoH0 <- table.paramH0[which((table.paramH0$type=="rho")*(table.paramH0$index.strata==1)==1),"name"]
+                        iRhoH1 <- table.paramH1[which((table.paramH1$type=="rho")*(table.paramH1$index.strata==1)==1),"name"]
                         rhs[iRhoH1] <- iRhoH0
                     }
                 }else{
@@ -822,6 +858,54 @@ anova.lmm <- function(object, effects = NULL, robust = FALSE, rhs = NULL, df = !
     return(out)
 }
 
+## * anova.mlmm
+##' @export
+anova.mlmm <- function(object, effects = NULL, rhs = NULL, ...){
+
+    ## ** normalize argument
+    if(is.null(effects)){
+        class(object) <- setdiff(class(object), c("mlmm"))
+        return(object)
+    }
+    if(inherits(effects, "mcp")){
+        if(length(effects)!=1){
+            stop("Argument \'effects\' must specify a single hypothesis test when being of class \"mcp\". \n",
+                 "Something like mcp(group = \"Dunnett\") or mcp(group = \"Tukey\") \n")
+        }
+        effects.save <- effects
+        constraint <- effects.save[[1]]
+        effects <- names(effects.save)
+        if(!grepl("=",effects)){
+            effects <- paste0(effects,"=0")
+        }
+    }else{
+        constraint <- NULL
+    }
+
+    ## ** test linear combinations
+    robust <- object$args$robust
+    df <- object$args$df 
+    ci <- object$args$ci
+
+    transform.sigma <- if(is.na(object$args$transform.sigma)){NULL}else{object$args$transform.sigma}
+    transform.k <- if(is.na(object$args$transform.k)){NULL}else{object$args$transform.k}
+    transform.rho <- if(is.na(object$args$transform.rho)){NULL}else{object$args$transform.rho}
+
+    ls.lmm <- object$model
+    name.lmm <- names(ls.lmm)
+    ls.anova <- stats::setNames(lapply(name.lmm, function(iName){ ## iName <- name.lmm[1]
+        anova(ls.lmm[[iName]], effects = effects, rhs = rhs, df = df, ci = ci, robust = robust,
+              transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho)
+    }), name.lmm)
+
+    ## ** regenerate a new mlmm object
+    out <- do.call("rbind.Wald_lmm",
+                   args = c(list(model = ls.anova[[1]], effects = constraint, rhs = rhs, name = names(object$model), sep = object$args$sep), unname(ls.anova[-1]))
+                   )
+    
+    return(out)
+    
+}
 
 
 ## * dfSigma
@@ -857,6 +941,9 @@ dfSigma <- function(contrast, vcov, dVcov, keep.param){
 .simplifyContrast <- function(object, rhs, tol = 1e-10, trace = TRUE){
     object.eigen <- eigen(tcrossprod(object))
     n.zero <- sum(abs(object.eigen$values) < tol)
+    if(length(rhs)==1 && NROW(object)>1){
+        rhs <- rep(rhs, NROW(object))
+    }
 
     if(n.zero==0){return(list(C = object, rhs = rhs, dim = NROW(object), rm = 0))}
     

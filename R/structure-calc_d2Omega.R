@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: sep 16 2021 (13:18) 
 ## Version: 
-## Last-Updated: feb 27 2023 (17:56) 
+## Last-Updated: jul 26 2023 (14:27) 
 ##           By: Brice Ozenne
-##     Update #: 195
+##     Update #: 217
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -91,11 +91,10 @@
                                transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho)
     }
 
-    Upattern <- object$X$Upattern
+    Upattern <- object$Upattern
     n.Upattern <- NROW(Upattern)
-    pattern.cluster <- object$X$pattern.cluster$pattern
-    X.var <- object$X$Xpattern.var
-    X.cor <- object$X$Xpattern.cor
+    X.var <- object$var$Xpattern
+    X.cor <- object$cor$Xpattern
     if(identical(transform.sigma,"log") && identical(transform.k,"log") && identical(transform.rho,"atanh")){
         Jacobian <- NULL
         dJacobian <- NULL
@@ -132,7 +131,7 @@
 
         iScore <- stats::setNames(vector(mode = "list", length = length(iName.param)), iName.param)
 
-        iPair <- object$X$pair.varcoef[[Upattern[iPattern,"name"]]]
+        iPair <- object$pair.vcov[[Upattern[iPattern,"name"]]]
         n.iPair <- NCOL(iPair)
 
         iHess <- lapply(1:n.iPair, function(iPair){matrix(0, nrow = iNtime, ncol = iNtime)})
@@ -251,6 +250,9 @@
 ## * calc_d2Omega.CS
 .calc_d2Omega.CS <- .calc_d2Omega.ID
 
+## * calc_d2Omega.RE
+.calc_d2Omega.RE <- .calc_d2Omega.ID
+
 ## * calc_d2Omega.TOEPLITZ
 .calc_d2Omega.TOEPLITZ <- .calc_d2Omega.ID
 
@@ -261,18 +263,19 @@
 .calc_d2Omega.CUSTOM <- function(object, param, Omega, dOmega, Jacobian = NULL, dJacobian = NULL,
                                  transform.sigma = NULL, transform.k = NULL, transform.rho = NULL){
 
-    Upattern <- object$X$Upattern
+    Upattern <- object$Upattern
     n.Upattern <- NROW(Upattern)
-     
+    X.var <- object$var$Xpattern
+    X.cor <- object$cor$Xpattern
     FCT.sigma <- object$FCT.sigma
     FCT.rho <- object$FCT.rho
     dFCT.sigma <- object$dFCT.sigma
     dFCT.rho <- object$dFCT.rho
     d2FCT.sigma <- object$d2FCT.sigma
     d2FCT.rho <- object$d2FCT.rho
-    name.sigma <- names(object$init.sigma)
-    name.rho <- names(object$init.rho)
-    pair.varcoef <- object$X$pair.varcoef
+    name.sigma <- object$param[object$param$type=="sigma","name"]
+    name.rho <- object$param[object$param$type=="rho","name"]
+    pair.varcoef <- object$pair.vcov
 
     if(!is.null(FCT.sigma) && is.null(d2FCT.sigma) || !is.null(FCT.rho) && is.null(d2FCT.rho) ){
 
@@ -285,18 +288,16 @@
         ## indicator of pattern
         vec.pattern <- unlist(lapply(names(dOmega), function(iName){ ## iName <- names(dOmega)[1]
             iParam <- names(dOmega[[iName]])
-            iTime <- object$X$Upattern$time[[iName]]            
             iNtime <- Upattern[Upattern$name==iName,"n.time"]
-            iOut <- lapply(iParam, function(iP){matrix(iName, nrow = iNtime, ncol = iNtime, dimnames = list(iTime,iTime))})
+            iOut <- lapply(iParam, function(iP){matrix(iName, nrow = iNtime, ncol = iNtime)})
             return(iOut)
         }))
 
         ## indicator of param
         vec.param <- unlist(lapply(names(dOmega), function(iName){ ## iName <- names(dOmega)[1]
             iParam <- names(dOmega[[iName]])
-            iTime <- object$X$Upattern$time[[iName]]            
             iNtime <- Upattern[Upattern$name==iName,"n.time"]
-            iOut <- lapply(iParam, function(iP){matrix(iP, nrow = iNtime, ncol = iNtime, dimnames = list(iTime,iTime))})
+            iOut <- lapply(iParam, function(iP){matrix(iP, nrow = iNtime, ncol = iNtime)})
             return(iOut)
         }))
 
@@ -309,7 +310,7 @@
             })
             names(iOut) <- c(name.sigma,name.rho)
             return(iOut)
-        })[unique(vec.patternXparam)]
+        }, simplify = FALSE)[unique(vec.patternXparam)]
 
         ## normalize to expected output
         out <- stats::setNames(vector(mode = "list", length = n.Upattern), Upattern$name)
@@ -325,27 +326,23 @@
 
         }
     }else{
-        pattern.cluster <- object$X$pattern.cluster
-        X.var <- object$X$var
-        X.cor <- object$X$cor
 
         out <- stats::setNames(vector(mode = "list", length = n.Upattern), Upattern$name)
         for(iPattern in 1:n.Upattern){ ## iPattern <- 1
 
-            iPattern.var <- object$X$Upattern$var[iPattern]
-            iNtime <- object$X$Upattern$n.time[iPattern]
-            iX.var <- object$X$Xpattern.var[[iPattern.var]]
-            iTime <- object$X$Upattern$time[[iPattern]]            
+            iPattern.var <- Upattern$var[iPattern]
+            iNtime <- Upattern$n.time[iPattern]
+            iX.var <- X.var[[iPattern.var]]
             iOmega.sd <- attr(Omega[[iPattern]], "sd")
-            idOmega.sd <- dFCT.sigma(p = param[name.sigma], time = iTime, X = iX.var)
-            id2Omega.sd <- d2FCT.sigma(p = param[name.sigma], time = iTime, X = iX.var)
+            idOmega.sd <- dFCT.sigma(p = param[name.sigma], n.time = iNtime, X = iX.var)
+            id2Omega.sd <- d2FCT.sigma(p = param[name.sigma], n.time = iNtime, X = iX.var)
 
-            if(iNtime > 1 && !is.null(X.cor)){
-                iPattern.cor <- object$X$Upattern$cor[iPattern]
-                iX.cor <- object$X$Xpattern.cor[[iPattern.cor]]
+            if(iNtime > 1 && !is.na(Upattern$cor[iPattern])){
+                iPattern.cor <- Upattern$cor[iPattern]
+                iX.cor <- X.cor[[iPattern.cor]]
                 iOmega.cor <- attr(Omega[[iPattern]], "cor")
-                idOmega.cor <- dFCT.rho(p = param[name.rho], time = iTime, X = iX.cor)
-                id2Omega.cor <- d2FCT.rho(p = param[name.rho], time = iTime, X = iX.cor)
+                idOmega.cor <- dFCT.rho(p = param[name.rho], n.time = iNtime, X = iX.cor)
+                id2Omega.cor <- d2FCT.rho(p = param[name.rho], n.time = iNtime, X = iX.cor)
             }
 
             out[[iPattern]] <- apply(pair.varcoef[[Upattern$name[iPattern]]], MARGIN = 2, simplify = FALSE, function(iCol){ ## iCol <- pair.varcoef[[Upattern$name[iPattern]]][,1]

@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:28) 
 ## Version: 
-## Last-Updated: sep  1 2022 (09:54) 
+## Last-Updated: Jul 29 2023 (21:31) 
 ##           By: Brice Ozenne
-##     Update #: 515
+##     Update #: 527
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -39,7 +39,8 @@
 ##' @details For details about the arguments \bold{transform.sigma}, \bold{transform.k}, \bold{transform.rho}, see the documentation of the \link[LMMstar]{coef.lmm} function.
 ##'
 ##' @return A matrix with an attribute \code{"df"} when argument df is set to \code{TRUE}.
-##' 
+##'
+##' @keywords methods 
 
 ## * vcov.lmm (code)
 ##' @export
@@ -67,11 +68,11 @@ vcov.lmm <- function(object, effects = "mean", robust = FALSE, df = FALSE, strat
     }
 
     if(is.null(type.information)){
-        type.information <- attr(object$information,"type.information")
+        type.information <- object$args$type.information
     }else{
         type.information <- match.arg(type.information, c("expected","observed"))
     }
-    if(df && robust && object$method.fit == "REML"){
+    if(df && robust && object$args$method.fit == "REML"){
         stop("Cannot compute degrees of freedom under REML for robust standard errors. \n",
              "Consider setting the argument df to FALSE",
              " \n or using ML estimation by setting the argument method.fit=\"ML\" when calling lmm.")
@@ -86,7 +87,7 @@ vcov.lmm <- function(object, effects = "mean", robust = FALSE, df = FALSE, strat
 
     ## ** extract or recompute variance covariance matrix
 
-    if(is.null(data) && is.null(p) && test.notransform && (df == FALSE || !is.null(object$df)) && (robust == FALSE) && attr(object$information,"type.information")==type.information){
+    if(is.null(data) && is.null(p) && test.notransform && (df == FALSE || !is.null(object$df)) && (robust == FALSE) && object$args$type.information==type.information){
         keep.name <- stats::setNames(names(coef(object, effects = effects, transform.sigma = "none", transform.k = "none", transform.rho = "none", transform.names = TRUE)),
                                      names(coef(object, effects = effects, transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = transform.names)))    
 
@@ -110,7 +111,7 @@ vcov.lmm <- function(object, effects = "mean", robust = FALSE, df = FALSE, strat
             test.precompute <- !is.null(object$design$precompute.XX)
          
             if(!is.null(data)){
-                design <- stats::model.matrix(object, data = data, effects = "all", simplifies = FALSE)
+                design <- stats::model.matrix(object, data = data, effects = "all", simplify = FALSE)
             }else{
                 design <- object$design
             }
@@ -126,8 +127,7 @@ vcov.lmm <- function(object, effects = "mean", robust = FALSE, df = FALSE, strat
             }else{
                 p <- object$param
             }
-
-            outMoments <- .moments.lmm(value = p, design = design, time = object$time, method.fit = object$method.fit, type.information = type.information,
+            outMoments <- .moments.lmm(value = p, design = design, time = object$time, method.fit = object$args$method.fit, type.information = type.information,
                                        transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho,
                                        logLik = FALSE, score = FALSE, information = FALSE, vcov = TRUE, df = df, indiv = FALSE, effects = effects, robust = robust,
                                        trace = FALSE, precompute.moments = test.precompute, method.numDeriv = options$method.numDeriv, transform.names = transform.names)
@@ -158,6 +158,11 @@ vcov.lmm <- function(object, effects = "mean", robust = FALSE, df = FALSE, strat
 ## * vcov.mlmm
 ##' @export
 vcov.Wald_lmm <- function(object, ...){
+
+    dots <- list(...)
+    if(length(dots)>0){
+        stop("Unknown argument(s) \'",paste(names(dots),collapse="\' \'"),"\'. \n")
+    }
 
     return(object$vcov)
     

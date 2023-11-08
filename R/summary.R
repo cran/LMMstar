@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt  7 2020 (11:13) 
 ## Version: 
-## Last-Updated: Feb 26 2023 (11:54) 
+## Last-Updated: nov  8 2023 (15:06) 
 ##           By: Brice Ozenne
-##     Update #: 1190
+##     Update #: 1285
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -34,6 +34,7 @@
 ##' @param type.cor [character] should the correlation matrix be display (\code{"matrix"}) or the parameter values (\code{"param"}).
 ##' @param hide.sd [logical] should information about the standard deviation not be printed.
 ##' @param hide.var [logical] should information about the variance not be printed.
+##' @param hide.re [logical] should information about the random effect not be printed.
 ##' @param hide.mean [logical] should information about the mean structure not be printed.
 ##' @param ... not used. For compatibility with the generic function.
 ##'
@@ -43,12 +44,14 @@
 ##' \item \code{sd}: the variance structure expressed in term of standard deviations.
 ##' \item \code{mean}: the mean structure.
 ##' }
+##'
+##' @keywords methods
 
 ## * summary.lmm (code)
 ##' @export
 summary.lmm <- function(object, level = 0.95, robust = FALSE,
                         print = TRUE, columns = NULL, digits = 3, digits.df = 1, digits.p.value = 3, 
-                        hide.data = FALSE, hide.fit = FALSE, hide.cor = is.null(object$formula$cor), type.cor = NULL, hide.var = TRUE, hide.sd = FALSE, hide.mean = FALSE, ...){
+                        hide.data = FALSE, hide.fit = FALSE, hide.cor = NULL, type.cor = NULL, hide.var = NULL, hide.sd = NULL, hide.re = NULL, hide.mean = FALSE, ...){
 
     ## ** extract from object
     param.value <- object$param
@@ -61,18 +64,18 @@ summary.lmm <- function(object, level = 0.95, robust = FALSE,
     data <- object$data
     call <- object$call
     structure <- object$design$vcov
+    structure.ranef <- structure$ranef
 
     logLik <- stats::logLik(object)
     nobs <- stats::nobs(object)
-    method.fit <- object$method
-    type.information <- attr(object$information,"type.information")
-    nobsByCluster <- object$design$cluster$nobs
+    method.fit <- object$args$method.fit
+    type.information <- object$args$type.information
+    nobsByCluster <- lengths(object$design$index.cluster)
     formula <- object$formula
     df <- !is.null(object$df)
     options <- LMMstar.options()
 
-    n.cluster.original <- object$cluster$n
-    n.cluster.design <- object$design$cluster$n
+    n.strata <- object$strata$n
     
     ## ** normalize user input
     dots <- list(...)
@@ -103,6 +106,18 @@ summary.lmm <- function(object, level = 0.95, robust = FALSE,
         type.cor <- match.arg(type.cor, c("matrix","param"))
     }
 
+    if(inherits(structure,"RE")){
+        if(is.null(hide.cor)){hide.cor <- TRUE}
+        if(is.null(hide.sd)){hide.sd <- TRUE}
+        if(is.null(hide.var)){hide.var <- TRUE}
+        if(is.null(hide.re)){hide.re <- FALSE}
+    }else{
+        if(is.null(hide.cor)){hide.cor <- is.null(object$formula$cor)}
+        if(is.null(hide.sd)){hide.sd <- FALSE}
+        if(is.null(hide.var)){hide.var <- TRUE}
+        if(is.null(hide.re)){hide.re <- TRUE}
+    }
+
     ## ** welcome message
     if(print){
         if(length(param.rho) == 0){
@@ -121,16 +136,16 @@ summary.lmm <- function(object, level = 0.95, robust = FALSE,
         }else{
             cat("Dataset:\n\n")
         }
-        if(nobs["missing"]>0){
-            if(n.cluster.original-n.cluster.design>0){
-                cat("  - ", nobs["cluster"], " clusters were analyzed, ",n.cluster.original-n.cluster.design," were excluded because of missing values \n" , sep = "")
+        if(nobs["missing.obs"]>0){
+            if(nobs["missing.cluster"]>0){
+                cat("  - ", nobs["cluster"], " clusters were analyzed, ",nobs["missing.cluster"]," were excluded because of missing values \n" , sep = "")
             }else{
                 cat("  - ", nobs["cluster"], " clusters \n" , sep = "")
             }
-            cat("  - ", sum(nobsByCluster), " observations were analyzed, ",nobs["missing"]," were excluded because of missing values \n",  sep = "")
+            cat("  - ", nobs["obs"], " observations were analyzed, ",nobs["missing.obs"]," were excluded because of missing values \n",  sep = "")
         }else{
             cat("  - ", nobs["cluster"], " clusters \n" , sep = "")
-            cat("  - ", sum(nobsByCluster), " observations \n",  sep = "")
+            cat("  - ", nobs["obs"], " observations \n",  sep = "")
         }
         if(length(unique(nobsByCluster))==1){
             cat("  - ", nobsByCluster[1], " observations per cluster \n", sep = "")
@@ -161,22 +176,21 @@ summary.lmm <- function(object, level = 0.95, robust = FALSE,
         }
         cat("  - log-likelihood :", as.double(logLik), "\n",sep="")
         cat("  - parameters: mean = ",length(param.mu),", variance = ",length(c(param.sigma,param.k)),", correlation = ",length(param.rho),"\n", sep = "")
-        if(object$opt$name!="gls"){
             abs.score <- abs(object$score)
             abs.diff <- abs(object$opt$previous.estimate-object$param)
             name.score <- names(which.max(abs.score))[1]
             name.diff <- names(which.max(abs.diff))[1]
             
-            cat("  - convergence: ",object$opt$cv>0," (",object$opt$n.iter," iterations) \n",
-                "    largest |score| = ",max(abs.score)," for ",name.score,"\n",
-                if(!is.null(name.diff)){paste0("            |change|= ",max(abs.diff)," for ",name.diff,"\n")},
-                sep = "")
-        }
+        cat("  - convergence: ",object$opt$cv>0," (",object$opt$n.iter," iterations) \n",
+            "    largest |score| = ",max(abs.score)," for ",name.score,"\n",
+            if(!is.null(name.diff)){paste0("            |change|= ",max(abs.diff)," for ",name.diff,"\n")},
+            sep = "")
+
         cat(" \n")
     }
 
     ## ** vcov structure
-    if(print && (!hide.cor || !hide.var || !hide.sd)){
+    if(print && (!hide.cor || !hide.var || !hide.sd || !hide.re)){
         cat("Residual variance-covariance: ")
         if(is.na(structure$name$strata)){
             txt.strata <- ""
@@ -188,42 +202,47 @@ summary.lmm <- function(object, level = 0.95, robust = FALSE,
             hide.sd <- TRUE
             hide.var <- TRUE
         }
-
-        if(length(param.rho)==0){
-            if(length(c(param.sigma,param.k))==0){
-                cat(txt.strata,"identity (variance=1) \n\n",sep="")
-            }else if(length(c(param.sigma,param.k))==1){
-                cat(txt.strata,"identity \n\n",sep="")
+        if(inherits(structure,"RE")){
+            if(structure.ranef$crossed==FALSE && structure.ranef$nested==FALSE){
+                cat("random intercept \n", sep = "")
+            }else if(structure.ranef$crossed==FALSE && structure.ranef$nested==TRUE){
+                cat("nested random intercepts \n", sep = "")
+            }else if(structure.ranef$crossed==TRUE && structure.ranef$nested==FALSE){
+                cat("cross random intercepts \n", sep = "")
             }else{
-                cat(txt.strata,"diagonal \n\n",sep="")
-            }
-        }else if(structure$type == "UN"){
+                cat("random effects \n", sep = "")
+            }        
+        }else if(inherits(structure,"ID")){
+            cat(txt.strata,"identity \n\n",sep="")         
+        }else if(inherits(structure,"IND")){
+            cat(txt.strata,"diagonal \n\n",sep="")
+        }else if(inherits(structure,"UN")){
             cat(txt.strata,"unstructured \n\n",sep="")
-        }else if(structure$type == "CS"){
-            if(structure$block>=1){
-                if(structure$heterogeneous){
-                    cat(txt.strata,"block unstructured \n\n",sep="")
-                }else{
-                    cat(txt.strata,"block compound symmetry \n\n",sep="")
-                }
-            }else{
+        }else if(inherits(structure,"CS")){
+            if(all(is.na(structure$name$cor))){
                 cat(txt.strata,"compound symmetry \n\n",sep="")
+            }else if(structure$type == "heterogeneous"){
+                cat(txt.strata,"block unstructured \n\n",sep="")
+            }else if(structure$type == "homogeneous"){
+                cat(txt.strata,"block compound symmetry \n\n",sep="")
+            }else if(structure$type == "heterogeneous0"){
+                cat(txt.strata,"crossed unstructured \n\n",sep="")
+            }else if(structure$type == "homogeneous0"){
+                cat(txt.strata,"crossed compound symmetry \n\n",sep="")
             }
-        }else if(structure$type == "TOEPLITZ"){
-            if(structure$block){
-                if(structure$heterogeneous == "UN"){
-                    n.block <- length(unique(structure$X$cor[,3]))-1
-                    cat(txt.strata,paste0("unstructured with ",n.block," constant subdiagonal",if(n.block>1){"s"}," \n\n"),sep="")
-                }else if(structure$heterogeneous == "LAG"){
-                    cat(txt.strata,"block Toeplitz \n\n",sep="")
-                }else if(structure$heterogeneous == "CS"){
-                    n.block <- length(unique(structure$X$cor[,3]))-1
-                    cat(txt.strata,paste0("block compound symmetry with ",n.block," specific subdiagonal",if(n.block>1){"s"}," \n\n"),sep="")
-                }
-            }else{
+        }else if(inherits(structure, "TOEPLITZ")){
+            if(all(is.na(structure$name$cor))){
                 cat(txt.strata,"Toeplitz \n\n",sep="")
+            }else if(structure$type == "heterogeneous"){
+                n.block <- length(unique(structure$X$cor[,3]))-1
+                cat(txt.strata,paste0("unstructured with ",n.block," constant subdiagonal",if(n.block>1){"s"}," \n\n"),sep="")
+            }else if(structure$type == "lag"){
+                cat(txt.strata,"block Toeplitz \n\n",sep="")
+            }else if(structure$type == "homogeneous"){
+                n.block <- length(unique(structure$X$cor[,3]))-1
+                cat(txt.strata,paste0("block compound symmetry with ",n.block," specific subdiagonal",if(n.block>1){"s"}," \n\n"),sep="")
             }
-        }else if(structure$type == "CUSTOM"){
+        }else if(inherits(structure, "CUSTOM")){
             cat("user-defined structure \n\n")
         }
     }
@@ -237,7 +256,7 @@ summary.lmm <- function(object, level = 0.95, robust = FALSE,
         if(identical(type.cor,"param") || (is.null(type.cor) && object$time$n>10)){
             table.cor <- rbind(coef(object,effect="correlation"))
         }else{
-            table.cor <- lapply(stats::sigma(object, simplifies = FALSE), stats::cov2cor)
+            table.cor <- lapply(stats::sigma(object, simplify = FALSE), stats::cov2cor)
         }
         if(print){
             if(identical(type.cor,"param") || (is.null(type.cor) && object$time$n>10)){
@@ -273,13 +292,12 @@ summary.lmm <- function(object, level = 0.95, robust = FALSE,
         table.cor <- NULL
     }
     
-
-    ## *** variance    
+    ## *** variance
     if(!hide.var || !hide.sd){
         name.sigma <- names(coef(object, transform.k = "sd", effects = "variance"))
         index.ref <- which(names(coef(object, effects = "variance", transform.names = FALSE)) %in% names(param.sigma))
         if(print){
-            cat("  - variance structure:",deparse(formula$var.design),"\n")
+            cat("  - variance structure:",deparse(formula$var),"\n")
         }
     }
 
@@ -318,7 +336,32 @@ summary.lmm <- function(object, level = 0.95, robust = FALSE,
         rownames(printtable) <- paste0("    ",name.sigma)
         print(printtable, digits = digits)
     }
-    if(print && (!hide.cor || !hide.var || !hide.sd)){
+    if(print && !hide.re){
+        if(n.strata==1){
+            cat("  - variance decomposition: ",deparse(structure.ranef$formula),"\n",sep="")
+        }else{
+            cat("  - variance decomposition: ",paste0(object$strata$var," ",deparse(structure.ranef$formula)),"\n",sep="")
+        }
+        table.re <- nlme::ranef(object, effects = "variance", format = "wide", simplify = FALSE)
+        if(n.strata==1){
+            printtable <- cbind(variance = table.re$variance, "%" = 100*table.re$relative, sd = sqrt(table.re$variance))
+            rownames(printtable) <- paste0("    ",table.re$variable)
+        }else{
+            printtable <- unclass(by(table.re,table.re$strata, function(iDF){
+                iPrintTable <- data.frame(variance = iDF$variance, "%" = 100*iDF$relative, sd = sqrt(iDF$variance),
+                                          check.names = FALSE)
+                rownames(iPrintTable) <- paste0("    ",iDF$variable)
+                return(as.matrix(iPrintTable))
+            }, simplify = FALSE))
+            attr(printtable,"call") <- NULL
+        }
+        print(printtable, digits = digits, na.print = "" , quote = FALSE)
+    }else{
+        table.re <- NULL
+    }
+
+    
+    if(print && (!hide.cor || !hide.var || !hide.sd || !hide.re)){
         cat("\n")
     }
 
@@ -331,7 +374,7 @@ summary.lmm <- function(object, level = 0.95, robust = FALSE,
                               columns = c("estimate","se","df","lower","upper","statistic","null","p.value"))
 
         if(print){
-            cat("Fixed effects:",deparse(call$formula),"\n\n")
+            cat("Fixed effects:",deparse(formula$mean),"\n\n")
             .printStatTable(table = table.mean, df = df, level = level, robust = robust,
                             method.p.adjust = NULL,
                             backtransform = NULL, transform.sigma = NULL, transform.k = NULL, transform.rho = NULL,
@@ -352,6 +395,7 @@ summary.lmm <- function(object, level = 0.95, robust = FALSE,
     return(invisible(list(correlation = table.cor,
                           variance = table.var,
                           sd = table.sd,
+                          re = table.re,
                           mean = table.mean)))
 }
 
@@ -375,13 +419,16 @@ summary.lmm <- function(object, level = 0.95, robust = FALSE,
 ##'
 ##'
 ##' @details By default adjustment for multiple comparisons via a single step max-test adjustment,
-##' either using the multcomp package (equal degrees of freedom) or the copula package (unequal degrees of freedom).
+##'  either using the multcomp package (equal degrees of freedom, \code{method="single-step"}) or the copula package (unequal degrees of freedom, \code{method="single-step2"}).
+##' See the argument \code{method} of \code{\link{confint.Wald_lmm}} for other adjustments for multiple comparisons. \cr
 ##' When multiple multivariate Wald tests are performed, adjustment for multiple comparisons for the univariate Wald tests is performed within each multivariate Wald test.
-##' The number of tests ajusted for equal the first degree of freedom of the multivariate Wald statistic.
+##' The number of tests ajusted for equal the first degree of freedom of the multivariate Wald statistic. \cr
 ##'
 ##' Adding the value \code{"type"} in argument \code{"columns"} ensures that the type of parameter that is being test (mean, variance, correlation) is output.
 ##'
 ##' @return \code{NULL}
+##' 
+##' @keywords methods
  
 ## * summary.Wald_lmm (code)
 ##' @export
@@ -498,7 +545,7 @@ summary.Wald_lmm <- function(object, print = TRUE, seed = NULL, columns = NULL, 
     }
 
     ## *** local tests
-    if(print.univariate>0 && ci){
+    if(print.univariate>0 && ci){        
         table.univariate <- confint(object, columns = union(setdiff(columns.univariate,""),"type"), ...)
         if(is.null(columns) && all(is.na(table.univariate$lower)) && all(is.na(table.univariate$upper))){
             columns.univariate <- setdiff(columns.univariate, c("lower","upper"))
@@ -653,6 +700,7 @@ summary.LRT_lmm <- function(object, digits = 3, digits.df = 1, digits.p.value = 
 ##' @param hide.fit [logical] should information about the model fit not be printed.
 ##' @param ... other arguments are passed to \code{\link{summary.Wald_lmm}}.
 ##'
+##' @keywords methods
 
 ## * summary.mlmm (code)
 ##' @export
@@ -670,7 +718,7 @@ summary.mlmm <- function(object, digits = 3, method = NULL, print = NULL, hide.d
     ## extract models
     ls.model <- object$model
     method.fit <- object$object$method.fit
-    optimizer <- ls.model[[1]]$opt$name
+    optimizer <- ls.model[[1]]$args$control$optimizer
     logLik <- sapply(ls.model, logLik)
     cv <- sapply(ls.model, function(iM){iM$opt$cv})
     n.iter <- sapply(ls.model, function(iM){iM$opt$n.iter})
@@ -681,17 +729,12 @@ summary.mlmm <- function(object, digits = 3, method = NULL, print = NULL, hide.d
     nparam.k  <- sapply(ls.model, function(iM){sum(iM$design$param$type=="k")})
     nparam.rho  <- sapply(ls.model, function(iM){sum(iM$design$param$type=="rho")})
 
-    M.nobs <- do.call(rbind,lapply(ls.model, stats::nobs))
-    vec.nobs <- apply(M.nobs,2,paste,collapse = ", ")
-    nobsByCluster <- lapply(ls.model,function(iM){iM$design$cluster$nobs})
-    n.cluster.original <- sapply(ls.model,function(iM){iM$design$cluster$n})
-    n.cluster.design <- sapply(ls.model,function(iM){iM$design$cluster$n})
-
+    M.nobs <- stats::nobs(object)
     call <- attr(object,"call")
-    
+
     ## ** welcome message
     if(any(print>0)){
-        cat("	Linear Mixed Models stratified according to \"",call$by,"\" \n\n",sep="")
+        cat("	Linear Mixed Models stratified according to \"",eval(call$by),"\" \n\n",sep="")
     }
 
     ## ** data message    
@@ -700,16 +743,18 @@ summary.mlmm <- function(object, digits = 3, method = NULL, print = NULL, hide.d
             cat("Dataset:", deparse(call$data), "\n")
         }
         cat("Strata : \"",paste(names(ls.model),collapse = "\", \""),"\"\n\n",sep="")
-        if(any(M.nobs[,"missing"]>0)){
-            if(any(n.cluster.original-n.cluster.design>0)){
-                cat("  - ", vec.nobs["cluster"], " clusters were analyzed, ",paste(n.cluster.original-n.cluster.design,collapse=", ")," were excluded because of missing values \n" , sep = "")
+        if(any(M.nobs[,"missing.obs"]>0)){
+            if(any(M.nobs[,"missing.cluster"])){
+                cat("  - ", paste(M.nobs[,"cluster"], collapse=", "), " clusters were analyzed \n",
+                    "    ", paste(M.nobs[,"missing.cluster"], collapse=", "), " were excluded because of missing values \n" , sep = "")
             }else{
-                cat("  - ", vec.nobs["cluster"], " clusters \n" , sep = "")
+                cat("  - ", paste(M.nobs[,"cluster"], collapse=", "), " clusters \n" , sep = "")
             }
-            cat("  - ", paste(sapply(nobsByCluster,sum), collapse = ", "), " observations were analyzed, ",vec.nobs["missing"]," were excluded because of missing values \n",  sep = "")
+            cat("  - ", paste(M.nobs[,"obs"], collapse = ", "), " observations were analyzed \n",
+                "    ", paste(M.nobs[,"missing.obs"],collapse=", "), " were excluded because of missing values \n",  sep = "")
         }else{
-            cat("  - ", vec.nobs["cluster"], " clusters \n" , sep = "")
-            cat("  - ", paste(sapply(nobsByCluster,sum), collapse = ", "), " observations \n",  sep = "")
+            cat("  - ", paste(M.nobs[,"cluster"], collapse=", "), " clusters \n" , sep = "")
+            cat("  - ", paste(M.nobs[,"obs"], collapse = ", "), " observations \n", sep = "")
         }
         cat("\n")
     }
@@ -724,15 +769,18 @@ summary.mlmm <- function(object, digits = 3, method = NULL, print = NULL, hide.d
         }
         cat("  - log-likelihood :", paste(round(as.double(logLik), digits = digits),collapse = ", "), "\n",sep="")
         cat("  - parameters: mean = ",paste(nparam.mu,collapse = ", "),", variance = ",paste(nparam.sigma+nparam.k,collapse = ", "),", correlation = ",paste(nparam.rho,collapse = ", "),"\n", sep = "")
-        if(optimizer!="gls"){
-            cat("  - convergence: ",paste(cv>0,collapse = ", ")," (",paste(n.iter,collapse = ", ")," iterations) \n", sep = "")
-        }
+        cat("  - convergence: ",paste(cv>0,collapse = ", ")," (",paste(n.iter,collapse = ", ")," iterations) \n", sep = "")
         cat(" \n")
     }
 
     ## ** extract test
     if(any(print>0)){
-        cat("Statistical inference \n\n")
+        name.param <- unique(object$univariate$parameter)
+        if(length(name.param)==1){
+            cat("Statistical inference for ",name.param," \n\n",sep="")
+        }else{
+            cat("Statistical inference \n\n")
+        }
         out <- summary.Wald_lmm(object, method = method, print = print, ...)
     }
 
@@ -749,6 +797,8 @@ summary.mlmm <- function(object, digits = 3, method = NULL, print = NULL, hide.d
 ##' @param detail [integer,>0] passed to \code{print.confint_lmm}. If above 0.5 also display when a back-transformation has been used.
 ##' @param ... other arguments are passed to \code{print.confint_lmm}.
 ##'
+##' @keywords methods
+##' 
 ##' @export
 summary.partialCor <- function(object, digits = 3, detail = TRUE, ...){
 
