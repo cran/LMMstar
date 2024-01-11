@@ -1,4 +1,4 @@
-258570d4b73ec2a154e059d5b0d2fc9a *DESCRIPTION
+9cc507f5c82d479eb89e518f5217e887 *DESCRIPTION
 5fedbb2bf4ad6633e813786e5733219c *NAMESPACE
 84672acf8a7364abf5ee29ff62435463 *NEWS
 f88555453c869fdd2546402d47344994 *R/0-onload.R
@@ -43,7 +43,7 @@ e2335e73c6f338de609baa14c586d465 *R/nobs.R
 2445e7e308ad43fa5e06429d5d2c36ee *R/plot.R
 ab0452786b37c02ee2b381236d450860 *R/precompute.R
 fd4d73daa6336a064ea2131344d023ec *R/predict.R
-4c59db7e09412101c5d7ab992bcda882 *R/print.R
+fa06209bdc5e198c1e8d3afbaa9a19b2 *R/print.R
 ff043a7a08f7e3ba27febacd22244aab *R/profile.R
 b5254d62dc60aa06d828402f6cb5c09b *R/proportion.R
 e9c43158906600bb8e49c7a9b0627edb *R/ranef.R
@@ -67,14 +67,14 @@ f9ea4afb0d878a1088d0abcfe5aad504 *R/structure-skeletonK.R
 aaee8fb2734870051ee682acc895bfc3 *R/structure-skeletonSigma.R
 0690e65c40eded7710a212da2b0628ef *R/structure-update.R
 c86ca91c4bfa41a52228518e72557e88 *R/structure.R
-9d339162cf3c81e9592377aae7fce71b *R/summarize.R
+44bb59ea186efd33579ae25fa0c67998 *R/summarize.R
 3e2a64c57f5d2baf058219f2f8de460e *R/summarizeNA.R
 3cbd8f6d97fd6f0e349ccf59552f6c83 *R/summary.R
 056508b955dcf1b9a9ebfdd63458b081 *R/terms.R
 22e4cfff9afa82fbe32747354355f769 *R/utils.R
 46ab978ae7046178e52686da64bb4773 *R/vcov.R
 c2b7e2af779649a204fa12dfa6ae1365 *R/weights.R
-a4007af8f099e8434957f8af736e5251 *build/vignette.rds
+2451973cc3ae76aa892a0ed23a13c003 *build/vignette.rds
 2d1411033912e8ce3fbb1cb331304d04 *data/abetaL.rda
 7c5ab544ade6692c7549be5450c763bc *data/abetaW.rda
 c5ba60a49632b2b662e3c4073bd4885a *data/blandAltmanL.rda
@@ -153,7 +153,7 @@ b58f8d85bdf30a9bc6c3d5bafa345ecb *inst/doc-software/overview.log
 cbfb785b95842cbcae08b8d2b5ebaa47 *inst/doc-software/overview.pdf
 0695bcf87fbe567c7ff9408197e455c3 *inst/doc-software/overview.soc
 562fe5cc7a1942bc4319d52a373df782 *inst/doc-software/overview.tex
-c549b1f26c6e2d3474071165e9ba3022 *inst/doc/overview.pdf
+42718734848fcdf5e72e6beaf956fc0f *inst/doc/overview.pdf
 e8e7397c5eb06b4848432d993bba5926 *inst/doc/overview.pdf.asis
 3c166b88c7ce3f7f09f5718783493f20 *inst/todo/R-suggestions.aux
 cec8704114fd681089ad16313d78d27a *inst/todo/R-suggestions.log
@@ -238,7 +238,7 @@ c192a6f568b99e3874f6532a1664cc95 *man/resample.Rd
 d3075b15795cf89ee7e50bfb1a582cec *man/scatterplot.Rd
 c59c0cad883ddc91cc96ad4247e82733 *man/score.lmm.Rd
 d297709cc741ba6bbee7b4107c7da699 *man/sigma.lmm.Rd
-f580d05f0da285c6f65fb7795e15860e *man/summarize.Rd
+2a44f4fa141c0ed76d61e256b98616ec *man/summarize.Rd
 22110da819d8861f7304aa0099bd6732 *man/summarizeNA.Rd
 f44db12fdd890b37924405f96cdf86d7 *man/summary.Wald_lmm.Rd
 c8ee33256810cd16fe173ac2a85f3494 *man/summary.lmm.Rd
@@ -248,11 +248,12 @@ c8ee33256810cd16fe173ac2a85f3494 *man/summary.lmm.Rd
 6ada6530b768ca51f9adcae3032dc249 *man/vcov.lmm.Rd
 4877249286532bfdef1cee5c378e4f22 *man/weights.Wald_lmm.Rd
 b55a7eb31c970de167120e29333f80d1 *tests/testthat.R
+7068efe50f046a61abbf3aca1a730bf6 *tests/testthat/operator.R
 f2be95391804706cf8e4dbe731e91974 *tests/testthat/test-auto-anova.R
 3705335c5091aa36bcc04a571247de12 *tests/testthat/test-auto-cor.R
 f557aa9489218d6701b4a0107b616450 *tests/testthat/test-auto-estimate.R
 ac4b1a4cf4c53880433e7dcb6e30a85d *tests/testthat/test-auto-linear-regression.R
-bf4b4a74d721c546aee67765c4432c43 *tests/testthat/test-auto-mixed-model.R
+90c8aa2d2ae56bb76363f3a7cad531ef *tests/testthat/test-auto-mixed-model.R
 b299df08c8ccfd86c6fe073e683c954e *tests/testthat/test-auto-mlmm.R
 6bb15d63bb313aedd668e9866914f78a *tests/testthat/test-auto-mmm.R
 a8973ebd684a9e6843ba7ea6ca90c24a *tests/testthat/test-auto-partial-residuals.R
@@ -261,6 +262,7 @@ ef9fa9eaf19d9014b3f252961be4400d *tests/testthat/test-auto-pattern-regression.R
 338aef3b99d52b5d4760d816761de52e *tests/testthat/test-auto-previous-bug.R
 567e65c0e8c94aa19d2983acb51f9cdc *tests/testthat/test-auto-profile.R
 6968dadcd3f7772ef1e2fa2d27cbb19d *tests/testthat/test-auto-reparametrize.R
+c13bd2608e5f15b6f6e857fa2f01c8d1 *tests/testthat/test-auto-summarize.R
 7cc897115e1f4c1990e6858881df45f9 *tests/testthat/test-auto-ttest.R
 06721155cfb76f78b3307a4694213c9b *tests/testthat/test-manual-armd.R
 75bf143f08dc47b0db793497d6c2a3a4 *tests/testthat/test-manual-tutorial.R
