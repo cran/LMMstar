@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: jul 21 2023 (09:28) 
 ## Version: 
-## Last-Updated: jul 28 2023 (17:34) 
+## Last-Updated: May 12 2024 (14:50) 
 ##           By: Brice Ozenne
-##     Update #: 56
+##     Update #: 77
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -30,7 +30,7 @@
     if(format == "long"){
         if(keep.data){
             out <- cbind(data, object)
-        }else if(simplify && NCOL(object)==1){
+        }else if(simplify>0 && NCOL(object)==1){
             out <- as.vector(object)
         }else{
             out <- as.data.frame(object)
@@ -47,22 +47,26 @@
         ## normalize cluster and time variables (in case of NAs)
         if(is.null(data) || (is.null(call$data) && is.null(call$newdata))){
             U.cluster <- object.cluster$levels
-        
+            
             if(length(index.na)==0){
                 indexAll.cluster <- U.cluster[index.cluster]
                 indexAll.time <- factor(U.time[index.time], U.time)
-            }else{
+            }else{                
                 indexAll.cluster <- rep(NA, NROW(object))
-                indexAll.cluster[-index.na] <- U.cluster[match(index.cluster, object.cluster$index)]
-                indexAll.cluster[index.na] <- U.cluster[as.numeric(attr(index.na,"cluster"))]
+                indexAll.cluster[-unname(index.na)] <- U.cluster[match(index.cluster, object.cluster$index)]
+                indexAll.cluster[unname(index.na)] <- as.character(attr(index.na,"cluster"))
 
                 indexAll.time <- factor(rep(NA, NROW(object)), U.time)
-                indexAll.time[-index.na] <- U.time[match(index.time, object.time$index)]
-                indexAll.time[index.na] <- U.time[as.numeric(attr(index.na,"time"))]
+                indexAll.time[-unname(index.na)] <- U.time[match(index.time, object.time$index)]
+                indexAll.time[unname(index.na)] <- as.character(attr(index.na,"time"))
             }           
             
         }else{
-            indexAll.cluster <- index.cluster
+            if(!is.null(data[[object.cluster$var]])){
+                indexAll.cluster <- data[[object.cluster$var]]
+            }else{
+                indexAll.cluster <- index.cluster
+            }
             indexAll.time <- U.time[index.time]
         }
 
@@ -74,25 +78,34 @@
         }else{
             names(object2list) <- colnames(object)
         }
-        
+
         df.object <- cbind(data.frame(cluster = indexAll.cluster, XXtimeXX = indexAll.time), object2list, stringsAsFactors = FALSE)
         names(df.object)[1] <- object.cluster$var
-        if((simplify == FALSE) && any(U.time %in% unique(df.object$XXtimeXX) == FALSE)){
+        if((simplify <= 0) && any(U.time %in% unique(df.object$XXtimeXX) == FALSE)){
             ## add missing times
             df.object <- rbind(df.object,
                                cbind(data.frame(cluster = indexAll.cluster[1], XXtimeXX = setdiff(U.time, unique(df.object$XXtimeXX))),
                                      stats::setNames(list(NA), names(object2list)))
                                )
         }
-        out <- stats::reshape(data = df.object[order(df.object$XXtimeXX),], direction = "wide",
+        out <- stats::reshape(data = df.object[order(factor(df.object$XXtimeXX, levels = object.time$levels)),], direction = "wide",
                               timevar = "XXtimeXX", idvar = object.cluster$var, v.names = names(object2list), times = U.time, sep = sep)
         if(!is.null(name)){ ## in case the user specify name <- " " to only keep the time levels (otherwise leads to " time1" as column names instead of "time1")
             names(out)[-1] <- trimws(names(out)[-1], which = "left")
         }
 
         ## use nicer column names
-        if(simplify && length(object.time$levels)==1){
+        if(simplify>0 && length(object.time$levels)==1){
             names(out)[-1] <- names(object2list)
+        }
+
+        ## restaure covariates
+        keep.var <- attr(keep.data,"var")
+        if(keep.data && length(keep.var)>0){
+            out <- merge(x = unique(data[,c(object.cluster$var, keep.var),drop=FALSE]),
+                         y = out,
+                         by = object.cluster$var,
+                         sort = FALSE)
         }
     }
 

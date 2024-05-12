@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: nov 13 2021 (16:47) 
 ## Version: 
-## Last-Updated: aug  1 2023 (14:05) 
+## Last-Updated: May 12 2024 (22:34) 
 ##           By: Brice Ozenne
-##     Update #: 28
+##     Update #: 32
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -19,7 +19,6 @@ if(FALSE){
     library(testthat)
     library(lattice) 
     library(psych)   
-    library(emmeans) 
 
     library(LMMstar)
 }
@@ -127,17 +126,19 @@ test_that("Dynamic predictions", {
                     df=TRUE,
                     data=long)
 
+    fit.GS <- lm(weight2 ~ weight1, data = wide)
+
     newd <- rbind(data.frame(id = 1:100, time = "-3 month", visit = 1, weight = seq(100,175,length.out = 100)),
                   data.frame(id = 1:100, time = "-1 week", visit = 2, weight = NA))
 
-
-    ## sigma(lm(weight2 ~ weight1, data = gastricbypassW))
-    ## head(dfFit)
-    ## sqrt(prod(coef(fit.main, effects = "all")[c("sigma","k.2")])^2*(1-coef(fit.main, effects = "all")[c("rho(1,2)")]^2))
+    pred.GS <- as.data.frame(predict(fit.GS, newdata = data.frame(weight1 = newd[newd$visit==1,"weight"]), se = TRUE))
+    pred.test <- predict(fit.main, newdata = newd, type = "dynamic", se = c(TRUE,FALSE), keep.data = TRUE)[newd$time=="-1 week",]
+    expect_equal(pred.test$estimate, pred.GS$fit, tol = 1e-3)
+    ## (pred.test$se-pred.GS$se.fit)/pred.GS$se.fit + 0.02667147 
 
     dfFit <- merge(newd[newd$time=="-3 month",c("id","weight")],
-                   cbind(res = predict(fit.main, newdata = newd, type = "dynamic", se = "res", keep.newdata = TRUE)[newd$time=="-1 week",c("id","estimate","lower","upper")],
-                         total = predict(fit.main, newdata = newd, type = "dynamic", se = "total", keep.newdata = TRUE)[newd$time=="-1 week",c("estimate","lower","upper")]),
+                   cbind(res = predict(fit.main, newdata = newd, type = "dynamic", se = c(FALSE,TRUE), keep.data = TRUE)[newd$time=="-1 week",c("id","estimate","lower","upper")],
+                         total = predict(fit.main, newdata = newd, type = "dynamic", se = c(TRUE,TRUE), keep.data = TRUE)[newd$time=="-1 week",c("estimate","lower","upper")]),
                    by.x = "id", by.y = "res.id")
 
     dfData <- reshape2::dcast(data = long[long$time %in% c("-3 month","-1 week"),], formula = id~time, value.var = "weight")
@@ -253,15 +254,11 @@ test_that("Extactors for lmm", {
     ## Reduce to one of each value:
     pred <- unique(pred)
     ## Add predicted means to the dataframe:
-    pred <- cbind(pred, predict(fit.main, newdata=pred))
+    pred <- predict(fit.main, newdata=pred, keep.data = TRUE)
 
     ## Plot predicted means
     xyplot(estimate~time, data=pred, type='b')
     xyplot(se~time, data=pred, type='b')
-
-    ## OPTIONAL: Picture including 95% CIs (emmeans-package)
-    emmip(fit.main, ~time, CIs=TRUE, xlab='Time', ylab='Mean weight')
-
 
     ## Residual diagnostics
     par(mfrow=c(2,2))
@@ -277,8 +274,8 @@ test_that("Extactors for lmm", {
 
     ## Note: Scaled residuals look good.
     ##residuals(fit.main, format = "long", type = "normalized", plot = "scatterplot")
-    plot(fit.main, type = "qqplot", engine.qqplot = "qqtest", by.repetition = TRUE)
-    plot(fit.main, type = "qqplot", engine.qqplot = "qqtest", by.repetition = FALSE)
+    plot(fit.main, type = "qqplot", engine.qqplot = "qqtest", facet = ~visit, labeller = "label_both")
+    plot(fit.main, type = "qqplot", engine.qqplot = "qqtest")
 
     ## ** section 7.5
     ## Fit the model without an intercept using -1 in the model formula:
@@ -326,7 +323,7 @@ test_that("log transformation for lmm", {
     ## Save predicted population means on log2-scale and plot them
     pred.log <- long[,c('visit','time')]
     pred.log <- unique(pred.log)
-    pred.log <- cbind(pred.log, predict(fit.log, newdata=pred.log))
+    pred.log <- predict(fit.log, newdata=pred.log, keep.data = TRUE)
 
     xyplot(estimate~time, type='b', data=pred.log) # mean on log2-scale
     xyplot(2^estimate~time, type='b', data=pred.log) # back-transformed, i.e. geometric means or medians

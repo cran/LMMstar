@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar 22 2021 (10:13) 
 ## Version: 
-## Last-Updated: aug  1 2023 (11:59) 
+## Last-Updated: May 12 2024 (20:37) 
 ##           By: Brice Ozenne
-##     Update #: 216
+##     Update #: 222
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -20,9 +20,7 @@ if(FALSE){
     library(numDeriv)
     library(lava)
     library(multcomp)
-    library(emmeans)
     library(nlme)
-    library(AICcmodavg)
 
     library(LMMstar)
 }
@@ -380,7 +378,7 @@ test_that("single variance parameter (REML)",{
     expect_equal(test$multivariate$p.value,GS[["p-value"]][-1], tol = 1e-6)
 
     ## ** predictions
-    test <- predict(e.lmm, newdata = d)
+    test <- predict(e.lmm, newdata = d, se = TRUE)
     GS <- predict(e.lm, newdata = d, se = TRUE)
     expect_equal(test$estimate,as.double(GS$fit), tol = 1e-7)
     expect_equal(test$se,as.double(GS$se.fit), tol = 1e-7)
@@ -688,20 +686,20 @@ test_that("multiple variance parameters (REML)",{
     ## anova(e.gls,type="marginal")
 
     ## ** predictions
-    if(require(AICcmodavg)){
-        GS <- AICcmodavg::predictSE(e.gls2, newdata = d)
-        pp1 <- predict(e.lmm, newdata = d)
-        pp2 <- predict(e.lmm2, newdata = d)
-        set.seed(10)
-        index <- sample.int(NROW(d))
-        pp3 <- predict(e.lmm, newdata = d[index,,drop=FALSE])
-        expect_equivalent(pp1$estimate,GS$fit, tol = 1e-5)
-        expect_equivalent(pp1$se,GS$se.fit, tol = 1e-5)
-        expect_equal(pp1,pp2, tol = 1e-5)
-        expect_equivalent(pp1[index,,drop=FALSE],pp3, tol = 1e-5) ## different rownames
-        ## .getUVarCov(e.lmm)
-    }
+    ## GS <- lapply(AICcmodavg::predictSE(e.gls2, newdata = d),head)
+    GS <- list(fit = c("1" = -0.58075328, "2" = -0.10811341, "3" = 0.90634198, "4" = 2.98227219, "5" = 1.41661756, "6" = 2.27857674) ,
+     se.fit = c("1" = 0.30371618, "2" = 0.26101415, "3" = 0.37908306, "4" = 0.43713441, "5" = 0.37370611, "6" = 0.35737563) )
 
+    pp1 <- predict(e.lmm, newdata = d, se = TRUE)
+    pp2 <- predict(e.lmm2, newdata = d, se = TRUE)
+    set.seed(10)
+    index <- sample.int(NROW(d))
+    pp3 <- predict(e.lmm, newdata = d[index,,drop=FALSE], se = TRUE)
+    expect_equivalent(head(pp1$estimate),GS$fit, tol = 1e-5)
+    expect_equivalent(head(pp1$se),GS$se.fit, tol = 1e-5)
+    expect_equal(pp1,pp2, tol = 1e-5)
+    expect_equivalent(pp1[index,,drop=FALSE],pp3, tol = 1e-5) ## different rownames
+    ## .getUVarCov(e.lmm)
 })
 
 ## * missing values

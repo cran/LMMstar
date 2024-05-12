@@ -1,0 +1,954 @@
+#+TITLE: Partial residuals with the package LMMstar
+#+Author: Brice Ozenne
+#+BEGIN_SRC R :exports none :results silent :session *R* :cache no
+options(width = 100, digits = 5)
+if(system("whoami",intern=TRUE)=="bozenne"){  
+  setwd("~/Documents/GitHub/LMMstar/inst/doc-partial-residuals/")
+}else if(system("whoami",intern=TRUE)=="unicph\\hpl802"){  
+  setwd("c:/Users/hpl802/Documents/Github/LMMstar/inst/doc-partial-residuals/")
+}
+library(ggpubr, quietly = TRUE, verbose = FALSE, warn.conflicts = FALSE)
+#+END_SRC
+
+This vignette details how partial residuals can be used to illustrate
+model fit in a linear regression and a linear mixed model when using
+the package LMMstar. We thus start by loading the necessary packages:
+#+BEGIN_SRC R :exports code :results output :session *R* :cache no
+library(LMMstar)
+library(ggplot2)
+#+END_SRC
+
+#+RESULTS:
+
+
+* Univariate linear regression
+
+To illustrate the use of partial residuals we will use the =state.x77=
+dataset:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+df1 <- data.frame(lifeExp = state.x77[,4],
+                  illiteracy = state.x77[,3],
+                  income = state.x77[,2]/1000,
+                  murder = state.x77[,5],
+                  edu = cut(state.x77[,6],c(0,50,60,100)))
+head(df1,4)
+#+END_SRC
+
+#+RESULTS:
+:          lifeExp illiteracy income murder      edu
+: Alabama    69.05        2.1  3.624   15.1   (0,50]
+: Alaska     69.31        1.5  6.315   11.3 (60,100]
+: Arizona    70.55        1.8  4.530    7.8  (50,60]
+: Arkansas   70.66        1.9  3.378   10.1   (0,50]
+
+ which contains information about life expectancy (=lifeExp=), income
+(=income=), illeteracy (=illiteracy=), murder rate (=murder=), and the
+percentage of high-school graduates (as categorical variable) in
+various states in the USA. For later use we display a few descriptive
+for each covariate value:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+summarize(lifeExp + illiteracy + income + murder + edu ~ 1, data = df1,
+          columns = c("observed","missing","mean","min","max","sd"))
+#+END_SRC
+
+#+RESULTS:
+:        outcome observed missing    mean    min    max      sd
+: 1      lifeExp       50       0 70.8786 67.960 73.600 1.34239
+: 2   illiteracy       50       0  1.1700  0.500  2.800 0.60953
+: 3       income       50       0  4.4358  3.098  6.315 0.61447
+: 4       murder       50       0  7.3780  1.400 15.100 3.69154
+: 5  edu:(50,60]       50       0  0.5600  0.000  1.000 0.50143
+: 6 edu:(60,100]       50       0  0.1600  0.000  1.000 0.37033
+
+and check there are no missing values. Here for the categorical
+covariates the mean indicates the relative frequency of occurrence
+(56% and 16%) and other columns like =sd= should be ignored.
+
+** No interaction
+
+Suppose we are interested in relating life expectancy (\(Y\)) to
+income (\(X\)). We cannot directly illustrate this relationship, as it
+could be confounded by other variables such as illiteracy (\(Z_1\)),
+murder rate (\(Z_2\)). and education (\(Z_3\)). We will therefore use
+a linear model to control for those variables (\(\VZ=(Z_1,Z_2,Z_3)\))
+where, for simplicity, we assume a linear effect for all variables:
+#+BEGIN_EXPORT latex
+\begin{align*}
+Y = \alpha + \beta X + \gamma_1 Z_1 + \gamma_2 Z_2 + \gamma_2 Z_3 + \varepsilon
+\end{align*}
+#+END_EXPORT
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+e.lm <- lmm(lifeExp ~ income + illiteracy + murder + edu, data = df1)
+model.tables(e.lm)
+#+END_SRC
+
+#+RESULTS:
+:             estimate       se     df    lower    upper    p.value
+: (Intercept) 71.57828 1.138488 44.009 69.28382 73.87274 0.0000e+00
+: income       0.19270 0.252649 44.009 -0.31648  0.70188 4.4971e-01
+: illiteracy   0.17590 0.320967 44.009 -0.47096  0.82276 5.8644e-01
+: murder      -0.27822 0.047855 44.009 -0.37467 -0.18178 6.3280e-07
+: edu(50,60]   0.30141 0.414015 44.009 -0.53298  1.13580 4.7046e-01
+: edu(60,100]  0.77306 0.513118 44.009 -0.26105  1.80718 1.3906e-01
+
+Note that the estimates are nearly identical to the ones of the =lm=
+function:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+coef(e.lm) - coef(lm(lifeExp ~ income + illiteracy + murder + edu, data = df1))
+#+END_SRC
+
+#+RESULTS:
+: (Intercept)      income  illiteracy      murder  edu(50,60] edu(60,100] 
+: -2.7001e-13  2.0345e-13 -2.9035e-13  6.3283e-15 -4.2277e-13 -5.3091e-13
+
+A graphical display can now be obtained by modifying the original
+outcome, life expectancy, had every state had the same illiteracy and
+murder rate:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+df1$pres <- residuals(e.lm, type = "partial", variable = c("(Intercept)","income"))
+head(df1)
+#+END_SRC
+
+#+RESULTS:
+:            lifeExp illiteracy income murder      edu   pres
+: Alabama      69.05        2.1  3.624   15.1   (0,50] 72.882
+: Alaska       69.31        1.5  6.315   11.3 (60,100] 71.417
+: Arizona      70.55        1.8  4.530    7.8  (50,60] 72.102
+: Arkansas     70.66        1.9  3.378   10.1   (0,50] 73.136
+: California   71.71        1.1  5.114   10.3 (60,100] 73.609
+: Colorado     72.06        0.7  4.884    6.8 (60,100] 73.056
+
+#+BEGIN_SRC R :exports none :results output :session *R* :cache no
+attr(residuals(e.lm, type = "partial", variable = c("(Intercept)","income"),
+               simplify = FALSE), "reference")
+#+END_SRC
+
+#+RESULTS:
+:   income illiteracy murder    edu
+: 1     NA          0      0 (0,50]
+
+By default, the partial residuals are computed substracting the effect
+of the covariates, i.e. had each state got no illiteracy, no murder,
+and the lowest education level:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+c(69.05 - 0.17590 * 2.1 - (-0.27822) * 15.1,
+  69.31 - 0.17590 * 1.5 - (-0.27822) * 11.3 - 0.77306)
+#+END_SRC
+
+#+RESULTS:
+: [1] 72.882 71.417
+
+The element ="(Intercept)"= was specified in the =variable= argument
+to avoid to substract the mean value from the outcome and keep a
+plausible range of values for the outcome.
+
+\bigskip
+
+One may wish to compute the life expectancy had every state got a
+specific illiteracy, murder rate, and education. Say the most common
+in the sample: 1.17, 7.378, and (50,60] based on the descriptive
+statistics. This can be obtained by specifying these values in the
+argument =at=:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+df1$pres2 <- residuals(e.lm, type = "partial", variable = c("(Intercept)","income"),
+                       at = data.frame(illiteracy = 1.17, murder = 7.378, edu = "(50,60]"))
+head(df1)
+#+END_SRC
+
+#+RESULTS:
+:            lifeExp illiteracy income murder      edu   pres  pres2
+: Alabama      69.05        2.1  3.624   15.1   (0,50] 72.882 71.336
+: Alaska       69.31        1.5  6.315   11.3 (60,100] 71.417 69.871
+: Arizona      70.55        1.8  4.530    7.8  (50,60] 72.102 70.557
+: Arkansas     70.66        1.9  3.378   10.1   (0,50] 73.136 71.590
+: California   71.71        1.1  5.114   10.3 (60,100] 73.609 72.064
+: Colorado     72.06        0.7  4.884    6.8 (60,100] 73.056 71.510
+
+or doing the calcuation by hand:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+c(69.05 - 0.17590 * (2.1-1.170) - (-0.27822) * (15.1-7.378) + 0.30141,
+  69.31 - 0.17590 * (1.5-1.170) - (-0.27822) * (11.3-7.378) + 0.30141 - 0.77306)
+#+END_SRC
+
+#+RESULTS:
+: [1] 71.336 69.871
+
+Note that changing in counterfactual only shifts the partial residuals
+by a constant, here:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+unique(df1$pres2 - df1$pres)
+#+END_SRC
+
+#+RESULTS:
+: [1] -1.5455
+
+so does not affect the relation between the counterfactual outcome
+(here =lifeExp=) and the exposure of interest (here =income=). One can
+then get a graphical display either manually using ggplot:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+gg.pres <- ggplot(df1) + geom_point(aes(x=income, y=pres))
+gg.pres <- gg.pres + geom_abline(intercept = coef(e.lm)["(Intercept)"],
+                                 slope = coef(e.lm)["income"])
+gg.pres <- gg.pres + ggtitle("(B) partial residuals")
+gg.pres
+#+END_SRC
+
+#+RESULTS:
+
+or directly via the plot function:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+plot(e.lm, type = "partial", variable = c("(Intercept)","income")) # C
+plot(e.lm, type = "partial", variable = c("(Intercept)","income"),
+     at = data.frame(illiteracy = 1.17, murder = 7.378, edu = "(50,60]")) # D
+#+END_SRC
+
+#+RESULTS:
+
+\clearpage
+
+These can be compared to displaying the observed outcome vs. income:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+gg.obs <- ggplot(df1) + geom_point(aes(x=income, y=lifeExp))
+gg.obs <- gg.obs + ggtitle("(A) observed")
+gg.obs
+#+END_SRC
+
+#+RESULTS:
+
+where it is apparent that by using the partial residuals, the data has
+been normalized and exhibit less variability.
+#+RESULTS:
+
+#+BEGIN_SRC R :exports none :results output :session *R* :cache no
+pdf("figures/gg-lmpres-comparisons.pdf", width = 10, height = 5)
+autogg.pres <- autoplot(e.lm, type = "partial", variable = c("(Intercept)","income"))$plot
+autogg.presC <- autoplot(e.lm, type = "partial", variable = c("(Intercept)","income"),
+                         at = data.frame(illiteracy = 1.17, murder = 7.378, edu = "(50,60]"))$plot
+ggarrange(gg.obs + coord_cartesian(ylim=c(68,74)) + theme(plot.title = element_text(size = 11), text = element_text(size = 10)),
+          gg.pres + coord_cartesian(ylim=c(68,74)) + theme(plot.title = element_text(size = 11), text = element_text(size = 10)),
+          autogg.pres + coord_cartesian(ylim=c(68,74)) + ggtitle(paste("(C): ",autogg.pres$labels$title)) + theme(plot.title = element_text(size = 11), text = element_text(size = 10)),
+          autogg.presC + coord_cartesian(ylim=c(68,74)) + ggtitle(paste("(D): ",autogg.presC$labels$title)) + theme(plot.title = element_text(size = 11), text = element_text(size = 10)),
+          nrow = 2, ncol = 2)
+dev.off()
+#+END_SRC
+
+#+RESULTS:
+: X11cairo 
+:        2
+
+
+#+ATTR_LaTeX: :width 1\textwidth :options trim={0 0 0 0} :placement [!h]
+[[./figures/gg-lmpres-comparisons.pdf]]
+
+The output of the =plot= method is a list containing an element plot
+with the ggplot object and an element data with the dataset. To avoid
+actually displaying the graph one can use the method =autoplot= to
+only save the ggplot object:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+ls.plot <- autoplot(e.lm, type = "partial", variable = c("(Intercept)","income"))
+lapply(ls.plot, class)
+#+END_SRC
+
+#+RESULTS:
+: $data
+: [1] "residuals_lmm" "data.frame"   
+: 
+: $plot
+: [1] "gg"     "ggplot"
+
+One can re-create the plot based on the data argument or modify the
+existing plot, e.g. displaying with the y axis between 68 and 74:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+ls.plot$plot  + coord_cartesian(ylim=c(68,74))
+#+END_SRC
+
+#+RESULTS:
+
+\bigskip
+
+** What about confidence intervals?
+
+A common question is whether one can display confidence intervals for
+the regression line. It is possible to add confidence intervals on the
+plot either via the argument =ci.alpha=:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+plot(e.lm, type = "partial", variable = c("(Intercept)","income"), ci.alpha = 0.25) ## E
+#+END_SRC
+
+#+RESULTS:
+
+or by requesting confidence intervals for the fitted lines via the
+argument =pres.ci= when calling =residuals=:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+pres.ci <- residuals(e.lm, type = "partial", variable = c("(Intercept)","income"),
+                     keep.data = TRUE, fitted.ci = TRUE)
+head(pres.ci)
+#+END_SRC
+
+#+RESULTS:
+:   lifeExp illiteracy income murder    edu fitted fitted.lower fitted.upper r.partial
+: 1   69.05          0  3.624      0 (0,50] 72.277       71.115       73.439    72.882
+: 2   69.31          0  6.315      0 (0,50] 72.795       71.107       74.483    71.417
+: 3   70.55          0  4.530      0 (0,50] 72.451       71.253       73.649    72.102
+: 4   70.66          0  3.378      0 (0,50] 72.229       71.046       73.413    73.136
+: 5   71.71          0  5.114      0 (0,50] 72.564       71.254       73.874    73.609
+: 6   72.06          0  4.884      0 (0,50] 72.519       71.261       73.778    73.056
+
+which can be added to the previous graphical display, e.g.:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+gg.pres + geom_ribbon(data = pres.ci, alpha = 0.25,
+                      aes(ymin = fitted.lower, ymax = fitted.upper, x = income))
+#+END_SRC
+
+#+RESULTS:
+
+The first plot is displayed in the left panel of the figure below. A
+similar partial residual plot but now for the =murder= variable is
+displayed in the right panel.
+
+#+BEGIN_SRC R :exports none :results output :session *R* :cache no
+autogg.presCI <- autoplot(e.lm, type = "partial", variable = c("(Intercept)","income"), ci.alpha = 0.25)$plot
+pdf("figures/gg-lmpres-cifit.pdf", width = 10, height = 4)
+ggarrange(autogg.presCI + ggtitle(paste("(E): ",autogg.presCI$labels$title)) + theme(plot.title = element_text(size = 12), text = element_text(size = 14)),
+          autoplot(e.lm, type = "partial", variable = c("(Intercept)","murder"), ci.alpha = 0.25)$plot + theme(plot.title = element_text(size = 12), text = element_text(size = 14)))
+dev.off()
+#+END_SRC
+
+#+RESULTS:
+: X11cairo 
+:        2
+
+
+#+ATTR_LaTeX: :width 1\textwidth :options trim={0 0 0 0} :placement [!h]
+[[./figures/gg-lmpres-cifit.pdf]]
+
+In many case the uncertainty represented here is of little interest,
+since it is the uncertainty of the intercept plus the exposure
+effect. This is why even though the =murder= variable was highly
+significant (p<0.001) whereas the income variable was not significant
+(p=0.45) the confidence intervals looks large in both cases. To only
+capture the uncertainty relative to the =income= or =murder= variable
+one should remove the intercept value, e.g. by omitting
+="(Intercept)"= from the =var= argument:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+plot(e.lm, type = "partial", variable = "income", ci.alpha = 0.25) ## F
+plot(e.lm, type = "partial", variable = "murder", ci.alpha = 0.25) ## G
+#+END_SRC
+#+RESULTS:
+
+#+ATTR_LaTeX: :width 1\textwidth :options trim={0 0 0 0} :placement [!h]
+[[./figures/gg-lmpres-cicov.pdf]]
+
+#+BEGIN_SRC R :exports none :results output :session *R* :cache no
+pdf("figures/gg-lmpres-cicov.pdf", width = 10, height = 4)
+autogg.presCCI.income <- autoplot(e.lm, type = "partial", variable = "income", ci.alpha = 0.25)$plot
+autogg.presCCI.murder <- autoplot(e.lm, type = "partial", variable = "murder", ci.alpha = 0.25)$plot
+ggarrange(autogg.presCCI.income + ggtitle(paste("(F): ",autogg.presCCI.income$labels$title)) + theme(plot.title = element_text(size = 12), text = element_text(size = 14)),
+          autogg.presCCI.murder + ggtitle(paste("(G): ",autogg.presCCI.murder$labels$title)) + theme(plot.title = element_text(size = 12), text = element_text(size = 14)))
+dev.off()
+#+END_SRC
+
+#+RESULTS:
+: X11cairo 
+:        2
+
+The unpleasant side effect is that the range of values on the y-axis
+appears unrealistic now. The statistical uncertainty may therefore be
+better communicated otherwise, e.g. reporting confidence intervals or
+p-values related to the covariate effect and keeping the partial
+residual plot free of confidence intervals.
+
+** Interaction with a categorical variable
+
+Suppose that we are now interested in relating life expectancy (\(Y\))
+to both income (\(X_1\)) for various level of education (\(X_2 \in
+\{a,b,c\}\)), adjusting for other variables such as illiteracy
+(\(Z_1\)) and murder rate (\(Z_2\)). As before we assume a linear
+effect for all variables:
+#+BEGIN_EXPORT latex
+\begin{align*}
+Y = \alpha + \beta_{1a} X_1 \Ind[X_2=a] + \beta_{1b} X_1 \Ind[X_2=b] + \beta_{1c} X_1 \Ind[X_2=c] + \gamma_1 Z_1 + \gamma_2 Z_2 + \varepsilon
+\end{align*}
+#+END_EXPORT
+where \(\Ind[x]\) denotes the indicator variable taking value 1 when
+\(x\) is true and 0 otherwise. This model can be estimated with the
+following R code
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+e.lmI <- lmm(lifeExp ~ income:edu + illiteracy + murder, data = df1)
+model.tables(e.lmI)
+#+END_SRC
+
+#+RESULTS:
+:                    estimate       se     df    lower    upper    p.value
+: (Intercept)        71.78584 1.209517 44.009 69.34823 74.22344 0.0000e+00
+: illiteracy          0.12870 0.319145 44.009 -0.51449  0.77189 6.8871e-01
+: murder             -0.27940 0.048208 44.009 -0.37656 -0.18224 6.7276e-07
+: income:edu(0,50]    0.17147 0.297725 44.009 -0.42855  0.77149 5.6760e-01
+: income:edu(50,60]   0.22526 0.252110 44.009 -0.28284  0.73335 3.7646e-01
+: income:edu(60,100]  0.30377 0.236929 44.009 -0.17373  0.78126 2.0652e-01
+
+_Note:_ this model is the same as =lmm(lifeExp ~ income*edu +
+illiteracy + murder, data = df1)= but uses a different parametrisation.
+
+\bigskip
+
+Similarly as before, we can use the =plot= function to display the
+partial residuals with respect to both =income= and =edu=:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+plot(e.lmI, type = "partial", variable = c("(Intercept)","income","edu")) ## H
+#+END_SRC
+
+#+RESULTS:
+
+which can be compared to a plot assuming no interaction:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+plot(e.lm, type = "partial", variable = c("(Intercept)","income","edu")) ## I
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC R :exports none :results output :session *R* :cache no
+autogg.presI.income <- autoplot(e.lmI, type = "partial", variable = c("(Intercept)","income","edu"))$plot
+autogg.presnoI.income <- autoplot(e.lm, type = "partial", variable = c("(Intercept)","income","edu"))$plot
+  
+gg <- ggarrange(autogg.presI.income + ggtitle(paste("(H): ",autogg.presI.income$labels$title)) + theme(plot.title = element_text(size = 12), text = element_text(size = 14)),
+                autogg.presnoI.income + ggtitle(paste("(I): ",autogg.presnoI.income$labels$title)) + theme(plot.title = element_text(size = 12), text = element_text(size = 14)),
+                common.legend = TRUE, legend = "bottom")
+
+pdf("figures/gg-lmpres-interaction.pdf", width = 10, height = 4)
+print(gg)
+dev.off()
+#+END_SRC
+
+#+RESULTS:
+: X11cairo 
+:        2
+
+
+#+ATTR_LaTeX: :width 1\textwidth :options trim={0 0 0 0} :placement [!h]
+[[./figures/gg-lmpres-interaction.pdf]]
+
+
+The partial residuals can also be output via the =residuals= method:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+residuals(e.lmI, type = "partial", variable = c("(Intercept)","income","edu"))[1:5]
+#+END_SRC
+
+#+RESULTS:
+: [1] 72.999 72.274 72.498 73.237 74.446
+
+and one can check that they are evaluated by substracting the effect
+of the other variables (here =illiteracy= and =murder=), e.g.:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+c(69.05 - 0.12870 * 2.1 - (-0.27940) * 15.1,
+  69.31 - 0.12870 * 1.5 - (-0.27940) * 11.3)
+#+END_SRC
+
+#+RESULTS:
+: [1] 72.999 72.274
+
+Here we computed partial residuals representing the life expectancy in
+the states had there be no murder nor illiteracy. We could also
+consider the case of average murder rate and illiteracy:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+residuals(e.lmI, type = "partial", variable = c("(Intercept)","income"),
+          at = data.frame(illiteracy = 1.17, murder = 7.378))[1:5]
+#+END_SRC
+
+#+RESULTS:
+: [1] 71.088 70.363 70.587 71.327 72.535
+
+which we can also retrieve by hand:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+c(69.05 - 0.12870 * (2.1-1.170) - (-0.27940) * (15.1-7.378),
+  69.31 - 0.12870 * (1.5-1.170) - (-0.27940) * (11.3-7.378))
+#+END_SRC
+
+#+RESULTS:
+: [1] 71.088 70.363
+
+
+\clearpage
+
+* Linear mixed model 
+
+To illustrate the use of partial residuals we will use data from a
+two-arm randomized trial comparing the quality of the vision over time
+of patients under placebo vs. active drug. We first re-shape the data:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+data(armd.wide, package = "nlmeU")
+armd.long <- reshape(armd.wide, direction ="long",
+                     varying = paste0("visual",c(0,4,12,24,52)), times = c(0,4,12,24,52),
+                     timevar = "week.num", v.names = "visual")
+armd.long$week <- as.factor(armd.long$week.num)
+#+END_SRC
+
+#+RESULTS:
+
+and notice that the outcome (=visual=) and the covariate =lesion= can be missing:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+summarizeNA(armd.long)
+#+END_SRC
+
+#+RESULTS:
+:  frequency missing.pattern n.missing subject lesion line0 treat.f miss.pat week.num visual id week
+:       1106       000000000         0       0      0     0       0        0        0      0  0    0
+:         89       000000100         1       0      0     0       0        0        0      1  0    0
+:          1       010000000         1       0      1     0       0        0        0      0  0    0
+:          4       010000100         2       0      1     0       0        0        0      1  0    0
+
+This is why a warning is displayed when fitting the linear mixed
+model:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+e.lmm <- lmm(visual ~ week*treat.f + lesion, data = armd.long, repetition =~week|subject)
+#+END_SRC
+
+#+RESULTS:
+: Warning message:
+: In .lmmNormalizeData(as.data.frame(data)[unique(stats::na.omit(var.all))],  :
+:   Can only handle missing values in the outcome variable visual. 
+:   5 observations with missing values in "lesion" have been removed. 
+:   1 cluster has been removed.
+
+To visualize the model fit, we can display the fitted mean for each
+level of baseline lesion:
+#+BEGIN_SRC R :file ./figures/gg-lmmfit.pdf :results graphics file :session *R* :cache no :width 10 :height 4
+plot(e.lmm, facet = ~lesion, labeller = label_both, facet_ncol = 4)
+#+END_SRC
+
+#+RESULTS:
+[[file:./figures/gg-lmmfit.pdf]]
+
+#+ATTR_LaTeX: :width \textwidth :options trim={0 0 0 0} :placement [!h]
+[[./figures/gg-lmmfit.pdf]]
+
+
+We can retrive the fitted values from the estimated coefficients:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+round(coef(e.lmm),2)
+#+END_SRC
+
+#+RESULTS:
+:          (Intercept)                week4               week12               week24 
+:                61.33                -1.28                -2.35                -6.03 
+:               week52        treat.fActive               lesion  week4:treat.fActive 
+:               -11.31                -0.84                -3.19                -2.19 
+: week12:treat.fActive week24:treat.fActive week52:treat.fActive 
+:                -3.47                -3.03                -4.84
+
+- in the Placebo group with lesion=1, the estimated average baseline mean
+  is =(Intercept)+1*lesion=, i.e. 61.33-3.19=58.14. When lesion=4, the
+  estimated average baseline mean is =(Intercept)+4*lesion=,
+  i.e. 61.33-4*3.19=48.57.
+- the estimated average baseline mean in the Active group is shifted
+  by =treat.fActive= i.e. -0.84 from the Placebo group.
+- in the Placebo group with lesion=1, the estimated average week 52
+  mean is \newline =(Intercept)+week52+1*lesion=,
+  i.e. 61.33-11.31-3.19=46.83. 
+- the estimated average week 52 mean in the Active group is shifted by \newline
+  =treat.fActive+week52:treat.fActive= i.e. -0.84-4.84=-5.68 from the
+  Placebo group.
+
+Unfortunately, the display of the fitted value becomes overwhelming
+with considering more covariates or more covariate levels. Instead can
+visualize the partial residuals, e.g. here the outcome and fitted
+values had there be no lesion:
+- on the same panel with a difference color for each treatment group:   
+#+BEGIN_SRC R :file ./figures/gg-lmm-presTraj.pdf :results graphics file :session *R* :cache no :width 10 :height 6
+plot(e.lmm, type = "partial", variable = c("(Intercept)","week","treat.f"),
+     at = data.frame(lesion = 2))
+#+END_SRC
+
+#+RESULTS:
+[[file:./figures/gg-lmm-presTraj.pdf]]
+
+#+ATTR_LaTeX: :width .8\textwidth :options trim={0 0 0 0} :placement [!h]
+[[./figures/gg-lmm-presTraj.pdf]]
+
+
+
+- on a separate panel for each timepoint:
+#+BEGIN_SRC R :file ./figures/gg-lmm-presFacet.pdf :results graphics file :session *R* :cache no :width 10 :height 4
+plot(e.lmm, type = "partial", variable = c("(Intercept)","week","treat.f"),
+     facet =~week, facet_nrow = 1, time.var = "treat.f", color = FALSE,
+     at = data.frame(lesion = 2))
+#+END_SRC
+
+#+RESULTS:
+[[file:./figures/gg-lmm-presFacet.pdf]]
+
+#+ATTR_LaTeX: :width 1\textwidth :options trim={0 0 0 0} :placement [!h]
+[[./figures/gg-lmm-presFacet.pdf]]
+
+#+BEGIN_SRC R :exports none :results output :session *R* :cache no
+## keep after export to handle warning output
+#+END_SRC
+
+#+RESULTS:
+
+The calculation of the partial residuals is similar to the univariate regression:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+armd.long$pres <- residuals(e.lmm, type = "partial", 
+                            variable = c("(Intercept)","week","treat.f"),
+                            at = data.frame(lesion = 2))
+head(armd.long)
+#+END_SRC
+
+#+RESULTS:
+:     subject lesion line0 treat.f miss.pat week.num visual id week   pres
+: 1.0       1      3    12  Active     --XX        0     59  1    0 62.187
+: 2.0       2      1    13  Active     ----        0     65  2    0 61.813
+: 3.0       3      4     8 Placebo     ---X        0     40  3    0 46.373
+: 4.0       4      2    13 Placebo     ----        0     67  4    0 67.000
+: 5.0       5      1    14  Active     XXXX        0     70  5    0 66.813
+: 6.0       6      3    12  Active     ----        0     59  6    0 62.187
+
+here substract the estimated lesion effect from the observed outcome:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+c(59 - (-3.19) * (3-2),
+  65 - (-3.19) * (1-2))
+#+END_SRC
+
+#+RESULTS:
+: [1] 62.19 61.81
+
+In particular, the partial residuals for patient with lesion equal to
+two is the observed outcome.
+
+ \clearpage
+
+* R session
+Details of the R session used to generate this document:
+#+BEGIN_SRC R :exports both :results output :session *R* :cache no
+sessionInfo()
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+R version 4.3.3 (2024-02-29)
+Platform: x86_64-pc-linux-gnu (64-bit)
+Running under: Ubuntu 22.04.4 LTS
+
+Matrix products: default
+BLAS:   /usr/lib/x86_64-linux-gnu/blas/libblas.so.3.10.0 
+LAPACK: /usr/lib/x86_64-linux-gnu/lapack/liblapack.so.3.10.0
+
+locale:
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C               LC_TIME=en_US.UTF-8       
+ [4] LC_COLLATE=en_US.UTF-8     LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                  LC_ADDRESS=C              
+[10] LC_TELEPHONE=C             LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+
+time zone: Europe/Copenhagen
+tzcode source: system (glibc)
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+[1] lava_1.8.0    nlme_3.1-163  LMMstar_1.1.0 lme4_1.1-35.2 Matrix_1.6-5  ggpubr_0.6.0 
+[7] ggplot2_3.5.1
+
+loaded via a namespace (and not attached):
+ [1] utf8_1.2.4          future_1.33.2       generics_0.1.3      tidyr_1.3.1        
+ [5] rstatix_0.7.2       lattice_0.22-5      listenv_0.9.1       digest_0.6.35      
+ [9] magrittr_2.0.3      grid_4.3.3          backports_1.4.1     survival_3.5-8     
+[13] gridExtra_2.3       purrr_1.0.2         fansi_1.0.6         scales_1.3.0       
+[17] numDeriv_2016.8-1.1 codetools_0.2-19    abind_1.4-5         cli_3.6.2          
+[21] rlang_1.1.3         parallelly_1.37.1   future.apply_1.11.2 cowplot_1.1.3      
+[25] munsell_0.5.1       splines_4.3.3       withr_3.0.0         tools_4.3.3        
+[29] parallel_4.3.3      nloptr_2.0.3        ggsignif_0.6.4      minqa_1.2.6        
+[33] dplyr_1.1.4         colorspace_2.1-0    boot_1.3-30         globals_0.16.3     
+[37] broom_1.0.5         vctrs_0.6.5         R6_2.5.1            lifecycle_1.0.4    
+[41] car_3.1-2           MASS_7.3-60.0.1     pkgconfig_2.0.3     pillar_1.9.0       
+[45] gtable_0.3.5        glue_1.7.0          Rcpp_1.0.12         tibble_3.2.1       
+[49] tidyselect_1.2.1    farver_2.1.1        labeling_0.4.3      carData_3.0-5      
+[53] compiler_4.3.3
+#+end_example
+
+\clearpage
+
+* References :noexport:
+:PROPERTIES:
+:UNNUMBERED: t
+:END:
+
+#+BEGIN_EXPORT latex
+\begingroup
+\renewcommand{\section}[2]{}
+#+END_EXPORT
+
+bibliographystyle:apalike
+[[bibliography:bibliography.bib]]
+
+#+BEGIN_EXPORT latex
+\endgroup
+#+END_EXPORT
+
+\clearpage
+
+#+BEGIN_EXPORT LaTeX
+\appendix
+\titleformat{\section}
+{\normalfont\Large\bfseries}{Appendix~\thesection}{1em}{}
+
+\renewcommand{\thefigure}{\Alph{figure}}
+\renewcommand{\thetable}{\Alph{table}}
+\renewcommand{\theequation}{\Alph{equation}}
+
+\setcounter{figure}{0}    
+\setcounter{table}{0}    
+\setcounter{equation}{0}    
+#+END_EXPORT
+
+* CONFIG                                                           :noexport:
+#+LANGUAGE:  en
+#+LaTeX_CLASS: org-article
+#+LaTeX_CLASS_OPTIONS: [12pt]
+#+OPTIONS:   title:t author:t toc:nil todo:nil
+#+OPTIONS:   H:3 num:t 
+#+OPTIONS:   TeX:t LaTeX:t
+** Display of the document
+# ## space between lines
+#+LATEX_HEADER: \RequirePackage{setspace} % to modify the space between lines - incompatible with footnote in beamer
+#+LaTeX_HEADER:\renewcommand{\baselinestretch}{1.1}
+# ## margins
+#+LaTeX_HEADER: \geometry{a4paper, left=10mm, right=10mm, top=10mm}
+# ## personalize the prefix in the name of the sections
+#+LaTeX_HEADER: \usepackage{titlesec}
+# ## fix bug in titlesec version
+# ##  https://tex.stackexchange.com/questions/299969/titlesec-loss-of-section-numbering-with-the-new-update-2016-03-15
+#+LaTeX_HEADER: \usepackage{etoolbox}
+#+LaTeX_HEADER: 
+#+LaTeX_HEADER: \makeatletter
+#+LaTeX_HEADER: \patchcmd{\ttlh@hang}{\parindent\z@}{\parindent\z@\leavevmode}{}{}
+#+LaTeX_HEADER: \patchcmd{\ttlh@hang}{\noindent}{}{}{}
+#+LaTeX_HEADER: \makeatother
+** Color
+# ## define new colors
+#+LATEX_HEADER: \RequirePackage{colortbl} % arrayrulecolor to mix colors
+#+LaTeX_HEADER: \definecolor{myorange}{rgb}{1,0.2,0}
+#+LaTeX_HEADER: \definecolor{mypurple}{rgb}{0.7,0,8}
+#+LaTeX_HEADER: \definecolor{mycyan}{rgb}{0,0.6,0.6}
+#+LaTeX_HEADER: \newcommand{\lightblue}{blue!50!white}
+#+LaTeX_HEADER: \newcommand{\darkblue}{blue!80!black}
+#+LaTeX_HEADER: \newcommand{\darkgreen}{green!50!black}
+#+LaTeX_HEADER: \newcommand{\darkred}{red!50!black}
+#+LaTeX_HEADER: \definecolor{gray}{gray}{0.5}
+# ## change the color of the links
+#+LaTeX_HEADER: \hypersetup{
+#+LaTeX_HEADER:  citecolor=[rgb]{0,0.5,0},
+#+LaTeX_HEADER:  urlcolor=[rgb]{0,0,0.5},
+#+LaTeX_HEADER:  linkcolor=[rgb]{0,0,0.5},
+#+LaTeX_HEADER: }
+** Font
+# https://tex.stackexchange.com/questions/25249/how-do-i-use-a-particular-font-for-a-small-section-of-text-in-my-document
+#+LaTeX_HEADER: \newenvironment{note}{\small \color{gray}\fontfamily{lmtt}\selectfont}{\par}
+#+LaTeX_HEADER: \newenvironment{activity}{\color{orange}\fontfamily{qzc}\selectfont}{\par}
+** Symbols
+# ## valid and cross symbols
+#+LaTeX_HEADER: \RequirePackage{pifont}
+#+LaTeX_HEADER: \RequirePackage{relsize}
+#+LaTeX_HEADER: \newcommand{\Cross}{{\raisebox{-0.5ex}%
+#+LaTeX_HEADER:		{\relsize{1.5}\ding{56}}}\hspace{1pt} }
+#+LaTeX_HEADER: \newcommand{\Valid}{{\raisebox{-0.5ex}%
+#+LaTeX_HEADER:		{\relsize{1.5}\ding{52}}}\hspace{1pt} }
+#+LaTeX_HEADER: \newcommand{\CrossR}{ \textcolor{red}{\Cross} }
+#+LaTeX_HEADER: \newcommand{\ValidV}{ \textcolor{green}{\Valid} }
+# ## warning symbol
+#+LaTeX_HEADER: \usepackage{stackengine}
+#+LaTeX_HEADER: \usepackage{scalerel}
+#+LaTeX_HEADER: \newcommand\Warning[1][3ex]{%
+#+LaTeX_HEADER:   \renewcommand\stacktype{L}%
+#+LaTeX_HEADER:   \scaleto{\stackon[1.3pt]{\color{red}$\triangle$}{\tiny\bfseries !}}{#1}%
+#+LaTeX_HEADER:   \xspace
+#+LaTeX_HEADER: }
+
+** Code
+:PROPERTIES:
+:ID: 2ec77c4b-f83d-4612-9a89-a96ba1b7bf70
+:END:
+# Documentation at https://org-babel.readthedocs.io/en/latest/header-args/#results
+# :tangle (yes/no/filename) extract source code with org-babel-tangle-file, see http://orgmode.org/manual/Extracting-source-code.html 
+# :cache (yes/no)
+# :eval (yes/no/never)
+# :results (value/output/silent/graphics/raw/latex)
+# :export (code/results/none/both)
+#+PROPERTY: header-args :session *R* :tangle yes :cache no ## extra argument need to be on the same line as :session *R*
+# Code display:
+#+LATEX_HEADER: \RequirePackage{fancyvrb}
+#+LATEX_HEADER: \DefineVerbatimEnvironment{verbatim}{Verbatim}{fontsize=\small,formatcom = {\color[rgb]{0.5,0,0}}}
+# ## change font size input (global change)
+# ## doc: https://ctan.math.illinois.edu/macros/latex/contrib/listings/listings.pdf
+# #+LATEX_HEADER: \newskip kipamount    kipamount =6pt plus 0pt minus 6pt
+# #+LATEX_HEADER: \lstdefinestyle{code-tiny}{basicstyle=\ttfamily\tiny, aboveskip =  kipamount, belowskip =  kipamount}
+# #+LATEX_HEADER: \lstset{style=code-tiny}
+# ## change font size input (local change, put just before BEGIN_SRC)
+# ## #+ATTR_LATEX: :options basicstyle=\ttfamily\scriptsize
+# ## change font size output (global change)
+# ## \RecustomVerbatimEnvironment{verbatim}{Verbatim}{fontsize=\tiny,formatcom = {\color[rgb]{0.5,0,0}}}
+** Rlogo
+#+LATEX_HEADER:\definecolor{grayR}{HTML}{8A8990}
+#+LATEX_HEADER:\definecolor{grayL}{HTML}{C4C7C9}
+#+LATEX_HEADER:\definecolor{blueM}{HTML}{1F63B5}   
+#+LATEX_HEADER: \newcommand{\Rlogo}[1][0.07]{
+#+LATEX_HEADER: \begin{tikzpicture}[scale=#1]
+#+LATEX_HEADER: \shade [right color=grayR,left color=grayL,shading angle=60] 
+#+LATEX_HEADER: (-3.55,0.3) .. controls (-3.55,1.75) 
+#+LATEX_HEADER: and (-1.9,2.7) .. (0,2.7) .. controls (2.05,2.7)  
+#+LATEX_HEADER: and (3.5,1.6) .. (3.5,0.3) .. controls (3.5,-1.2) 
+#+LATEX_HEADER: and (1.55,-2) .. (0,-2) .. controls (-2.3,-2) 
+#+LATEX_HEADER: and (-3.55,-0.75) .. cycle;
+#+LATEX_HEADER: 
+#+LATEX_HEADER: \fill[white] 
+#+LATEX_HEADER: (-2.15,0.2) .. controls (-2.15,1.2) 
+#+LATEX_HEADER: and (-0.7,1.8) .. (0.5,1.8) .. controls (2.2,1.8) 
+#+LATEX_HEADER: and (3.1,1.2) .. (3.1,0.2) .. controls (3.1,-0.75) 
+#+LATEX_HEADER: and (2.4,-1.45) .. (0.5,-1.45) .. controls (-1.1,-1.45) 
+#+LATEX_HEADER: and (-2.15,-0.7) .. cycle;
+#+LATEX_HEADER: 
+#+LATEX_HEADER: \fill[blueM] 
+#+LATEX_HEADER: (1.75,1.25) -- (-0.65,1.25) -- (-0.65,-2.75) -- (0.55,-2.75) -- (0.55,-1.15) -- 
+#+LATEX_HEADER: (0.95,-1.15)  .. controls (1.15,-1.15) 
+#+LATEX_HEADER: and (1.5,-1.9) .. (1.9,-2.75) -- (3.25,-2.75)  .. controls (2.2,-1) 
+#+LATEX_HEADER: and (2.5,-1.2) .. (1.8,-0.95) .. controls (2.6,-0.9) 
+#+LATEX_HEADER: and (2.85,-0.35) .. (2.85,0.2) .. controls (2.85,0.7) 
+#+LATEX_HEADER: and (2.5,1.2) .. cycle;
+#+LATEX_HEADER: 
+#+LATEX_HEADER: \fill[white]  (1.4,0.4) -- (0.55,0.4) -- (0.55,-0.3) -- (1.4,-0.3).. controls (1.75,-0.3) 
+#+LATEX_HEADER: and (1.75,0.4) .. cycle;
+#+LATEX_HEADER: 
+#+LATEX_HEADER: \end{tikzpicture}
+#+LATEX_HEADER: }
+** Image and graphs
+#+LATEX_HEADER: \RequirePackage{epstopdf} % to be able to convert .eps to .pdf image files
+#+LATEX_HEADER: \RequirePackage{capt-of} % 
+#+LATEX_HEADER: \RequirePackage{caption} % newlines in graphics
+#+LaTeX_HEADER: \RequirePackage{tikz-cd} % graph
+# ## https://tools.ietf.org/doc/texlive-doc/latex/tikz-cd/tikz-cd-doc.pdf
+** Table
+#+LATEX_HEADER: \RequirePackage{booktabs} % for nice lines in table (e.g. toprule, bottomrule, midrule, cmidrule)
+** Inline latex
+# @@latex:any arbitrary LaTeX code@@
+** Algorithm
+#+LATEX_HEADER: \RequirePackage{amsmath}
+#+LATEX_HEADER: \RequirePackage{algorithm}
+#+LATEX_HEADER: \RequirePackage[noend]{algpseudocode}
+** Math
+#+LATEX_HEADER: \RequirePackage{dsfont}
+#+LATEX_HEADER: \RequirePackage{amsmath,stmaryrd,graphicx}
+#+LATEX_HEADER: \RequirePackage{prodint} % product integral symbol (\PRODI)
+# ## lemma
+# #+LaTeX_HEADER: \RequirePackage{amsthm}
+# #+LaTeX_HEADER: \newtheorem{theorem}{Theorem}
+# #+LaTeX_HEADER: \newtheorem{lemma}[theorem]{Lemma}
+*** Template for shortcut
+#+LATEX_HEADER: \usepackage{ifthen}
+#+LATEX_HEADER: \usepackage{xifthen}
+#+LATEX_HEADER: \usepackage{xargs}
+#+LATEX_HEADER: \usepackage{xspace}
+#+LATEX_HEADER: \newcommand\defOperator[7]{%
+#+LATEX_HEADER:	\ifthenelse{\isempty{#2}}{
+#+LATEX_HEADER:		\ifthenelse{\isempty{#1}}{#7{#3}#4}{#7{#3}#4 \left#5 #1 \right#6}
+#+LATEX_HEADER:	}{
+#+LATEX_HEADER:	\ifthenelse{\isempty{#1}}{#7{#3}#4_{#2}}{#7{#3}#4_{#1}\left#5 #2 \right#6}
+#+LATEX_HEADER: }
+#+LATEX_HEADER: }
+#+LATEX_HEADER: \newcommand\defUOperator[5]{%
+#+LATEX_HEADER: \ifthenelse{\isempty{#1}}{
+#+LATEX_HEADER:		#5\left#3 #2 \right#4
+#+LATEX_HEADER: }{
+#+LATEX_HEADER:	\ifthenelse{\isempty{#2}}{\underset{#1}{\operatornamewithlimits{#5}}}{
+#+LATEX_HEADER:		\underset{#1}{\operatornamewithlimits{#5}}\left#3 #2 \right#4}
+#+LATEX_HEADER: }
+#+LATEX_HEADER: }
+#+LATEX_HEADER: \newcommand{\defBoldVar}[2]{	
+#+LATEX_HEADER:	\ifthenelse{\equal{#2}{T}}{\boldsymbol{#1}}{\mathbf{#1}}
+#+LATEX_HEADER: }
+**** Probability
+#+LATEX_HEADER: \newcommandx\Esp[2][1=,2=]{\defOperator{#1}{#2}{E}{}{\lbrack}{\rbrack}{\mathbb}}
+#+LATEX_HEADER: \newcommandx\Prob[2][1=,2=]{\defOperator{#1}{#2}{P}{}{\lbrack}{\rbrack}{\mathbb}}
+#+LATEX_HEADER: \newcommandx\Qrob[2][1=,2=]{\defOperator{#1}{#2}{Q}{}{\lbrack}{\rbrack}{\mathbb}}
+#+LATEX_HEADER: \newcommandx\Var[2][1=,2=]{\defOperator{#1}{#2}{V}{ar}{\lbrack}{\rbrack}{\mathbb}}
+#+LATEX_HEADER: \newcommandx\Cov[2][1=,2=]{\defOperator{#1}{#2}{C}{ov}{\lbrack}{\rbrack}{\mathbb}}
+#+LATEX_HEADER: \newcommandx\Binom[2][1=,2=]{\defOperator{#1}{#2}{B}{}{(}{)}{\mathcal}}
+#+LATEX_HEADER: \newcommandx\Gaus[2][1=,2=]{\defOperator{#1}{#2}{N}{}{(}{)}{\mathcal}}
+#+LATEX_HEADER: \newcommandx\Wishart[2][1=,2=]{\defOperator{#1}{#2}{W}{ishart}{(}{)}{\mathcal}}
+#+LATEX_HEADER: \newcommandx\Likelihood[2][1=,2=]{\defOperator{#1}{#2}{L}{}{(}{)}{\mathcal}}
+#+LATEX_HEADER: \newcommandx\logLikelihood[2][1=,2=]{\defOperator{#1}{#2}{\ell}{}{(}{)}{}}
+#+LATEX_HEADER: \newcommandx\Information[2][1=,2=]{\defOperator{#1}{#2}{I}{}{(}{)}{\mathcal}}
+#+LATEX_HEADER: \newcommandx\Hessian[2][1=,2=]{\defOperator{#1}{#2}{H}{}{(}{)}{\mathcal}}
+#+LATEX_HEADER: \newcommandx\Score[2][1=,2=]{\defOperator{#1}{#2}{S}{}{(}{)}{\mathcal}}
+**** Operators
+#+LATEX_HEADER: \newcommandx\Vois[2][1=,2=]{\defOperator{#1}{#2}{V}{}{(}{)}{\mathcal}}
+#+LATEX_HEADER: \newcommandx\IF[2][1=,2=]{\defOperator{#1}{#2}{IF}{}{(}{)}{\mathcal}}
+#+LATEX_HEADER: \newcommandx\Ind[1][1=]{\defOperator{}{#1}{1}{}{(}{)}{\mathds}}
+#+LATEX_HEADER: \newcommandx\Max[2][1=,2=]{\defUOperator{#1}{#2}{(}{)}{min}}
+#+LATEX_HEADER: \newcommandx\Min[2][1=,2=]{\defUOperator{#1}{#2}{(}{)}{max}}
+#+LATEX_HEADER: \newcommandx\argMax[2][1=,2=]{\defUOperator{#1}{#2}{(}{)}{argmax}}
+#+LATEX_HEADER: \newcommandx\argMin[2][1=,2=]{\defUOperator{#1}{#2}{(}{)}{argmin}}
+#+LATEX_HEADER: \newcommandx\cvD[2][1=D,2=n \rightarrow \infty]{\xrightarrow[#2]{#1}}
+#+LATEX_HEADER: \newcommandx\Hypothesis[2][1=,2=]{
+#+LATEX_HEADER:         \ifthenelse{\isempty{#1}}{
+#+LATEX_HEADER:         \mathcal{H}
+#+LATEX_HEADER:         }{
+#+LATEX_HEADER: 	\ifthenelse{\isempty{#2}}{
+#+LATEX_HEADER: 		\mathcal{H}_{#1}
+#+LATEX_HEADER: 	}{
+#+LATEX_HEADER: 	\mathcal{H}^{(#2)}_{#1}
+#+LATEX_HEADER:         }
+#+LATEX_HEADER:         }
+#+LATEX_HEADER: }
+#+LATEX_HEADER: \newcommandx\dpartial[4][1=,2=,3=,4=\partial]{
+#+LATEX_HEADER: 	\ifthenelse{\isempty{#3}}{
+#+LATEX_HEADER: 		\frac{#4 #1}{#4 #2}
+#+LATEX_HEADER: 	}{
+#+LATEX_HEADER: 	\left.\frac{#4 #1}{#4 #2}\right\rvert_{#3}
+#+LATEX_HEADER: }
+#+LATEX_HEADER: }
+#+LATEX_HEADER: \newcommandx\dTpartial[3][1=,2=,3=]{\dpartial[#1][#2][#3][d]}
+#+LATEX_HEADER: \newcommandx\ddpartial[3][1=,2=,3=]{
+#+LATEX_HEADER: 	\ifthenelse{\isempty{#3}}{
+#+LATEX_HEADER: 		\frac{\partial^{2} #1}{\partial #2^2}
+#+LATEX_HEADER: 	}{
+#+LATEX_HEADER: 	\frac{\partial^2 #1}{\partial #2\partial #3}
+#+LATEX_HEADER: }
+#+LATEX_HEADER: } 
+**** General math
+#+LATEX_HEADER: \newcommand\Real{\mathbb{R}}
+#+LATEX_HEADER: \newcommand\Rational{\mathbb{Q}}
+#+LATEX_HEADER: \newcommand\Natural{\mathbb{N}}
+#+LATEX_HEADER: \newcommand\trans[1]{{#1}^\intercal}%\newcommand\trans[1]{{\vphantom{#1}}^\top{#1}}
+#+LATEX_HEADER: \newcommand{\independent}{\mathrel{\text{\scalebox{1.5}{$\perp\mkern-10mu\perp$}}}}
+#+LaTeX_HEADER: \newcommand\half{\frac{1}{2}}
+#+LaTeX_HEADER: \newcommand\normMax[1]{\left|\left|#1\right|\right|_{max}}
+#+LaTeX_HEADER: \newcommand\normTwo[1]{\left|\left|#1\right|\right|_{2}}
+#+LATEX_HEADER: \newcommand\Veta{\boldsymbol{\eta}}
+
+** Notations
+
+#+LaTeX_HEADER:\newcommand{\Model}{\mathcal{M}}
+#+LaTeX_HEADER:\newcommand{\ModelHat}{\widehat{\mathcal{M}}}
+
+#+LaTeX_HEADER:\newcommand{\param}{\Theta}
+#+LaTeX_HEADER:\newcommand{\paramHat}{\widehat{\param}}
+#+LaTeX_HEADER:\newcommand{\paramCon}{\widetilde{\param}}
+
+#+LaTeX_HEADER:\newcommand{\Vparam}{\boldsymbol{\param}}
+#+LaTeX_HEADER:\newcommand{\VparamT}{\Vparam_0}
+#+LaTeX_HEADER:\newcommand{\VparamHat}{\boldsymbol{\paramHat}}
+#+LaTeX_HEADER:\newcommand{\VparamCon}{\boldsymbol{\paramCon}}
+
+#+LaTeX_HEADER:\newcommand{\X}{X}
+#+LaTeX_HEADER:\newcommand{\x}{x}
+#+LaTeX_HEADER:\newcommand{\VZ}{\boldsymbol{Z}}
+#+LaTeX_HEADER:\newcommand{\VX}{\boldsymbol{X}}
+#+LaTeX_HEADER:\newcommand{\Vx}{\boldsymbol{x}}
+
+#+LaTeX_HEADER:\newcommand{\Y}{Y}
+#+LaTeX_HEADER:\newcommand{\y}{y}
+#+LaTeX_HEADER:\newcommand{\VY}{\boldsymbol{Y}}
+#+LaTeX_HEADER:\newcommand{\Vy}{\boldsymbol{y}}
+#+LaTeX_HEADER:\newcommand{\Vvarepsilon}{\boldsymbol{\varepsilon}}
+
+

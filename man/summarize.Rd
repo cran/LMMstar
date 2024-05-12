@@ -13,9 +13,9 @@ summarize(
   columns = c("observed", "missing", "pc.missing", "mean", "sd", "min", "q1", "median",
     "q3", "max", "correlation"),
   FUN = NULL,
-  which = NULL,
   skip.reference = TRUE,
   digits = NULL,
+  filter = NULL,
   ...
 )
 }
@@ -51,11 +51,12 @@ When specifying a grouping variable, it will also attempt to count missing rows 
 \item{FUN}{[function] user-defined function for computing summary statistics.
 It should take a vector as an argument and output a named single value or a named vector.}
 
-\item{which}{deprecated, use the argument columns instead.}
-
 \item{skip.reference}{[logical] should the summary statistics for the reference level of categorical variables be omitted?}
 
 \item{digits}{[integer, >=0] the minimum number of significant digits to be used to display the results. Passed to \code{print.data.frame}}
+
+\item{filter}{[character] a regular expression passed to \code{grep} to filter the columns of the dataset.
+Relevant when using \code{.} to indicate all other variables.}
 
 \item{...}{additional arguments passed to argument \code{FUN}.}
 }
@@ -75,7 +76,7 @@ Confidence intervals (CI) for the median are computed via \code{asht::medianTest
 Correlation can be assessed when a grouping and ordering variable are given in the formula interface , e.g. Y ~ time|id.
 }
 \examples{
-## simulate data in the wide format
+#### simulate data (wide format) ####
 set.seed(10)
 d <- sampleRem(1e2, n.times = 3)
 d$treat <-  sample(LETTERS[1:3], NROW(d), replace=TRUE, prob=c(0.3, 0.3, 0.4) )
@@ -84,16 +85,18 @@ d$treat <-  sample(LETTERS[1:3], NROW(d), replace=TRUE, prob=c(0.3, 0.3, 0.4) )
 d2 <- d
 d2[1,"Y2"] <- NA
 
-## run summarize
+#### summarize (wide format) ####
 summarize(Y1 ~ 1, data = d)
 summarize(Y1 ~ 1, data = d, FUN = quantile, p = c(0.25,0.75))
 summarize(Y1+Y2 ~ X1, data = d)
+summarize(treat ~ 1, data = d)
 summarize(treat ~ 1, skip.reference = FALSE, data = d)
 
 summarize(Y1 ~ X1, data = d2)
 summarize(Y1+Y2 ~ X1, data = d2, na.rm = TRUE)
+summarize(. ~ treat, data = d2, na.rm = TRUE, filter = "Y")
 
-## long format
+#### summarize (long format) ####
 dL <- reshape(d, idvar = "id", direction = "long",
              v.names = "Y", varying = c("Y1","Y2","Y3"))
 summarize(Y ~ time + X1, data = dL)
@@ -109,5 +112,6 @@ dL$time3 <- dL$time == 3
 e.S <- summarize(Y ~ time2 + time3 + X1 | id, data = dL, na.rm = TRUE)
 e.S
 attr(e.S, "correlation")
+
 }
 \keyword{utilities}

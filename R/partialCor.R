@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: May  1 2022 (17:01) 
 ## Version: 
-## Last-Updated: aug  1 2023 (14:25) 
+## Last-Updated: Mar 10 2024 (15:59) 
 ##           By: Brice Ozenne
-##     Update #: 518
+##     Update #: 528
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -330,9 +330,8 @@ partialCor.list <- function(object, data, repetition = NULL, structure = NULL, b
                 code.rho <- e.lmm$design$param[e.lmm$design$param$type=="rho","code"]
                 name.rhoWithinBlock <- name.rho[grepl("R.",code.rho)]
                 name.rhoAcrossBlock <- setdiff(name.rho, c(name.rhoWithinBlock, name.rho.marginal))
-
                 test.atanh <- identical(attr(out,"backtransform")$FUN,"tanh")
-                out2 <- estimate(e.lmm, df = df, f = function(p){
+                out2 <- estimate(e.lmm, df = df, f = function(p){ ## p <- coef(e.lmm, effects = "all")
                     if(any(p[name.rhoWithinBlock]<0)){
                         iOut <- c(NA,NA)
                     }else{
@@ -344,7 +343,7 @@ partialCor.list <- function(object, data, repetition = NULL, structure = NULL, b
                 }, ...)
 
                 if(test.atanh){
-                    out2 <- .backtransform(out2, type.param = "rho", backtransform.names = NULL, backtransform = c(FALSE,FALSE,FALSE,TRUE),
+                    out2 <- .backtransform(out2, type.param = rep("rho",NROW(out2)), backtransform.names = NULL, backtransform = c(FALSE,FALSE,FALSE,TRUE),
                                            transform.mu = NULL, transform.sigma = NULL, transform.k = NULL, transform.rho = "atanh")
                         
                 }
@@ -663,7 +662,6 @@ partialCor.lmm <- function(object, level = 0.95, R2 = FALSE, se = TRUE, df = TRU
   
 ##                     partial.r2 <- sum(Mpartial.R2[,"R2"] * (Mpartial.R2[,"n"] / sum(Mpartial.R2[,"n"])))
 
-## browser()
 ##                 }else{
 ##                     partial.r2 <- NA
 ##                 }

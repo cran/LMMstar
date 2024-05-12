@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: feb  9 2022 (14:51) 
 ## Version: 
-## Last-Updated: nov  8 2023 (15:09) 
+## Last-Updated: May 12 2024 (17:06) 
 ##           By: Brice Ozenne
-##     Update #: 489
+##     Update #: 505
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -64,6 +64,7 @@
 ## * rbind.Wald_lmm (code)
 ##' @export
 rbind.Wald_lmm <- function(model, ..., effects = NULL, rhs = NULL, name = NULL, sep = ": "){
+
     default <- LMMstar.options()
     call <- match.call()
     
@@ -90,7 +91,8 @@ rbind.Wald_lmm <- function(model, ..., effects = NULL, rhs = NULL, name = NULL, 
 
     Utype <- unique(unlist(table.args$type))
 
-    newtable.args <- data.frame(type = ifelse(length(Utype)>1,"all",Utype), sep = sep, 
+    newtable.args <- data.frame(type = ifelse(length(Utype)>1,"all",Utype),
+                                sep = sep, 
                                 table.args[1,c("robust","df","ci","transform.sigma","transform.k","transform.rho","backtransform")])
 
     newobject <- list()
@@ -106,6 +108,12 @@ rbind.Wald_lmm <- function(model, ..., effects = NULL, rhs = NULL, name = NULL, 
     
     if(any(table.args$ci==FALSE)){
         stop("All argument should contain a \"glht\" object, i.e. call anova with argument ci=TRUE. \n")
+    }
+    if(any(newtable.args$ACO!=table.args$ACO[-1])){
+        stop("Element \'ACO\' should take the same value for all objects. \n")
+    }
+    if(any(newtable.args$ATE!=table.args$ATE[-1])){
+        stop("Element \'ATE\' should take the same value for all objects. \n")
     }
     if(any(newtable.args$robust!=table.args$robust[-1])){
         stop("Element \'robust\' should take the same value for all objects. \n")
@@ -339,6 +347,7 @@ rbind.Wald_lmm <- function(model, ..., effects = NULL, rhs = NULL, name = NULL, 
     if(inherits(C.vcov.C_M1,"try-error")){
         multistat <- NA
         attr(multistat,"error") <- "\n  Could not invert the covariance matrix for the proposed contrast."
+        warning(attr(multistat,"error"))
     }else{
         multistat <- as.double(t(outSimp$C %*% beta.estimate - outSimp$rhs) %*% C.vcov.C_M1 %*% (outSimp$C %*% beta.estimate - outSimp$rhs))/outSimp$dim 
     }

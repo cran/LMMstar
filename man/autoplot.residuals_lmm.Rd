@@ -9,14 +9,20 @@
   object,
   type = NULL,
   type.residual = NULL,
-  by.repetition = TRUE,
+  time.var = NULL,
+  facet = NULL,
+  facet_nrow = NULL,
+  facet_ncol = NULL,
   engine.qqplot = "ggplot2",
   add.smooth = TRUE,
   digits.cor = 2,
   size.text = 16,
+  color = NULL,
+  obs.size = NULL,
   mean.size = c(3, 1),
   ci.alpha = 0.25,
-  scales = "free",
+  position = NULL,
+  scales = "fixed",
   labeller = "label_value",
   ...
 )
@@ -30,7 +36,14 @@
 
 \item{type.residual}{[character] Type of residual for which the graphical representation should be made.}
 
-\item{by.repetition}{[logical] Should a seperate graphical display be made for each repetition.}
+\item{time.var}{[character] x-axis variable for the plot. Only relevant when argument type is one of \code{"scatterplot"}, \code{"scatterplot2"}, \code{"partial"}, \code{"partial-center"},}
+
+\item{facet}{[formula] split the plot into a matrix of panels defined by the variables in the formula.
+Internally it calls \code{ggplot2::facet_wrap} or \code{ggplot2::facet_grid} depending on whether the formula contains a variable on the left hand side.}
+
+\item{facet_nrow}{[integer] number of rows of panels in the graphical display.}
+
+\item{facet_ncol}{[integer] number of columns of panels  in the graphical display.}
 
 \item{engine.qqplot}{[character] Should ggplot2 or qqtest be used to display quantile-quantile plots?
 Only used when argument \code{type} is \code{"qqplot"}.}
@@ -43,9 +56,16 @@ No correlation coefficient is displayed when set to 0. Only used when argument \
 
 \item{size.text}{[numeric, >0] Size of the font used to displayed text when using ggplot2.}
 
+\item{color}{[character] color of the dots representing the observations.
+When displaying partial residuals, should contain a second color indicating how to display the model fit.}
+
+\item{obs.size}{[numeric vector] size of the dots representing the observations.}
+
 \item{mean.size}{[numeric vector of length 2] size of the point and line for the mean trajectory.}
 
 \item{ci.alpha}{[numeric, 0-1] When not NA, transparency parameter used to display the confidence intervals.}
+
+\item{position}{[character] relative position of the points when colored according to a variable.}
 
 \item{scales, labeller}{[character] Passed to \code{ggplot2::facet_wrap}.}
 

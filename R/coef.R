@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:30) 
 ## Version: 
-## Last-Updated: aug  1 2023 (15:03) 
+## Last-Updated: maj  7 2024 (11:31) 
 ##           By: Brice Ozenne
-##     Update #: 674
+##     Update #: 707
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -88,6 +88,8 @@
 coef.lmm <- function(object, effects = NULL, p = NULL,
                      transform.sigma = "none", transform.k = "none", transform.rho = "none", transform.names = TRUE, ...){
 
+    mycall <- match.call()
+    
     ## ** extract from object
     param.name <- object$design$param$name
     param.type <- stats::setNames(object$design$param$type,param.name)
@@ -125,13 +127,36 @@ coef.lmm <- function(object, effects = NULL, p = NULL,
     effects <- match.arg(effects, c("mean","fixed","variance","correlation","ranef"), several.ok = TRUE)
     effects[effects== "fixed"] <- "mean"
 
-    init <- .init_transform(transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, 
-                            x.transform.sigma = object$reparametrize$transform.sigma, x.transform.k = object$reparametrize$transform.k, x.transform.rho = object$reparametrize$transform.rho)
+    ## initialize parameter values
+    init <- .init_transform(p = p, transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, 
+                            x.transform.sigma = object$reparametrize$transform.sigma, x.transform.k = object$reparametrize$transform.k, x.transform.rho = object$reparametrize$transform.rho,
+                            table.param = object$design$param)
+    test.notransform <- init$test.notransform
     transform.sigma <- init$transform.sigma
     transform.k <- init$transform.k
     transform.rho <- init$transform.rho
-    test.notransform <- init$test.notransform
-    
+    if(transform.rho=="cov"){
+        if("transform.k" %in% names(mycall) == FALSE){
+            transform.k <- "var"
+        }
+        if("transform.sigma" %in% names(mycall) == FALSE){
+            transform.sigma <- "square"
+        }
+    }
+    if(transform.k %in% c("logsd","var","logvar") && "transform.sigma" %in% names(mycall) == FALSE){
+        transform.sigma <- switch(transform.k,
+                                  "logsd" = "log",
+                                  "var" = "square",
+                                  "logvar" = "logsquare")
+                                      
+    }
+    transform <- init$transform
+    if(!is.null(p)){
+        theta <- init$p
+    }else{
+        theta <- object$param
+    }
+
     effects2 <- effects
     if(transform.rho == "cov"){
         if(all("correlation" %in% effects == FALSE)){
@@ -141,100 +166,43 @@ coef.lmm <- function(object, effects = NULL, p = NULL,
             effects2 <- c("variance",effects2)
         }
     }
-    if(!is.null(p)){
-        if(any(duplicated(names(p)))){
-            stop("Incorrect argument \'p\': contain duplicated names \"",paste(unique(names(p)[duplicated(names(p))]), collapse = "\" \""),"\".\n")
-        }
-        if(any(param.name %in% names(p) == FALSE)){
-            stop("Incorrect argument \'p\': missing parameter(s) \"",paste(param.name[param.name %in% names(p) == FALSE], collapse = "\" \""),"\".\n")
-        }
-        p <- p[param.name]
-        if(object$reparametrize$transform){
-            reparametrize.p <- .reparametrize(p = p[object.reparametrize.name],  
-                                              type = param.type[object.reparametrize.name],
-                                              sigma = param.sigma[object.reparametrize.name],
-                                              k.x = param.k.x[object.reparametrize.name],
-                                              k.y = param.k.y[object.reparametrize.name],
-                                              level = param.level[object.reparametrize.name],                                              
-                                              Jacobian = FALSE, dJacobian = FALSE, inverse = FALSE,
-                                              transform.sigma = transform.sigma,
-                                              transform.k = transform.k,
-                                              transform.rho = transform.rho,
-                                              transform.names = FALSE)$p
-        }else{
-            reparametrize.p <- p[object.reparametrize.name]
-        }
+
+    ## apply transformation request by the user
+    if(is.null(p) && test.notransform){
+        theta.trans <- theta
+        theta.trans[match(object.reparametrize.name, names(theta))] <- object.reparametrize.value
+        if(transform.names){
+            names(theta.trans)[match(object.reparametrize.name, names(theta))] <- object.reparametrize.newname
+        }        
+    }else if((transform.sigma == "none" || "variance" %in% effects2 == FALSE) && (transform.k == "none" || "variance" %in% effects2 == FALSE) && (transform.rho == "none" || "correlation" %in% effects2 == FALSE)){
+        theta.trans <- theta
     }else{
-        p <- object$param
-        reparametrize.p <- object.reparametrize.value
+        reparam <- .reparametrize(p = theta[object.reparametrize.name],  
+                                  type = param.type[object.reparametrize.name],
+                                  sigma = param.sigma[object.reparametrize.name],
+                                  k.x = param.k.x[object.reparametrize.name],
+                                  k.y = param.k.y[object.reparametrize.name],
+                                  level = param.level[object.reparametrize.name],                                              
+                                  Jacobian = FALSE, dJacobian = FALSE, inverse = FALSE,
+                                  transform.sigma = transform.sigma,
+                                  transform.k = transform.k,
+                                  transform.rho = transform.rho,
+                                  transform.names = transform.names)
+        theta.trans <- theta
+        theta.trans[match(object.reparametrize.name, names(theta))] <- reparam$p
+        if(transform.names){
+            names(theta.trans)[match(object.reparametrize.name, names(theta))] <- reparam$newname
+        }        
     }
 
     ## ** extract
-    out <- NULL
-    if("mean" %in% effects2){
-        out <- c(out, p[param.type=="mu"])
-    }
-    if(any(c("variance","correlation") %in% effects2)){
-        pVar <- NULL
-        if("variance" %in% effects2){
-            if(test.notransform){                
-                index.sigmak <- names(param.type)[param.type %in% c("sigma","k")]
-                if(transform.names && !is.null(object.reparametrize.newname)){
-                    pVar <- c(pVar, stats::setNames(reparametrize.p[index.sigmak],object.reparametrize.newname[match(index.sigmak,names(reparametrize.p))]))
-                }else{
-                    pVar <- c(pVar, reparametrize.p[index.sigmak])
-                }                    
-            }else{
-                pVar <- c(pVar, p[param.name[param.type %in% c("sigma","k")]])
-            }
-        }
-        if("correlation" %in% effects2){
-            if(test.notransform){
-                index.rho <- names(param.type)[param.type %in% c("rho")]
-                if(transform.names && !is.null(object.reparametrize.newname)){
-                    pVar <- c(pVar, stats::setNames(reparametrize.p[index.rho],object.reparametrize.newname[match(index.rho,names(reparametrize.p))]))
-                }else{
-                    pVar <- c(pVar, reparametrize.p[index.rho])
-                }                    
-            }else{
-                pVar <- c(pVar, p[param.name[param.type %in% c("rho")]])
-            }
-        }
-        if(!test.notransform){
-            ls.reparam <- .reparametrize(p = pVar,  
-                                         type = param.type[names(pVar)], 
-                                         sigma = param.sigma[names(pVar)], 
-                                         k.x = param.k.x[names(pVar)], 
-                                         k.y = param.k.y[names(pVar)], 
-                                         level = param.level[names(pVar)], 
-                                         Jacobian = FALSE, dJacobian = FALSE, inverse = FALSE,
-                                         transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, transform.names = transform.names)
-            outVar <- ls.reparam$p
-            if(ls.reparam$transform){
-                newname <- stats::setNames(ls.reparam$newname,names(pVar))
-            }else{
-                newname <- NULL
-            }            
-        }else{
-            outVar <- pVar
-            newname <- NULL
-        }
-        out <- c(out,outVar)
+    keep.type <- unlist(lapply(effects, switch,
+                               "mean" = "mu",
+                               "variance" = c("sigma","k"),
+                               "correlation" = "rho"))
+    out <- theta.trans[param.type %in% keep.type]
 
-        }else{
-            newname <- NULL
-        }
-    
-    ## ** post process
-    if(("variance" %in% effects2) && ("variance" %in% effects == FALSE)){
-        index.rm <- which(names(newname) %in% param.name[param.type %in% c("sigma","k")])
-        newname <- newname[-index.rm]
-        out <- out[-index.rm]
-    }
-    if(length(newname)>0){
-        ## rename
-        names(out)[match(names(newname),names(out))] <- as.character(newname)
-    }
+    ## ** export
     return(out)
 }
 

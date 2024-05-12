@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: jul 31 2023 (09:54) 
 ## Version: 
-## Last-Updated: jul 31 2023 (10:29) 
+## Last-Updated: May 12 2024 (20:35) 
 ##           By: Brice Ozenne
-##     Update #: 10
+##     Update #: 18
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -20,7 +20,7 @@ if(FALSE){
     library(numDeriv)
     library(lava)
     library(multcomp)
-    library(emmeans)
+    library(nlme)
 
     library(LMMstar)
 }
@@ -102,7 +102,7 @@ test_that("Compound symmetry structure (REML)",{
     newp.cov <- newp; newp.cov[c("sigma","rho")] <- c(newp["sigma"]^2,newp["rho"]*newp["sigma"]^2)
     ## GS <- jacobian(func = function(p){p[c("sigma","rho")] <- c(sqrt(p["sigma"]),p["rho"]/p["sigma"]); logLik(eCS.lmm, p = p, transform.sigma = "none", transform.k = "none", transform.rho = "cov")}, x = newp.cov)
     GS <- rbind(c(-1434.54797024, -360.96098759, -360.9609876, -360.96098776, -75945.93430486, -597.3281072, 2657.67539179, 8019.18564457))
-    test <- score(eCS.lmm, effects = "all", p = newp, transform.sigma = "none", transform.k = "none", transform.rho = "cov")
+    test <- score(eCS.lmm, effects = "all", p = newp, transform.rho = "cov")
     expect_equal(as.double(test), as.double(GS), tol = 1e-6)
 
     ## ** information
@@ -164,7 +164,7 @@ test_that("Compound symmetry structure (REML)",{
                 c(-973.19305846, -245.45864557, -245.45864555, -245.45864554, -51521.49497161, -405.22560363, 3750.76786163, 10824.81657287), 
                 c(-2919.57917442, -727.73441273, -727.73441286, -727.7344128, -154564.4849145, -1215.67681085, 10824.81657287, 32901.93673129)
                 )
-    test <- information(eCS.lmm, p = newp, effects = "all", transform.sigma = "none", transform.k = "none", transform.rho = "cov")
+    test <- information(eCS.lmm, p = newp, effects = "all", transform.rho = "cov")
     expect_equal(as.double(test), as.double(GS), tol = 1e-6)
 
     ## no transformation 
@@ -196,15 +196,15 @@ test_that("Compound symmetry structure (REML)",{
     sigma(eCS.lmm)
 
     ## ** prediction
-    test <- predict(eCS.lmm, newdata = dL)
+    test <- predict(eCS.lmm, newdata = dL, se = TRUE)
     index <- sample.int(NROW(dL))
-    test2 <- predict(eCS.lmm, newdata = dL[index,,drop=FALSE])
-    if(require(AICcmodavg)){
-        GS <- AICcmodavg::predictSE(eCS.gls, newdata = dL)
-        expect_equivalent(test$estimate,GS$fit, tol = 1e-7)
-        expect_equivalent(test$se,GS$se.fit, tol = 1e-7)
-        expect_equivalent(test[index,,drop=FALSE],test2, tol = 1e-7)
-    }
+    test2 <- predict(eCS.lmm, newdata = dL[index,,drop=FALSE], se = TRUE)
+    ## GS <- AICcmodavg::predictSE(eCS.gls, newdata = dL)
+    GS <- list(fit = c("1" = 2.78132573, "2" = 3.04660727, "3" = 3.47291713, "4" = 3.30670866, "5" = 2.74336483, "6" = 3.19347129) ,
+               se.fit = c("1" = 0.11128311, "2" = 0.11700474, "3" = 0.11383802, "4" = 0.11360494, "5" = 0.11036375, "6" = 0.12667589) )
+    expect_equivalent(head(test$estimate),GS$fit, tol = 1e-7)
+    expect_equivalent(head(test$se),GS$se.fit, tol = 1e-7)
+    expect_equivalent(test[index,,drop=FALSE],test2, tol = 1e-7)
 
 })
 
@@ -568,18 +568,18 @@ test_that("Stratified compound symmetry structure (REML)",{
     expect_equal(eSCS.lmm_anova[eSCS.lmm_anova$type=="rho","df.denom"], c(7.450136), tol = 1e-1)
 
     ## ** getVarCov
-    Omega.GS <- list("2:2" = matrix(c(0.90433467, 0.09326275, 0.09326275, 0.09326275, 0.09326275, 0.90433467, 0.09326275, 0.09326275, 0.09326275, 0.09326275, 0.90433467, 0.09326275, 0.09326275, 0.09326275, 0.09326275, 0.90433467), 
+    Omega.GS <- list("female" = matrix(c(0.90433467, 0.09326275, 0.09326275, 0.09326275, 0.09326275, 0.90433467, 0.09326275, 0.09326275, 0.09326275, 0.09326275, 0.90433467, 0.09326275, 0.09326275, 0.09326275, 0.09326275, 0.90433467), 
                                   nrow = 4, 
                                   ncol = 4, 
                                   dimnames = list(c("Y1", "Y2", "Y3", "Y4"),c("Y1", "Y2", "Y3", "Y4")) 
                                   ),
-                     "1:1" = matrix(c(1.01368386, -0.09324164, -0.09324164, -0.09324164, -0.09324164, 1.01368386, -0.09324164, -0.09324164, -0.09324164, -0.09324164, 1.01368386, -0.09324164, -0.09324164, -0.09324164, -0.09324164, 1.01368386), 
+                     "male" = matrix(c(1.01368386, -0.09324164, -0.09324164, -0.09324164, -0.09324164, 1.01368386, -0.09324164, -0.09324164, -0.09324164, -0.09324164, 1.01368386, -0.09324164, -0.09324164, -0.09324164, -0.09324164, 1.01368386), 
                                   nrow = 4, 
                                   ncol = 4, 
                                   dimnames = list(c("Y1", "Y2", "Y3", "Y4"),c("Y1", "Y2", "Y3", "Y4")) 
                                   ) 
                      )
-    expect_equivalent(sigma(eSCS.lmm), Omega.GS, tol = 1e-5)
+    expect_equivalent(sigma(eSCS.lmm)[names(Omega.GS)], Omega.GS, tol = 1e-5)
 })
 
 ## * Stratified unstructed covariance matrix
@@ -825,17 +825,17 @@ test_that("Stratified unstructured (REML)",{
 
 
     ## ** getVarCov
-    Omega.GS <- list("2:2" = matrix(c(0.87759105, 0.1151575, 0.06705109, 0.12241344, 0.1151575, 0.87666546, -0.09762837, 0.35757795, 0.06705109, -0.09762837, 0.81905439, -0.00726966, 0.12241344, 0.35757795, -0.00726966, 1.04251101), 
+    Omega.GS <- list("female" = matrix(c(0.87759105, 0.1151575, 0.06705109, 0.12241344, 0.1151575, 0.87666546, -0.09762837, 0.35757795, 0.06705109, -0.09762837, 0.81905439, -0.00726966, 0.12241344, 0.35757795, -0.00726966, 1.04251101), 
                                     nrow = 4, 
                                     ncol = 4, 
                                     dimnames = list(c("Y1", "Y2", "Y3", "Y4"),c("Y1", "Y2", "Y3", "Y4"))),
-                     "1:1" = matrix(c(0.90996917, -0.18047956, -0.03950488, -0.00529246, -0.18047956, 0.9682825, -0.1395401, -0.21029739, -0.03950488, -0.1395401, 1.01961468, 0.01518698, -0.00529246, -0.21029739, 0.01518698, 1.15655052), 
+                     "male" = matrix(c(0.90996917, -0.18047956, -0.03950488, -0.00529246, -0.18047956, 0.9682825, -0.1395401, -0.21029739, -0.03950488, -0.1395401, 1.01961468, 0.01518698, -0.00529246, -0.21029739, 0.01518698, 1.15655052), 
                                     nrow = 4, 
                                     ncol = 4, 
                                     dimnames = list(c("Y1", "Y2", "Y3", "Y4"),c("Y1", "Y2", "Y3", "Y4"))) 
                      )
 
-    expect_equivalent(sigma(eSUN.lmm), Omega.GS, tol = 1e-5)
+    expect_equivalent(sigma(eSUN.lmm)[names(Omega.GS)], Omega.GS, tol = 1e-5)
 })
 
 ## * Missing data

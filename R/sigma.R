@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (12:57) 
 ## Version: 
-## Last-Updated: aug  1 2023 (14:20) 
+## Last-Updated: May  9 2024 (15:20) 
 ##           By: Brice Ozenne
-##     Update #: 670
+##     Update #: 764
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -103,15 +103,21 @@ sigma.lmm <- function(object, cluster = NULL, p = NULL, chol = FALSE, inverse = 
                                     Upattern$name)
 
     ## ** normalize user imput
-    ## dot
+
+    ## dots
     dots <- list(...)
     if(length(dots)>0){
         stop("Unknown argument(s) \'",paste(names(dots),collapse="\' \'"),"\'. \n")
     }
-
+    
     ## p
-    if(!is.null(p) && any(names(which(param.type %in% c("sigma","k","rho"))) %in% names(p) == FALSE)){
-        stop("Incorrect argument \'p\' - it should be a vector with names containing all variance and correlation parameters. \n")
+    if(!is.null(p)){
+        init <- .init_transform(p = p, transform.sigma = NULL, transform.k = NULL, transform.rho = NULL, 
+                                x.transform.sigma = object$reparametrize$transform.sigma, x.transform.k = object$reparametrize$transform.k, x.transform.rho = object$reparametrize$transform.rho,
+                                table.param = object$design$param)
+        theta <- init$p
+    }else{
+        theta <- object$param
     }
 
     ## cluster    
@@ -121,7 +127,7 @@ sigma.lmm <- function(object, cluster = NULL, p = NULL, chol = FALSE, inverse = 
             if(outcome.var %in% names(cluster) == FALSE){
                 cluster[[outcome.var]] <- NA
             }
-            newdesign <- stats::model.matrix(object, data = cluster, effect = "variance", simplify = FALSE)            
+            newdesign <- stats::model.matrix(object, newdata = cluster, effect = "variance", simplify = FALSE, na.rm = FALSE)            
             cluster.num <- 1:length(newdesign$index.cluster)
             if(!is.null(attr(object$cluster$var,"original"))){
                 cluster.level <- cluster[sapply(newdesign$index.cluster, "[", 1), attr(object$cluster$var,"original")]                
@@ -165,7 +171,7 @@ sigma.lmm <- function(object, cluster = NULL, p = NULL, chol = FALSE, inverse = 
 
             if(!is.null(p)){
                 Omega <- .calc_Omega(object = object.structure,
-                                     param = p,
+                                     param = theta,
                                      keep.interim = FALSE)
             }else{
                 Omega <- object.Omega
@@ -175,30 +181,34 @@ sigma.lmm <- function(object, cluster = NULL, p = NULL, chol = FALSE, inverse = 
                 }
             }
             Omega.time <- pattern.Utime[names(Omega)]
-            
+
         }else{
-            ## Create an artifical cluster agregating all timepoints
+            ## find group pattern (ignoring the time variable)
+            Upattern$group <- .nameUpatterns(object$design$vcov, xfactor = object$xfactor, ignore.time = TRUE, sep = LMMstar.options()$sep[c("Gpattern.var","Gpattern.level")])
+            Ugroup <- unique(Upattern$group)
+            cluster.var <- attr(object$design$vcov$name$cluster,"original")
+            vcov.var <- unique(stats::na.omit(c(attr(object$design$vcov$name$time,"original"),
+                                                object$design$vcov$name$strata,
+                                                object$design$vcov$name$var[[1]],
+                                                object$design$vcov$name$cor[[1]])))
+            
+            
+            ## Create artifical clusters agregating patterns
             ## (typically usefull in presence of missing values, e.g. only observe time A-B or time A-C but not A-B-C together)
-            keep.index.strata <- which(vec.ntime < n.time)
-            df.fulltime <- do.call(rbind,lapply(keep.index.strata, function(iStrata){ ## iStrata <- keep.index.strata[1]
-                if(!is.na(attr(strata.var,"original"))){
-                    ## NOTE: use U.time.original instead of U.time in case multiple time variables
-                    iDF <- data.frame(U.strata[iStrata],
-                                      U.time.original, 
-                                      object$cluster$levels[iStrata])
-                    names(iDF) <- c(attr(strata.var,"original"),time.var,cluster.var)
-                }else{
-                    iDF <- data.frame(U.time.original,object$cluster$levels[iStrata])
-                    names(iDF) <- c(time.var,cluster.var)
+            df.fulltime <- do.call(rbind,lapply(Ugroup, function(iGroup){ ## iGroup <- Ugroup[1]
+                iPattern <- Upattern[Upattern$group==iGroup,c("name","n.time")]
+                iCluster <- unlist(attr(object$design$vcov$pattern,"list")[iPattern$name])
+                iDF <- object$data[object$data$XXcluster.indexXX %in% iCluster,c("XXtime.indexXX",vcov.var),drop=FALSE]
+                if(!is.na(cluster.var)){
+                    iDF[[cluster.var]] <- iGroup
                 }
-                return(iDF)
+                return(unique(iDF)[c(cluster.var,vcov.var)])
             }))
-            df.fulltime[[object$outcome$var]] <- NA
             ## update structure
-            object$design <- model.matrix(object, data = df.fulltime, effects = "variance", simplify = FALSE)
+            object$design <- stats::model.matrix(object, newdata = df.fulltime, effects = "variance", simplify = FALSE)
             ## evaluate residual varince covariance matrix
             Omega <- .calc_Omega(object = object$design$vcov,
-                                 param = if(is.null(p)){object$param}else{p},
+                                 param = theta,
                                  keep.interim = FALSE)
             ## identify timepoints
             Upattern <- object$design$vcov$Upattern
@@ -209,13 +219,14 @@ sigma.lmm <- function(object, cluster = NULL, p = NULL, chol = FALSE, inverse = 
             Omega.time <- pattern.Utime[names(Omega)]
         }
 
+        ## add groups
+        Upattern$group <- .nameUpatterns(object$design$vcov, xfactor = object$xfactor, ignore.time = FALSE,
+                                         sep = LMMstar.options()$sep[c("Gpattern.var","Gpattern.level")])
+
     }else if(test.clusterDF){ ## for new clusters/times
 
-        if(is.null(p)){
-            p <- coef(object, effects = "all")
-        }
         Omega <- .calc_Omega(object = newdesign$vcov,
-                             param = p,
+                             param = theta,
                              keep.interim = FALSE)
         ## identify timepoints
         Unewpattern <- newdesign$vcov$Upattern
@@ -233,7 +244,7 @@ sigma.lmm <- function(object, cluster = NULL, p = NULL, chol = FALSE, inverse = 
 
         if(!is.null(p)){
             Omega <- .calc_Omega(object = object.structure,
-                                 param = p,
+                                 param = theta,
                                  keep.interim = FALSE)
         }else{
             Omega <- object.Omega
@@ -263,24 +274,20 @@ sigma.lmm <- function(object, cluster = NULL, p = NULL, chol = FALSE, inverse = 
     }
 
     ## ** subset residual variance-covariance matrix
-    if(is.null(cluster)){ ## find unique covariance patterns 
+    if(is.null(cluster)){ ## find unique covariance patterns
 
-        if(!is.null(Upattern$nameCov)){
-            vec.Upattern <- unlist(by(Upattern,Upattern$nameCov,function(iDf){
-                iDf$name[which.max(iDf$n.time)]
-            }, simplify = FALSE))
-        }else{
-            vec.Upattern <- unlist(by(Upattern,U.strata[Upattern$index.strata],function(iDf){
-                iDf$name[which.max(iDf$n.time)]
-            }, simplify = FALSE))
-        }
-
+        vec.Upattern <- unlist(by(Upattern,Upattern$group,function(iDf){
+            iDf$name[which.max(iDf$n.time)]
+        }, simplify = FALSE))
+        
         ## subset
         out <- Omega[vec.Upattern]
-        names(out) <- vec.Upattern        
+        if(!is.null(names(vec.Upattern))){
+            names(out) <- names(vec.Upattern)
+        }
 
         ## add possibly missing times
-        for(iPattern  in vec.Upattern){
+        for(iPattern  in 1:length(vec.Upattern)){
             if(!identical(colnames(out[[iPattern]]),U.time) || !identical(rownames(out[[iPattern]]),U.time)){
                 iOmega.save <- out[[iPattern]]
                 out[[iPattern]] <- matrix(NA, nrow = n.time, ncol = n.time, dimnames = list(U.time,U.time))

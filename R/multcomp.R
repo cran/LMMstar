@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: May 10 2021 (15:57) 
 ## Version: 
-## Last-Updated: jul 27 2023 (17:46) 
+## Last-Updated: May  5 2024 (20:14) 
 ##           By: Brice Ozenne
-##     Update #: 25
+##     Update #: 29
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -42,7 +42,6 @@
 #' @method estfun lmm
 #' 
 #' @keywords interface
-#' @export
 estfun.lmm <- function(x, ...){
     U <- lava::score(x, indiv = TRUE)
     return(U)

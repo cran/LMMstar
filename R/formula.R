@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: mar  5 2021 (21:53) 
 ## Version: 
-## Last-Updated: jul 28 2023 (16:44) 
+## Last-Updated: maj 10 2024 (17:39) 
 ##           By: Brice Ozenne
-##     Update #: 221
+##     Update #: 237
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -58,9 +58,12 @@ formula.lmm <- function(x, effects = "mean", ...){
 ##' formula2var(Y~(time|id))
 ##' formula2var(Y+Z~X+(1|id)+(1|region))
 ##' formula2var(Y+Z~s(X1)+X2*X3 + (X1|id:baseline))
+##'
+##' df <- cbind(Y=1, as.data.frame(matrix(1,ncol = 5, nrow = 1)))
+##' formula2var(Y ~ ., data = df)
 
 ## * formula2var (code)
-formula2var <- function(formula, specials = NULL, name.argument  = "formula",
+formula2var <- function(formula, data = NULL, specials = NULL, name.argument  = "formula",
                         suggestion = ""){
 
     ## ** normalize user input
@@ -80,14 +83,19 @@ formula2var <- function(formula, specials = NULL, name.argument  = "formula",
                 index.terms = list() ## position of the term in the right hand side of the formula
                 )                                   
     out$vars$all <- all.vars(formula)
-    ff.terms <- stats::terms(formula, specials = specials)
+    ff.terms <- stats::terms(formula, specials = specials, data = data)
     out$terms$intercept <- as.logical(attr(ff.terms,"intercept"))
 
     ## *** identify response variables
     ff.formulaLHS <- stats::update(formula, ~1)
     ff.varLHS <- all.vars(ff.formulaLHS)
     n.outcome <- length(ff.varLHS)
+
     if(n.outcome>0){
+        if(grepl("(",deparse(ff.formulaLHS), fixed = TRUE)){
+            stop("The left hand side of the formula should not contain any parenthesis. \n",
+                 "Consider adding a transformed variable in the dataset instead of via the formula interface. \n")
+        }
         out$vars$response <- ff.varLHS
     }
 

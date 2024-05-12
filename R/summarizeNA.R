@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: dec  7 2022 (17:13) 
 ## Version: 
-## Last-Updated: jul 10 2023 (18:16) 
+## Last-Updated: maj  7 2024 (10:18) 
 ##           By: Brice Ozenne
-##     Update #: 51
+##     Update #: 55
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -35,18 +35,25 @@
 ##' \code{\link{autoplot.summarizeNA}} for a graphical display.
 ##' 
 ##' @examples
+##' #### display missing data pattern (wide format) ####
 ##' data(gastricbypassW, package = "LMMstar")
-##' summarizeNA(gastricbypassW) 
+##' e.SNA <- summarizeNA(gastricbypassW) 
+##' plot(e.SNA)
 ##' summarizeNA(gastricbypassW, keep.data = FALSE)
-##' 
+##'
+##' #### display missing data pattern (long format) ####
+##' ## example 1
 ##' data(gastricbypassL, package = "LMMstar")
-##' summarizeNA(gastricbypassL, repetition = ~time|id)
-##' 
+##' e.SNAL <- summarizeNA(gastricbypassL, repetition = ~time|id)
+##' plot(e.SNAL, variable = "glucagonAUC")
+##'
+##' ## example 2
 ##' data(calciumL, package = "LMMstar")
 ##' mp <- summarizeNA(calciumL, repetition = ~visit|girl)
 ##' plot(mp, variable = "bmd")
 ##' summarizeNA(calciumL[,c("visit","girl","bmd")], repetition = ~visit|girl)
-##' 
+##'
+##' ## example 3
 ##' data(vasscoresW, package = "LMMstar")
 ##' summarizeNA(vasscoresW)
 
@@ -105,7 +112,7 @@ summarizeNA <- function(data, repetition = NULL, sep = "",
             data[[var.time]] <- as.factor(data[[var.time]])
         }
         Utime <- levels(data[[var.time]])
-            
+      
         ls.data <- stats::setNames(lapply(name.Y, function(iY){ ## iY <- name.Y[1]
             stats::reshape(data[,c(var.cluster,var.time,iY)], direction = "wide", timevar = var.time, idvar = var.cluster, varying = Utime)
         }), name.Y)

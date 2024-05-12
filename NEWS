@@ -1,8 +1,23 @@
 # -*- mode: org -*-
 
-* Version 1.0.0
+* Version 1.1.0
 ** User visible changes
-   - NEW FEATURE: support lme4 syntax for random intercepts
+   - NEW FEATURE effects.lmm to evaluate average counterfactuals.
+   - FIX: reparametrisation when using sigma() inside estimate
+   - CHANGE: Rename argument data into newdata in extractors such as logLik, information, model.frame, model.matrix, residuals, score, vcov
+   - CHANGE: Rename argument keep.newdata into keep.data
+   - CHANGE: Argument at for partial residual calculation (instead of using an attribute on argument type).
+   - REMOVE: method dummy.coef.lmm.
+   - REMOVE: dependency on emmeans and sandwich.
 
 ** Internal change
-   - substantial re-wrote of the functions for handling covariance patterns
+   - partial derivative of the residuals w.r.t. model parameters can be exported as an attribute grad.
+   - standard deviation for random effect computed via delta method instead of numerical differentiation
+
+
+* Version 1.0.0
+** User visible changes
+   - NEW FEATURE: support lme4 syntax for random intercepts.
+
+** Internal change
+   - substantial re-wrote of the functions for handling covariance patterns.

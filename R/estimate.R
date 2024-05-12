@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Jun 20 2021 (23:25) 
 ## Version: 
-## Last-Updated: aug  1 2023 (15:39) 
+## Last-Updated: May  9 2024 (13:40) 
 ##           By: Brice Ozenne
-##     Update #: 1036
+##     Update #: 1079
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -23,6 +23,7 @@
 ##' @param f [function] function of the model coefficient computing the parameter(s) of interest. Can accept extra-arguments.
 ##' @param robust [logical] Should robust standard errors (aka sandwich estimator) be output instead of the model-based standard errors. 
 ##' @param df [logical] Should degree of freedom, computed using Satterthwaite approximation, for the parameter of interest be output.
+##' Can also be a numeric vector providing providing the degrees of freedom relative to each estimate.
 ##' @param type.information [character] Should the expected information be used  (i.e. minus the expected second derivative) or the observed inforamtion (i.e. minus the second derivative).
 ##' @param level [numeric,0-1] the confidence level of the confidence intervals.
 ##' @param average [logical] is the estimand the average output of argument \code{f}?
@@ -43,8 +44,8 @@
 ##' set.seed(10)
 ##' dL <- sampleRem(1e2, n.times = 3, format = "long")
 ##' e.lmm1 <- lmm(Y ~ X1+X2+X3 + (1|id), repetition = ~visit|id, data = dL)
-##' nlme::ranef(e.lmm1)
-##' e.ranef <- estimate(e.lmm1, f  = function(p){nlme::ranef(e.lmm1, p = p)$estimate})
+##' nlme::ranef(e.lmm1, se = TRUE)
+##' e.ranef <- estimate(e.lmm1, f  = function(p){nlme::ranef(e.lmm1, p = p)})
 ##' e.ranef
 ##'
 ##' if(require(ggplot2)){
@@ -59,17 +60,28 @@
 ##' e.ANCOVA1 <- lm(Y2~Y1+X1, data = d)
 ##'
 ##' if(require(reshape2)){
-##'    dL2 <- melt(d, id.vars = c("id","Y1","X1"),  measure.vars = c("Y1","Y2"))
-##'    e.lmm <- lmm(value ~ variable + variable:X1, data = dL2, repetition = ~variable|id)
+##'    dL2 <- melt(d, id.vars = c("id","X1"),  measure.vars = c("Y1","Y2"),
+##'                value.name = "Y", variable.name = "time")
+##'    dL2$time <- factor(dL2$time, levels = c("Y1","Y2"), labels = c("1","2"))
+##'
+##'    ## estimated treatment effect (no baseline constraint)
+##'    e.lmm <- lmm(Y ~ time + time:X1, data = dL2, repetition = ~time|id)
 ##' 
 ##'    e.delta <- estimate(e.lmm, function(p){
-##'        c(Y1 = p["rho(Y1,Y2)"]*p["k.Y2"],
-##'          X1 = p["variableY2:X1"]-p["k.Y2"]*p["rho(Y1,Y2)"]*p["variableY1:X1"])
-##' })
-##'    ## same estimate and similar standard errors. 
-##'    e.delta
-##'    summary(e.ANCOVA1)$coef
-##'    ## Degrees of freedom are a bit off though
+##'        c(Y1 = p["rho(1,2)"]*p["k.2"],
+##'          X1 = p["time2:X1"]-p["k.2"]*p["rho(1,2)"]*p["time1:X1"])
+##'    }) ## same estimate and similar standard errors. 
+##'    e.delta ## Degrees of freedom are a bit off though
+##'    cbind(summary(e.ANCOVA1)$coef, df = df.residual(e.ANCOVA1))
+##'
+##'    ## estimated treatment effect (baseline constraint)
+##'    dL2$time2 <- as.numeric(dL2$time=="2")
+##'    e.lmmC <- lmm(Y ~ time2 + time2:X1, data = dL2, repetition = ~time|id)
+##'    e.deltaC <- estimate(e.lmmC, function(p){
+##'        c(Y1 = p["rho(1,2)"]*p["k.2"],
+##'          X1 = p["time2:X1"])
+##'    })
+##'    e.deltaC ## Degrees of freedom are a bit more accurate
 ##' }
 ##'
 ##' }
@@ -101,9 +113,20 @@ estimate.lmm <- function(x, f, df = !is.null(x$df), robust = FALSE, type.informa
     }else{
         transform2.rho <- transform.rho
     }
+    if(is.numeric(df)){
+        e.df <- df
+        df <- FALSE
+    }else if(is.logical(df) && length(df)==1){
+        e.df <- NULL
+    }else{
+        stop("Argument \'df\' must be a logical value or a numeric vector. \n")
+    }
 
     ## ** estimate
     beta <- coef(x, effects = "all", transform.sigma = transform2.sigma, transform.k = transform2.k, transform.rho = transform2.rho, transform.names = FALSE)
+    attr(beta, "transform.sigma") <- transform2.sigma
+    attr(beta, "transform.k") <- transform2.k
+    attr(beta, "transform.rho") <- transform2.rho
     type.beta <- stats::setNames(x$design$param$type,x$design$param$name)[names(beta)]
 
     ## ** partial derivative
@@ -111,20 +134,38 @@ estimate.lmm <- function(x, f, df = !is.null(x$df), robust = FALSE, type.informa
     if(length(f.formals)==1){
         if(average){
             fbeta.indiv <- f(beta) 
+            if(!is.vector(fbeta.indiv) || (!is.numeric(fbeta.indiv) && !is.logical(fbeta.indiv))){
+                stop("The output of the function defined in the argument \'FUN\' must be a numeric vector. \n")
+            }
             fbeta <- mean(fbeta.indiv)
             grad <- numDeriv::jacobian(func = function(x){mean(f(x))}, x = beta, method = method.numDeriv)
         }else{
             fbeta <- f(beta)
+            if(!is.vector(fbeta) || (!is.numeric(fbeta) && !is.logical(fbeta))){
+                stop("The output of the function defined in the argument \'FUN\' must be a numeric vector. \n")
+            }
+            if(!is.null(names(fbeta)) && any(duplicated(names(fbeta)))){
+                stop("The output of the function defined in the argument \'FUN\' should not contain duplicated names. \n")
+            }
             grad <- numDeriv::jacobian(func = f, x = beta, method = method.numDeriv)
         }
         
     }else{
         if(average){
             fbeta.indiv <- f(beta, ...)
+            if(!is.vector(fbeta.indiv) || (!is.numeric(fbeta.indiv) && !is.logical(fbeta.indiv))){
+                stop("The output of the function defined in the argument \'FUN\' must be a numeric vector. \n")
+            }
             fbeta <- mean(fbeta.indiv)
             grad <- numDeriv::jacobian(func = function(x, ...){mean(f(x, ...))}, x = beta, method = method.numDeriv)
         }else{
             fbeta <- f(beta, ...)
+            if(!is.vector(fbeta) || (!is.numeric(fbeta) && !is.logical(fbeta))){
+                stop("The output of the function defined in the argument \'FUN\' must be a numeric vector. \n")
+            }
+            if(!is.null(names(fbeta)) && any(duplicated(names(fbeta)))){
+                stop("The output of the function defined in the argument \'FUN\' should not contain duplicated names. \n")
+            }
             grad <- numDeriv::jacobian(func = f, x = beta, method = method.numDeriv, ...)
         }
     }
@@ -164,22 +205,29 @@ estimate.lmm <- function(x, f, df = !is.null(x$df), robust = FALSE, type.informa
         C.sigma.C <- sqrt(diag(C.Sigma.C))
     }
     
-    ## ** df 
-    if(!is.null(attr(Sigma, "dVcov"))){
+    ## ** df
+    if(!is.null(e.df)){
+        if(length(e.df)==1 & length(fbeta)>1){
+            e.df <- rep(e.df,length(fbeta))
+        }else if(length(e.df) != length(fbeta)){
+            stop("Incorrect length of argument \'df\': when a numeric vector it should have same length as the number of estimates. \n",
+                 "Valid length: ",length(fbeta),". \n")
+        }
+    }else if(!is.null(attr(Sigma, "dVcov"))){
         colnames(grad) <- colnames(Sigma)
-        df <- .dfX(X.beta = grad, vcov.param = Sigma, dVcov.param = attr(Sigma, "dVcov"))
+        e.df <- .dfX(X.beta = grad, vcov.param = Sigma, dVcov.param = attr(Sigma, "dVcov"))
     }else{
-        df <- rep(Inf, NROW(grad))
+        e.df <- rep(Inf, NROW(grad))
     }
 
     ## ** export
     alpha <- 1-level
     out <- data.frame(estimate = as.double(fbeta),
                       se = as.double(C.sigma.C),
-                      df = as.double(df),
-                      lower = as.double(fbeta + stats::qt(alpha/2, df = df) * C.sigma.C),
-                      upper = as.double(fbeta + stats::qt(1-alpha/2, df = df) * C.sigma.C),
-                      p.value = as.double(2*(1-stats::pt(abs(fbeta/C.sigma.C), df = df))))
+                      df = as.double(e.df),
+                      lower = as.double(fbeta + stats::qt(alpha/2, df = e.df) * C.sigma.C),
+                      upper = as.double(fbeta + stats::qt(1-alpha/2, df = e.df) * C.sigma.C),
+                      p.value = as.double(2*(1-stats::pt(abs(fbeta/C.sigma.C), df = e.df))))
     attr(out,"gradient") <- grad
     if(!is.null(names(fbeta))){
         rownames(out) <- names(fbeta)
@@ -601,7 +649,7 @@ estimate.rbindWald_lmm <- function(x, f, robust = FALSE, level = 0.95,
         }else if(cv==-2){
             attr(cv,"message") <- "Stop optimization before convergence (log-likelihood=NA based on the initial values)"
         }
-        if(trace>1){
+        if(trace>=1){
             if(trace %in% 2:3){
                 cat("\n")
                 print(param.value)

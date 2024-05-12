@@ -8,6 +8,7 @@
   object,
   effects = NULL,
   robust = FALSE,
+  multivariate = TRUE,
   rhs = NULL,
   df = !is.null(object$df),
   ci = TRUE,
@@ -25,9 +26,13 @@
 or only variables relative to the mean (\code{"mean"} or \code{"fixed"}),
 or only variables relative to the variance structure (\code{"variance"}),
 or only variables relative to the correlation structure (\code{"correlation"}).
+or average counterfactual outcome with respect to the value of a covariate X at each repetition  (\code{"ACO_X"}),
+or the contrast between average counterfactual outcome for any pair of value of a covariate X (\code{"ATE_X"}).
 Can also be use to specify linear combinations of coefficients or a contrast matrix, similarly to the \code{linfct} argument of the \code{multcomp::glht} function.}
 
 \item{robust}{[logical] Should robust standard errors (aka sandwich estimator) be output instead of the model-based standard errors.}
+
+\item{multivariate}{[logical] Should all hypotheses be simultaneously tested using a multivariate Wald test?}
 
 \item{rhs}{[numeric vector] the right hand side of the hypothesis. Only used when the argument effects is a matrix.}
 
@@ -75,15 +80,13 @@ eUN.lmm <- lmm(Y ~ visit + X1 + X2 + X5,
 anova(eUN.lmm)
 anova(eUN.lmm, effects = "all")
 anova(eUN.lmm, robust = TRUE, df = FALSE)
-summary(anova(eUN.lmm))
+summary(anova(eUN.lmm), method = "bonferroni")
 
 ## user defined F-test
 summary(anova(eUN.lmm, effects = c("X1=0","X2+X5=10")))
-print(anova(eUN.lmm, effects = "mean_visit"), columns = add("null"))
 
 ## chi2-tests
 anova(eUN.lmm, df = FALSE)
-
 
 ## with standard contrast
 if(require(multcomp)){

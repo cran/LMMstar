@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: apr 13 2022 (10:06) 
 ## Version: 
-## Last-Updated: nov  8 2023 (16:04) 
+## Last-Updated: maj 10 2024 (11:45) 
 ##           By: Brice Ozenne
-##     Update #: 848
+##     Update #: 916
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -97,11 +97,6 @@
         })
     }
 
-    ## ** rename patterns
-    if(!is.na(structure$name$strata)){ ## WARNING may not be unique, e.g. in presence of missing values
-        Upattern$group <- as.character(U.strata[Upattern$index.strata])
-    }
-
     ## ** export
     structure$pattern <- as.character(pattern.var)
     attr(structure$pattern,"list") <- tapply(1:n.cluster, structure$pattern, base::identity)
@@ -111,25 +106,7 @@
 }
 
 ## * .findUpatterns.IND
-.findUpatterns.IND <- function(structure, 
-                              index.clusterTime, U.time,
-                              index.cluster, U.cluster,
-                              index.clusterStrata, U.strata){
-
-    sep <- LMMstar.options()$sep["pattern"]
-
-    structure <- .findUpatterns.ID(structure = structure, 
-                                   index.clusterTime = index.clusterTime, U.time = U.time,
-                                   index.cluster = index.cluster, U.cluster = U.cluster,
-                                   index.clusterStrata = index.clusterStrata, U.strata = U.strata)
-
-    ## rename patterns (to add possible extra covariates)
-    structure$Upattern$group <- .namePatternCov(Upattern = structure$Upattern, structure = structure, sep = sep)
-
-    ## export
-    return(structure)
-
-}
+.findUpatterns.IND <- .findUpatterns.ID
 
 
 ## * .findUpatterns.UN
@@ -153,6 +130,7 @@
     structure.param <- structure$param[structure$param$type=="rho",]
     param.rho <- structure.param$name[is.na(structure.param$constraint)] ## index.level=0 indicates correlation fixed to 0, i.e. not a real parameter (e.g. crossed random effects)
     n.cluster <- length(U.cluster)
+    if(length(param.rho)==0){return(Upatterns.init)}
 
     ## *** group clusters by linear predictor patterns
     ## *** (to later work on a single representative cluster per pattern)
@@ -278,12 +256,7 @@
     Upattern$n.cluster <- UpatternCor[matchCor,"n.cluster"]
     Upattern$n.time <- UpatternCor[matchCor,"n.time"]
     Upattern$param <- unname(mapply(x = UpatternVar$param[matchVar], y = UpatternCor$param[matchCor], FUN = function(x,y){unname(c(x,y))}, SIMPLIFY = FALSE))
-
-    ## ** rename patterns
-    if(!is.na(structure$name$strata)){ ## WARNING may not be unique, e.g. in presence of missing values
-        Upattern$group <- as.character(U.strata[Upattern$index.strata])
-    }
-
+    
     ## ** export
     structure$pattern <- vec.pattern
     attr(structure$pattern,"list") <- tapply(1:n.cluster, vec.pattern, base::identity)
@@ -294,6 +267,9 @@
     return(structure)
 }
 
+## * .findUpatterns.CS
+.findUpatterns.CS <- .findUpatterns.UN
+
 ## * .findUpatterns.RE
 .findUpatterns.RE <- .findUpatterns.UN
 
@@ -303,24 +279,6 @@
 ## * .findUpatterns.EXP
 .findUpatterns.EXP <- .findUpatterns.UN
 
-## * .findUpatterns.CS
-.findUpatterns.CS <- function(structure = structure, 
-                              index.clusterTime, U.time,
-                              index.cluster, U.cluster,
-                              index.clusterStrata, U.strata){
-
-    structure <- .findUpatterns.UN(structure = structure, 
-                                   index.clusterTime = index.clusterTime, U.time = U.time,
-                                   index.cluster = index.cluster, U.cluster = U.cluster,
-                                   index.clusterStrata = index.clusterStrata, U.strata = U.strata)
-
-    ## rename patterns (to add possible extra covariates)
-    structure$Upattern$nameCov <- .namePatternCov(Upattern = structure$Upattern, structure = structure, sep = attr(structure$Upattern,"sep"))
-
-    ## export
-    return(structure)
-
-}
 
 ## * .findUpatterns_CUSTOM
 .findUpatterns.CUSTOM <- function(structure, 
@@ -401,60 +359,5 @@
     return(structure)
 }
 
-## * .namePatternCov
-.namePatternCov <- function(Upattern, structure, sep){
-
-    ## ** variance
-    if(any(!is.na(Upattern$var)) && NROW(structure$var$lp2X)>1){ ## if variance structure and variables in the variable structure
-        variable.variance <- setdiff(unique(stats::na.omit(c(structure$name$strata,structure$name$var[[1]]))),c(structure$name$time,attr(structure$name$time,"original")))
-        if(length(variable.variance)>0){
-            out.var <- sapply(structure$var$pattern2lp, function(iLp){ ## iLp <- structure$var$pattern2lp[[1]]
-                iX <- structure$var$lp2data[iLp,variable.variance,drop=FALSE]
-                iName <- sapply(iX, function(iVec){if(length(unique(iVec))>1){NA}else{as.character(iVec[1])}})
-                return(paste(stats::na.omit(iName), collapse = sep))
-            })        
-        }else{
-            out.var <- NULL
-        }
-    }else{
-        out.var <- NULL
-    }
-
-    ## ** correlation
-    if(any(!is.na(Upattern$var)) && NROW(structure$cor$lp2X)){
-        variable.correlation <- setdiff(unique(stats::na.omit(c(structure$name$strata,structure$name$cor[[1]]))),c(structure$name$time,attr(structure$name$time,"original")))
-        if(length(variable.correlation)>0){
-            out.cor <- sapply(structure$cor$pattern2lp, function(iLp){ ## iLp <- structure$cor$pattern2lp[[1]]
-                iX <- structure$cor$lp2data[iLp,variable.correlation,drop=FALSE]
-                iName <- sapply(iX, function(iVec){if(length(unique(iVec))>1){NA}else{as.character(iVec[1])}})
-                return(paste(stats::na.omit(iName), collapse = sep))
-            })        
-        }else{
-            out.cor <- NULL
-        }
-    }else{
-        out.cor <- NULL
-    }
-
-    ## ** merge
-    if((is.null(out.var) && is.null(out.cor)) || (all(out.var=="") && all(out.cor==""))){
-        return(NULL)
-    }else if(!is.null(out.var) && (is.null(out.cor) || all(out.cor==""))){
-        return(out.var)
-    }else if((is.null(out.var) || all(out.var=="")) && !is.null(out.cor)){
-        return(out.cor)
-    }else if(!is.null(out.var) && !is.null(out.cor)){
-        if(identical(out.var,out.cor)){
-            return(out.var)
-        }else if(all(variable.correlation %in% variable.variance)){
-            return(out.var)
-        }else if(all(variable.variance %in% variable.correlation)){
-            return(out.cor)
-        }else{
-            return(paste(out.var,out.cor,sep = paste0(sep,sep)))
-        }
-    }
-
-}
 ##----------------------------------------------------------------------
 ### findPatterns.R ends here

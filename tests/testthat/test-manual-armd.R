@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Dec 19 2021 (17:07) 
 ## Version: 
-## Last-Updated: aug  1 2023 (13:53) 
+## Last-Updated: Mar 26 2024 (09:54) 
 ##           By: Brice Ozenne
-##     Update #: 32
+##     Update #: 42
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -19,11 +19,10 @@ if(FALSE){
     library(testthat)
     library(lattice) 
     library(psych)   
-    library(emmeans) 
     library(ggplot2) 
 
     library(LMMstar)
-}
+} 
 
 context("Check lmm on Basic Statistic course")
 LMMstar.options(optimizer = "FS", method.numDeriv = "simple", precompute.moments = TRUE, df = TRUE)
@@ -78,7 +77,7 @@ test_that("lmm 2 times", {
       active.52 = sum(coef(e052.lmm)))
 
     ## chunk 22
-    dummy.coef(e052.lmm)
+    effects(e052.lmm, variable = "treat.f")
 
     armd.114 <- armd.long[armd.long$subject=="114" & armd.long$week %in% c("0","52"),]
     armd.114
@@ -91,11 +90,9 @@ test_that("lmm 2 times", {
     alpha52 <- alpha0 + coef(e052.lmm)["week52"]
 
     ## chunk 24
-    
-    expect_equivalent(predict(e052.lmm, newdata = armd.114, type = "dynamic")$estimate,
+    expect_equivalent(predict(e052.lmm, newdata = armd.114, type = "dynamic"),
                       c(NA,unname(alpha52 + rho * sigma52/sigma0 * (armd.114$visual[1]-alpha0))),
                       tol = 1e-4)
-
 
 })
 
@@ -109,28 +106,30 @@ test_that("lmm 4 times", {
     model.tables(eLin.lmm)
 
     levels(eLin.lmm)$reference
+    summary(effects(eLin.lmm, variable = "treat.f", type = "identity"))
+    summary(effects(eLin.lmm, variable = "treat.f", type = "difference"))
+    ## plot(eLin.lmm, ci = FALSE, obs.alpha = 0.1)
 
     eFlex.lmm <- lmm(visual ~ week*treat.f,
                      repetition = ~ week | subject, structure = "UN",
                      data = armd.long)
     model.tables(eFlex.lmm)
+    summary(effects(eFlex.lmm, variable = "treat.f", type = "identity"))
+    summary(effects(eFlex.lmm, variable = "treat.f", type = "difference"))
     ## plot(eFlex.lmm, ci = FALSE, obs.alpha = 0.1)
 
-    armd.long.imp <- fitted(eFlex.lmm, impute = TRUE, keep.newdata = TRUE)
+    armd.long.imp <- fitted(eFlex.lmm, type = "outcome", keep.data = TRUE)
     gg <- autoplot(eFlex.lmm, obs.alpha = 0.1, ci = FALSE)$plot
-    gg <- gg + geom_point(data = armd.long.imp[armd.long.imp$subject %in% c("114","167"),,drop=FALSE], aes(x = week, y = visual, group = subject, color = treat.f, shape = imputed), size = 4)
+    gg <- gg + geom_point(data = armd.long.imp[armd.long.imp$subject %in% c("114","167"),,drop=FALSE], aes(x = week, y = visual, group = subject, color = treat.f, shape = impute), size = 4)
     gg <- gg + geom_line(data = armd.long.imp[armd.long.imp$subject %in% c("114","167"),,drop=FALSE], aes(x = week, y = visual, group = subject, color = treat.f))
     gg
     
-    armdU <- unique(armd.long[,c("week","week.num","treat.f")])
-    armdU
+    pLin <- fitted(eLin.lmm, newdata = "unique", keep.data = TRUE, se = TRUE)
+    pFlex <- fitted(eFlex.lmm, newdata = "unique", keep.data = TRUE, se = TRUE)
+    armdU <- rbind(cbind(model = "linear", pLin[,c("week","treat.f","visual","lower","upper")]),
+                   cbind(model = "flexible", pFlex[,c("week","treat.f","visual","lower","upper")]))
 
-    pLin <- predict(eLin.lmm, newdata = armdU, keep.newdata = TRUE)
-    pFlex <- predict(eFlex.lmm, newdata = armdU, keep.newdata = TRUE)
-    armdU <- rbind(cbind(pLin, model = "linear"),
-                   cbind(pFlex, model = "flexible"))
-
-    gg.comp <- ggplot(armdU, aes(x = week, y = estimate, color = treat.f,
+    gg.comp <- ggplot(armdU, aes(x = week, y = visual, color = treat.f,
                                  group =  interaction(treat.f,model)))
     gg.comp <- gg.comp + geom_errorbar(aes(ymin = lower, ymax = upper),
                                        width = 0.2, alpha = 0.3)
@@ -149,7 +148,7 @@ test_that("lmm - ttest", {
                     repetition = ~week|subject, 
                     data = armd.long[armd.long$week %in% c("0","52"),])
 
-    armd.long.imp <- fitted(e052.lmm, impute = TRUE, keep.newdata = TRUE)
+    armd.long.imp <- fitted(e052.lmm, type = "outcome", keep.data = TRUE)
 
     GS <- t.test(armd.long.imp[armd.long.imp$treat.f=="Placebo" & armd.long.imp$week=="52","visual"]-armd.long.imp[armd.long.imp$treat.f=="Placebo" & armd.long.imp$week=="0","visual"],
                  armd.long.imp[armd.long.imp$treat.f=="Active" & armd.long.imp$week=="52","visual"]-armd.long.imp[armd.long.imp$treat.f=="Active" & armd.long.imp$week=="0","visual"])
@@ -164,7 +163,7 @@ test_that("lmm - ttest", {
                     repetition = ~week|subject, 
                     data = armd.long)
 
-    armd.long.imp <- fitted(e052.lmm2, impute = TRUE, keep.newdata = TRUE)
+    armd.long.imp <- fitted(e052.lmm2, type = "outcome", keep.data = TRUE)
 
     GS <- t.test(armd.long.imp[armd.long.imp$treat.f=="Placebo" & armd.long.imp$week=="52","visual"]-armd.long.imp[armd.long.imp$treat.f=="Placebo" & armd.long.imp$week=="0","visual"],
                  armd.long.imp[armd.long.imp$treat.f=="Active" & armd.long.imp$week=="52","visual"]-armd.long.imp[armd.long.imp$treat.f=="Active" & armd.long.imp$week=="0","visual"])
@@ -198,8 +197,8 @@ test_that("lmm - predict", {
     armd.longRa$visual[armd.longRa$week != 0] <- NA
 
     ## ANCOVA with homogenous variance/correlation
-    pred.longRpl <- predict(e.UN, newdata = armd.longRpl, type = "dynamic", se = FALSE, keep.newdata = TRUE)
-    pred.longRa <- predict(e.UN, newdata = armd.longRa, type = "dynamic", se = FALSE, keep.newdata = TRUE)
+    pred.longRpl <- predict(e.UN, newdata = armd.longRpl, type = "dynamic", se = FALSE, keep.data = TRUE)
+    pred.longRa <- predict(e.UN, newdata = armd.longRa, type = "dynamic", se = FALSE, keep.data = TRUE)
 
     expect_true(all(abs(pred.longRa[pred.longRpl$week!=0,"estimate"]-pred.longRpl[pred.longRpl$week!=0,"estimate"]-coef(e.ANCOVA)["treat.fActive"])<1e-5))
 
@@ -210,8 +209,8 @@ test_that("lmm - predict", {
     ## }, method.numDeriv = "simple", average = TRUE)
 
     ## ANCOVA with heterogenous variance/correlation
-    pred.longRpl <- predict(e.SUN, newdata = armd.longRpl, type = "dynamic", se = FALSE, keep.newdata = TRUE)
-    pred.longRa <- predict(e.SUN, newdata = armd.longRa, type = "dynamic", se = FALSE, keep.newdata = TRUE)
+    pred.longRpl <- predict(e.SUN, newdata = armd.longRpl, type = "dynamic", se = FALSE, keep.data = TRUE)
+    pred.longRa <- predict(e.SUN, newdata = armd.longRa, type = "dynamic", se = FALSE, keep.data = TRUE)
 
     expect_equal(-4.3300289,mean(pred.longRa[pred.longRpl$week!=0,"estimate"]-pred.longRpl[pred.longRpl$week!=0,"estimate"]), tol = 1e-5)
 

@@ -49,7 +49,6 @@ an object of class \code{lmm} containing the estimated parameter values, the res
 }
 \description{
 Fit a linear mixed model defined by a mean and a covariance structure.
-g
 }
 \details{
 \bold{Computation time} the \code{lmm} has not been developped to be a fast function as, by default, it uses REML estimation with the observed information matrix and uses a Satterthwaite approximation to compute degrees of freedom (this require to compute the third derivative of the log-likelihood which is done by numerical differentiation). The computation time can be substantially reduced by using ML estimation with the expected information matrix and no calculation of degrees of freedom: arguments \code{method.fit="ML"}, \code{type.information="expected"}, \code{df=FALSE}. This will, however, lead to less accurate p-values and confidence intervals in small samples.
@@ -93,10 +92,6 @@ coef(eCS.lmm)
 model.tables(eCS.lmm)
 confint(eCS.lmm)
 
-if(require(emmeans)){
-  dummy.coef(eCS.lmm)
-}
-
 ## all parameters
 coef(eCS.lmm, effects = "all")
 model.tables(eCS.lmm, effects = "all")
@@ -131,11 +126,11 @@ summary(anova(eCS.lmm, effects = c("X11=0","X21=0")))
 #### 6- prediction ####
 ## conditional on covariates
 newd <- dL[1:3,]
-predict(eCS.lmm, newdata = newd, keep.newdata = TRUE)
+predict(eCS.lmm, newdata = newd, keep.data = TRUE)
 ## conditional on covariates and outcome
 newd <- dL[1:3,]
 newd$Y[3] <- NA
-predict(eCS.lmm, newdata = newd, type = "dynamic", keep.newdata = TRUE)
+predict(eCS.lmm, newdata = newd, type = "dynamic", keep.data = TRUE)
 
 #### EXTRA ####
 if(require(mvtnorm)){
@@ -161,6 +156,7 @@ model.tables(e.lmm0, effects = "all")
 \code{\link{plot.lmm}} for a graphical display of the model fit or diagnostic plots. \cr
 \code{\link{levels.lmm}} to display the reference level. \cr
 \code{\link{anova.lmm}} for testing linear combinations of coefficients (F-test, multiple Wald tests) \cr
+\code{\link{effects.lmm}} for evaluating average marginal or counterfactual effects \cr
 \code{\link{sigma.lmm}} for extracting estimated residual variance-covariance matrices. \cr
 \code{\link{residuals.lmm}} for extracting residuals or creating residual plots (e.g. qqplots). \cr
 \code{\link{predict.lmm}} for evaluating mean and variance of the outcome conditional on covariates or other outcome values.

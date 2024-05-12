@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: jun 16 2022 (15:19) 
 ## Version: 
-## Last-Updated: jul 27 2023 (16:45) 
+## Last-Updated: maj 10 2024 (19:46) 
 ##           By: Brice Ozenne
-##     Update #: 314
+##     Update #: 319
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -83,7 +83,7 @@ profile.lmm <- function(fitted, effects = NULL, profile.likelihood = FALSE,
     name.p <- rownames(p)
     type.p <- stats::setNames(fitted$design$param$type, name.p)
 
-    init <- .init_transform(transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, 
+    init <- .init_transform(p = NULL, transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, 
                             x.transform.sigma = fitted$reparametrize$transform.sigma, x.transform.k = fitted$reparametrize$transform.k, x.transform.rho = fitted$reparametrize$transform.rho)
     transform.sigma <- init$transform.sigma
     transform.k <- init$transform.k
@@ -101,7 +101,12 @@ profile.lmm <- function(fitted, effects = NULL, profile.likelihood = FALSE,
     }else if(identical(effects,"all")){
         effects <- c("mean","variance","correlation")
     }
-    effects <- match.arg(effects, c("mean","fixed","variance","correlation",name.p), several.ok = TRUE)
+    valid.effects <- c("mean","fixed","variance","correlation",name.p)
+    if(any(effects %in% valid.effects == FALSE)){
+        stop("Argument \'effects\' contains incorrect values. \n",
+             "Incorrect value: \"",paste(setdiff(effects,valid.effects), collapse = "\", \""),"\"\n",
+             "Possible value: \"",paste(setdiff(name.p,effects), collapse = "\", \""),"\"\n")
+    }
     if(any(effects %in% name.p == FALSE)){
         effects <- names(coef(fitted, effects = effects))
     }

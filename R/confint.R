@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: feb  9 2022 (14:51) 
 ## Version: 
-## Last-Updated: nov  8 2023 (15:59) 
+## Last-Updated: May  9 2024 (12:55) 
 ##           By: Brice Ozenne
-##     Update #: 672
+##     Update #: 721
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -125,7 +125,7 @@ confint.lmm <- function (object, parm = NULL, level = 0.95, effects = NULL, robu
     }
 
     ## used to decide on the null hypothesis of k parameters
-    init <- .init_transform(transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, 
+    init <- .init_transform(p = NULL, transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho, 
                             x.transform.sigma = object$reparametrize$transform.sigma, x.transform.k = object$reparametrize$transform.k, x.transform.rho = object$reparametrize$transform.rho)
     
     transform.sigma <- init$transform.sigma
@@ -241,17 +241,16 @@ confint.lmm <- function (object, parm = NULL, level = 0.95, effects = NULL, robu
                                   transform.rho = backtransform)
 
         }else{
-
             backtransform.names <- names(coef(object, effects = effects, 
                                               transform.sigma = gsub("log","",transform.sigma), transform.k = gsub("log","",transform.k), transform.rho = gsub("atanh","",transform.rho), transform.names = transform.names))
 
             out <- .backtransform(out,
-                                   type.param = type.param[match(nameNoTransform.beta, names(type.param))],
-                                   backtransform = backtransform, backtransform.names = backtransform.names,
-                                   transform.mu = "none",
-                                   transform.sigma = transform.sigma,
-                                   transform.k = transform.k,
-                                   transform.rho = transform.rho)            
+                                  type.param = type.param[match(nameNoTransform.beta, names(type.param))],
+                                  backtransform = backtransform, backtransform.names = backtransform.names,
+                                  transform.mu = "none",
+                                  transform.sigma = transform.sigma,
+                                  transform.k = transform.k,
+                                  transform.rho = transform.rho)            
         }
     }
 
@@ -309,7 +308,7 @@ confint.lmmCC <- function(object, parm = NULL, level = 0.95, effects = NULL, col
 ##'  \item \code{"holm"}, \code{"hochberg"}, \code{"hommel"}, \code{"BH"}, \code{"BY"}, \code{"fdr"}: adjustment performed by [stats::p.adjust()], no confidence interval is computed.
 ##'  \item \code{"single-step"}, \code{"free"}, \code{"Westfall"}, \code{"Shaffer"}: adjustment performed by [multcomp::glht()],  for all but the first method no confidence interval is computed.
 ##' }
-##' Note: method \code{"single-step"} adjust for multiple comparisons using equicoordinate quantiles of the multivariate Student's t-distribution over all tests, instead of the univariate quantiles. It assumes equal degrees of freedom in the marginal and is described in section 7.1 of Dmitrienko et al. (2013) under the name single-step Dunnett procedure. The name \code{"single-step"} is borrowed from the multcomp package. In the book Bretz et al. (2010) written by the authors of the package, the procedure is refered to as max-t tests which is the terminology adopted in the LMMstar package.  \cr
+##' Note: method \code{"single-step"} adjusts for multiple comparisons using equicoordinate quantiles of the multivariate Student's t-distribution over all tests, instead of the univariate quantiles. It assumes equal degrees of freedom in the marginal and is described in section 7.1 of Dmitrienko et al. (2013) under the name single-step Dunnett procedure. The name \code{"single-step"} is borrowed from the multcomp package. In the book Bretz et al. (2010) written by the authors of the package, the procedure is refered to as max-t tests which is the terminology adopted in the LMMstar package.  \cr
 ##' When degrees of freedom differs between individual hypotheses, method \code{"single-step2"} is recommended. It simulates data using copula whose marginal distributions are Student's t-distribution (with possibly different degrees of freedom) and elliptical copula with parameters the estimated correlation between the test statistics (via the copula package). It then computes the frequency at which the simulated maximum exceed the observed maximum and appropriate quantile of simulated maximum for the confidence interval.
 ##'
 ##'  \bold{Pooling estimates}: available methods are:
@@ -452,9 +451,9 @@ confint.Wald_lmm <- function(object, parm, level = 0.95, method = NULL, columns 
 
         ## *** method for multiple comparisons adjustment
         if(is.null(method)){
-            if(NROW(iTable$df)==1){
+            if(NROW(iTable$df)==1 || all(is.na(iTable$statistic))){
                 iMethod  <- "none"
-            }else if(df == FALSE || all(abs(iTable$df - round(mean(iTable$df)))<0.1)){
+            }else if(df == FALSE || all(is.infinite(iTable$df)) || all(abs(iTable$df - round(mean(iTable$df)))<0.1)){
                 iMethod <- "single-step"
             }else{
                 iMethod <- "single-step2"
@@ -668,6 +667,7 @@ confint.Wald_lmm <- function(object, parm, level = 0.95, method = NULL, columns 
             out[iIndex.table,"lower"] <- iCi$confint[,"lwr"]
             out[iIndex.table,"upper"] <- iCi$confint[,"upr"]
             out[iIndex.table,"p.value"] <- as.double(iP$test$pvalues)
+            
             if(df){
                 out[iIndex.table,"df"] <- iGlht$df
             }
@@ -678,6 +678,7 @@ confint.Wald_lmm <- function(object, parm, level = 0.95, method = NULL, columns 
 
             iP <- summary(iGlht, test = multcomp::adjusted(iMethod))
             out[iIndex.table,"p.value"] <- as.double(iP$test$pvalues)
+            
             out[iIndex.table,"lower"] <- NA
             out[iIndex.table,"upper"] <- NA
             if(df){
@@ -687,14 +688,20 @@ confint.Wald_lmm <- function(object, parm, level = 0.95, method = NULL, columns 
 
         }else if(iMethod == "single-step2"){
 
-            rho <- stats::cov2cor(iGlht$linfct %*% iGlht$vcov %*% t(iGlht$linfct))
+            sigma.linfct <- iGlht$linfct %*% iGlht$vcov %*% t(iGlht$linfct)
+            index.n0sigma <- which(diag(sigma.linfct)>0) ## handles no variance (e.g. no treatment effect at baseline)
+            rho.linfct <- stats::cov2cor(sigma.linfct[index.n0sigma,index.n0sigma,drop=FALSE])
 
-            myMvd <- copula::mvdc(copula = copula::normalCopula(param=rho[lower.tri(rho)], dim = NROW(rho), dispstr = "un"),
-                                  margins = rep("t", iN.test),
-                                  paramMargins = as.list(stats::setNames(iTable$df,rep("df",iN.test))))
-            maxH0 <- apply(abs(copula::rMvdc(n.sample, myMvd)), 1, max)
+            if(all(rho.linfct>=(1-1e-6))){ ## handles perfectly colinear case (e.g. same treatment effect at all timepoints)
+                maxH0 <- abs(stats::rt(n.sample, df = mean(iTable$df[index.n0sigma])))
+            }else{
+                myMvd <- copula::mvdc(copula = copula::normalCopula(param=rho.linfct[lower.tri(rho.linfct)], dim = NROW(rho.linfct), dispstr = "un"),
+                                      margins = rep("t", NROW(rho.linfct)),
+                                      paramMargins = as.list(stats::setNames(iTable$df[index.n0sigma],rep("df",NROW(rho.linfct)))))
+                maxH0 <- apply(abs(copula::rMvdc(n.sample, myMvd)), 1, max)
+            }
             cH0 <- stats::quantile(maxH0, 1-alpha)  ## attr(confint(iGlht)$confint,"calpha")
-                
+
             out[iIndex.table,"p.value"] <- sapply(abs(iTable$statistic), function(iT){(sum(iT <= maxH0)+1)/(n.sample+1)})
             out[iIndex.table,"lower"] <- iTable$estimate - iTable$se * cH0
             out[iIndex.table,"upper"] <- iTable$estimate + iTable$se * cH0                
@@ -770,6 +777,13 @@ confint.LRT_lmm <- function(object, parm, level = 0.95, ...){
     message("No confidence interval available for likelihood ratio tests.")
     return(NULL)
 }
+
+## * confint.effect_lmm
+##' @export
+confint.effect_lmm <- function(object, parm, level = 0.95, method = "none", ...){
+    return(confint.Wald_lmm(object, parm, level = 0.95, method = method,  ...))
+}
+
 
 ## * confint.mlmm (documentation)
 ##' @title Confidence Intervals for Multiple Linear Mixed Model.

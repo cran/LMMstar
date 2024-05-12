@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt 31 2022 (10:09) 
 ## Version: 
-## Last-Updated: nov  8 2023 (18:12) 
+## Last-Updated: maj  7 2024 (10:11) 
 ##           By: Brice Ozenne
-##     Update #: 566
+##     Update #: 624
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -23,6 +23,7 @@
 ##' @param object a \code{lmm} object.
 ##' @param type [character] should permutation test (\code{"perm-var"} or \code{"perm-res"}) or non-parametric bootstrap (\code{"boot"}) be used?
 ##' @param effects [character vector] the variable(s) to be permuted or the effect(s) to be tested via non-parametric bootstrap.
+##' Can also be a function of the model parameters when performing non-parametric bootstrap.
 ##' @param n.sample [integer] the number of samples used.
 ##' @param studentized [logical] should a studentized boostrap or permutation test be used?
 ##' @param level [numeric,0-1] the confidence level of the confidence intervals.
@@ -101,6 +102,8 @@ resample.lmm <- function(object, type, effects, n.sample = 1e3, studentized = TR
                          trace = TRUE, seed = NULL, cpus = 1, export.cpus = NULL,
                          ...){
 
+    options <- LMMstar.options()
+
     ## ** check user input
     alpha <- 1-level
     type <- match.arg(type, c("perm-var","perm-res","boot"))
@@ -116,7 +119,12 @@ resample.lmm <- function(object, type, effects, n.sample = 1e3, studentized = TR
     sd.meancoef <- sqrt(diag(vcov(object, effects = "mean")))
 
     name.meancoef <- names(value.meancoef)
+    name.coef <- names(coef(object, effects = "all"))
     if(type == "perm-var"){
+        if(is.function(effects)){
+            stop("Argument \'effects\' cannot be a function when using permutation. \n",
+                 "Consider setting the argument \'type\' to \"boot\". \n")
+        }
         if(any(is.character(effects)==FALSE)){
             stop("Argument \'effects\' should contain character strings refering to a variable for the mean structure. \n")
         }
@@ -132,8 +140,13 @@ resample.lmm <- function(object, type, effects, n.sample = 1e3, studentized = TR
 
         index.keepcoef <- which(colSums(M.factor[effects,,drop=FALSE]!=0)>0)
         name.keepcoef <- names(index.keepcoef)
-        effects.vcov <- any(effects %in% manifest(object, effects = c("variance","correlation")))
-        
+        if(!is.null(manifest(object, effects = "variance")) & !is.null(manifest(object, effects = "correlation"))){
+            effects.vcov <- any(effects %in% union(manifest(object, effects = "variance"),manifest(object, effects = "correlation")))
+        }else{
+            effects.vcov <- FALSE
+        }
+        effects.fct <- FALSE
+
         ## test whether the covariate is constant within cluster
         test.Wvar <- unlist(by(object$data[effects], object$data[[object$cluster$var]], function(iData){sum(!duplicated(iData))>1}, simplify = FALSE))
         if(any(test.Wvar)){
@@ -143,6 +156,10 @@ resample.lmm <- function(object, type, effects, n.sample = 1e3, studentized = TR
         Uvar <- by(object$data[effects], object$data[[object$cluster$var]], function(iData){iData[1,,drop=FALSE]}, simplify = FALSE)
 
     }else if(type == "perm-res"){
+        if(is.function(effects)){
+            stop("Argument \'effects\' cannot be a function when using permutation. \n",
+                 "Consider setting the argument \'type\' to \"boot\". \n")
+        }
         if(any(is.character(effects)==FALSE)){
             stop("Argument \'effects\' should contain character strings refering to a parameter of the mean structure. \n")
         }
@@ -150,16 +167,55 @@ resample.lmm <- function(object, type, effects, n.sample = 1e3, studentized = TR
             stop("Argument \'effects\' should be one of \"",paste(name.meancoef, collapse = "\", \""),"\". \n")
         }
         effects.vcov <- FALSE
+        effects.fct <- FALSE
         name.keepcoef <- effects
     }else if(type == "boot"){
-        if(any(is.character(effects)==FALSE)){
-            stop("Argument \'effects\' should contain character strings refering to a parameter of the mean structure. \n")
-        }
-        if(any(effects %in% name.meancoef == FALSE)){
-            stop("Argument \'effects\' should be one of \"",paste(name.meancoef, collapse = "\", \""),"\". \n")
-        }
-        effects.vcov <- TRUE
-        name.keepcoef <- effects
+
+        if(is.function(effects)){
+            effects.formals <- names(formals(effects))            
+            if(studentized){
+                if(length(effects.formals) != 2){
+                    stop("When a function, argument \'effects\' should have two arguments (studentized bootstrap) \n",
+                         "The first argument refers to the estimates and the second to thevariance-covariance matrix of the estimates \n")
+                }
+                effects.estimate <- effects(coef(object, effects = "all"), vcov(object, effects = "all"))
+                if(!is.matrix(effects.estimate) || !is.numeric(effects.estimate) || NROW(effects.estimate)!=2){
+                    stop("The output of the function defined in the argument \'effects\' must be a numeric matrix with two rows (studentized bootstrap). \n",
+                         "The first row should contain estimates and the second row corresponding standard errors.")
+                }
+                if(is.null(colnames(effects.estimate))){
+                    stop("The columns of the matrix output by the function defined in the argument \'effects\' must be named. \n")
+                }
+                name.keepcoef <- colnames(effects.estimate)
+                effects.fct <- TRUE
+            }else if(!studentized){
+                if(length(effects.formals) != 1){
+                    stop("When a function, argument \'effects\' should have one or two arguments (non-studentized bootstrap) \n",
+                         "The argument refers to the estimates. \n")
+                }
+                effects.estimate <- effects(coef(object, effects = "all"))
+                if(!is.vector(effects.estimate) || !is.numeric(effects.estimate)){
+                    stop("The output of the function defined in the argument \'effects\' must be a numeric vector (non-studentized bootstrap). \n")
+                }
+                if(is.null(names(effects.estimate))){
+                    stop("The output of the function defined in the argument \'effects\' must be named. \n")
+                }
+                name.keepcoef <- names(effects.estimate)
+                effects.fct <- TRUE
+            }
+            
+            }else{
+                if(any(is.character(effects)==FALSE)){
+                    stop("Argument \'effects\' should be a function or a character strings refering to model parameters. \n")
+                }
+                if(any(effects %in% name.coef == FALSE)){
+                    stop("Incorrect argument \'effects\': \"",paste(effects[effects %in% name.coef == FALSE], collapse = "\", \""),"\" does not match any model parameter. \n")
+                }
+                name.keepcoef <- effects
+                effects.fct <- FALSE
+            }
+            effects.vcov <- TRUE
+        
     }
 
     if(length(cpus)!=1){
@@ -181,9 +237,6 @@ resample.lmm <- function(object, type, effects, n.sample = 1e3, studentized = TR
     ## ** initialize
     ## *** data
     data <- object$data
-    if(length(object$index.na)>0){
-        data <- data[-object$index.na,]
-    }
     var.cluster <- object$cluster$var
     vec.Uid <- object$cluster$level
     n.cluster <- object$cluster$n
@@ -269,11 +322,9 @@ resample.lmm <- function(object, type, effects, n.sample = 1e3, studentized = TR
             iData[[var.outcome]] <- iData[[var.outcome]] + Xbeta0[iPerm]
             ## range(iData[[var.outcome]] - data[,var.outcome])
         }else if(type == "boot"){
-            ils.Boot <- index.cluster[sample(n.cluster, replace = TRUE)]
-            iBoot <- unlist(ils.Boot)
-            
-            iData <- data[iBoot,,drop=FALSE]
-            iData[[var.cluster]] <- unlist(lapply(1:n.cluster, function(iC){rep(iC,length(ils.Boot[[iC]]))}))
+            iIndex.bootcluster <- index.cluster[sample(n.cluster, replace = TRUE)]
+            iData <- data[unlist(iIndex.bootcluster),,drop=FALSE]
+            iData[[var.cluster]] <- unlist(mapply(x=1:n.cluster, times=lengths(iIndex.bootcluster), FUN = rep, SIMPLIFY = FALSE))
             rownames(iData) <- NULL
             ## lmm(Y~X1*X2+X5,data = iData[,c("Y","X1","X2","X5")])
         }
@@ -289,7 +340,7 @@ resample.lmm <- function(object, type, effects, n.sample = 1e3, studentized = TR
             iStructure$Upattern <- NULL
             iStructure$pair.vcov <- NULL
             iStructure$pair.meanvcov <- NULL
-            
+
             iData2 <- .lmmNormalizeData(iData[,var.all,drop=FALSE],
                                         var.outcome = var.outcome,
                                         var.cluster = attr(var.cluster, "original"),
@@ -297,7 +348,8 @@ resample.lmm <- function(object, type, effects, n.sample = 1e3, studentized = TR
                                         var.strata = attr(object$strata$var, "original"),
                                         droplevels = TRUE,
                                         initialize.cluster = iStructure$ranef$crossed,
-                                        initialize.time = setdiff(iStructure$ranef$vars, iStructure$var.cluster))$data
+                                        initialize.time = setdiff(iStructure$ranef$vars, iStructure$var.cluster),
+                                        na.rm = TRUE)$data
 
             iDesign <- .model.matrix.lmm(formula.mean = object$formula$mean.design,
                                          structure = iStructure,
@@ -305,7 +357,8 @@ resample.lmm <- function(object, type, effects, n.sample = 1e3, studentized = TR
                                          var.outcome = object$outcome$var,
                                          var.weights = object$weights$var,
                                          precompute.moments = precompute.moments,
-                                         drop.X = object$design$drop.X)
+                                         drop.X = object$design$drop.X,
+                                         options = options)
 
         }else if(type == "perm-res"){ ## change in the Y values
 
@@ -327,7 +380,7 @@ resample.lmm <- function(object, type, effects, n.sample = 1e3, studentized = TR
         }else{ ## change in the X values
             ## update design matrix according to the permutation (only mean)
             iDesign <- object$design
-            iDesign$mean <- model.matrix(object, data = iData[,var.mean,drop=FALSE])
+            iDesign$mean <- stats::model.matrix(object, newdata = iData[,var.mean,drop=FALSE])
             attr(iDesign$mean, "assign") <- attr(object$design$mean, "assign")
             attr(iDesign$mean, "contrasts") <- attr(object$design$mean, "contrasts")
             attr(iDesign$mean, "variable") <- attr(object$design$mean, "variable")
@@ -387,9 +440,18 @@ resample.lmm <- function(object, type, effects, n.sample = 1e3, studentized = TR
         if(inherits(iEstimate,"try-error")){
             return(iEstimate)
         }else if(!studentized){
-            return(c(iEstimate$cv, iEstimate$estimate[name.keepcoef]))
+            if(effects.fct){
+                return(c(iEstimate$cv, effects(iEstimate$estimate)))
+            }else{
+                return(c(iEstimate$cv, iEstimate$estimate[name.keepcoef]))
+            }
         }else if(studentized){
-            c(iEstimate$cv, iEstimate$estimate[name.keepcoef], se = sqrt(diag(iVcov)[name.keepcoef]))
+            if(effects.fct){
+                iRes <- effects(iEstimate$estimate, iVcov)
+                return(c(iEstimate$cv, iRes[1,], se = iRes[2,]))
+            }else{
+                c(iEstimate$cv, iEstimate$estimate[name.keepcoef], se = sqrt(diag(iVcov)[name.keepcoef]))
+            }
         }
 
     }
@@ -441,8 +503,7 @@ resample.lmm <- function(object, type, effects, n.sample = 1e3, studentized = TR
     }
 
     if(cpus==1){
-        if (trace > 0) {
-            requireNamespace("pbapply")
+        if (trace > 0 & requireNamespace("pbapply")) {
             method.loop <- pbapply::pblapply
         }else{
             method.loop <- lapply
@@ -505,17 +566,29 @@ resample.lmm <- function(object, type, effects, n.sample = 1e3, studentized = TR
         Mcv.sample <- Mcv.sample[,1:length(name.keepcoef),drop=FALSE]
     }
     
-    out <- model.tables(object)[name.keepcoef,,drop=FALSE]*NA
-    out$estimate <- as.double(value.meancoef[name.keepcoef])
-
+    out <- as.data.frame(matrix(NA, nrow = length(name.keepcoef), ncol = 6,
+                                dimnames = list(name.keepcoef, c("estimate","se","df","lower","upper","p.value"))))
+    if(effects.fct){
+        if(studentized){
+            out$estimate <- effects.estimate[1,]
+            out$se <- effects.estimate[2,]
+        }else{
+            out$estimate <- effects.estimate
+        }
+    }else{
+        out$estimate <- as.double(value.meancoef[name.keepcoef])
+        if(studentized){
+            out$se <- as.double(sd.meancoef[name.keepcoef])
+        }
+    }
+    
     if(type %in% c("perm-var","perm-res") ){
-
+    
         if(studentized){
             Mcv.estimate <- matrix(value.meancoef[name.keepcoef]/sd.meancoef[name.keepcoef], nrow = ncv.sample, ncol = length(name.keepcoef), byrow = TRUE,
                                    dimnames = list(NULL,name.keepcoef))
             Mcv.sample.Wald <- Mcv.sample/Mcv.sample.se
 
-            out$se <- as.double(sd.meancoef[name.keepcoef])
             out$p.value <- (colSums(abs(Mcv.sample.Wald) > abs(Mcv.estimate), na.rm = TRUE)+correction)/(colSums(!is.na(Mcv.sample.Wald))+correction)
         }else{
             Mcv.estimate <- matrix(value.meancoef[name.keepcoef], nrow = ncv.sample, ncol = length(name.keepcoef), byrow = TRUE,
@@ -524,10 +597,9 @@ resample.lmm <- function(object, type, effects, n.sample = 1e3, studentized = TR
             out$p.value <- (colSums(abs(Mcv.sample) > abs(Mcv.estimate), na.rm = TRUE)+correction)/(colSums(!is.na(Mcv.sample))+correction)
         }
     }else if(type == "boot"){
+
         if(studentized){
-            Mcv.sample.Wald0 <- apply(Mcv.sample, MARGIN = 2, FUN = scale, scale = FALSE, center = TRUE)/Mcv.sample.se  ## center around the null
-            
-            out$se <- as.double(sd.meancoef[name.keepcoef])
+            Mcv.sample.Wald0 <- sweep(Mcv.sample, MARGIN = 2, FUN = "-", STATS = out$estimate)/Mcv.sample.se  ## center around the null
             out$lower <- out$estimate + out$se * apply(Mcv.sample.Wald0, MARGIN = 2, FUN = stats::quantile, probs = alpha/2, na.rm = TRUE)
             out$upper <- out$estimate + out$se * apply(Mcv.sample.Wald0, MARGIN = 2, FUN = stats::quantile, probs = 1-alpha/2, na.rm = TRUE)
             out$p.value <- sapply(name.keepcoef, function(iName){
@@ -539,9 +611,6 @@ resample.lmm <- function(object, type, effects, n.sample = 1e3, studentized = TR
             })
             
         }else{
-            Mcv.estimate <- matrix(value.meancoef[name.keepcoef], nrow = ncv.sample, ncol = length(name.keepcoef), byrow = TRUE,
-                                   dimnames = list(NULL,name.keepcoef))
-
             out$se <- apply(Mcv.sample, MARGIN = 2, FUN = stats::sd, na.rm = TRUE)
             out$lower <- apply(Mcv.sample, MARGIN = 2, FUN = stats::quantile, probs = alpha/2, na.rm = TRUE)
             out$upper <- apply(Mcv.sample, MARGIN = 2, FUN = stats::quantile, probs = 1-alpha/2, na.rm = TRUE)
@@ -713,7 +782,6 @@ resample.lmm <- function(object, type, effects, n.sample = 1e3, studentized = TR
 ##                 iData[index.cluster[[iCluster]],variable.perm] <- Uvar[[iPerm[iCluster]]] ## seems to properly expand Uvar over multiple timepoints
 ##             }
 ##         }else if(type == "bootstrap"){
-##             browser()
 ##             ils.Boot <- index.cluster[sample(n.cluster, replace = TRUE)]
 ##             iBoot <- unlist(ils.Boot)
 ##             iBoot.cl <- unlist(mapply(x = 1:n.cluster, y = lengths(ils.Boot), function(x,y){rep(x,y)}, SIMPLIFY = FALSE))

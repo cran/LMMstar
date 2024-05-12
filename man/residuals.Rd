@@ -10,12 +10,15 @@
 \method{residuals}{lmm}(
   object,
   type = "response",
-  var = NULL,
-  data = NULL,
+  variable = NULL,
+  at = NULL,
+  newdata = NULL,
   p = NULL,
   format = "long",
   keep.data = FALSE,
+  fitted.ci = FALSE,
   simplify = TRUE,
+  var,
   ...
 )
 
@@ -26,11 +29,14 @@
 \arguments{
 \item{object}{a \code{lmm} object.}
 
-\item{type}{[character] type of residual to output: raw residuals (\code{"response"}), Pearson residuals (\code{"pearson"}), normalized residuals (\code{"normalized"}, scaled residual \code{"scaled"}), or partial residuals (\code{"partial"} or \code{"partial-center"}). Can also be \code{"all"} to output all except partial residuals. See detail section.}
+\item{type}{[character] type of residual to output such as raw residuals (\code{"response"}), normalized residuals (\code{"normalized"}, partial residuals (\code{"partial"}).
+Can also be \code{"all"} to output all except partial residuals. See detail section.}
 
-\item{var}{[character vector] name of the variable relative to which the partial residuals should be computed.}
+\item{variable}{[character vector] name of the variable relative to which the partial residuals should be computed.}
 
-\item{data}{[data.frame] dataset relative to which the residuals should be computed. Only relevant if differs from the dataset used to fit the model.}
+\item{at}{[data.frame] values for the covariates at which to evaluate the partial residuals.}
+
+\item{newdata}{[data.frame] dataset relative to which the residuals should be computed. Only relevant if differs from the dataset used to fit the model.}
 
 \item{p}{[numeric vector] value of the model coefficients at which to evaluate the residuals. Only relevant if differs from the fitted values.}
 
@@ -41,8 +47,12 @@ or in a data.frame/vector with as many rows as observations (\code{"long"})}
 \item{keep.data}{[logical] Should the dataset relative to which the residuals are evaluated be output along side the residual values?
 Only possible in the long format.}
 
+\item{fitted.ci}{[logical] Should the confidence intervals relative to the fitted values be added to the output. Only relevant when argument \code{keep.data=TRUE}.}
+
 \item{simplify}{[logical] Simplify the data format (vector instead of data.frame) and column names (no mention of the time variable) when possible.
 Otherwise, information about the call and reference values used for partial residuals be added as an attribute.}
+
+\item{var}{[Deprecated] Not used anymore, replaced by argument variable.}
 
 \item{...}{Not used. For compatibility with the generic method.}
 }
@@ -56,7 +66,6 @@ Extract or compute the residuals of a linear mixed model.
 \details{
 The argument \code{type} defines how the residuals are computed:
 \itemize{
-\item \code{"fitted"}: fitted value \eqn{X_{ij} \hat{\beta}}.
 \item \code{"response"}: raw residual, i.e. observed outcome minus fitted value \eqn{\varepsilon_{ij} = Y_{ij} - X_{ij} \hat{\beta}}.
 \item \code{"pearson"}: each raw residual is divided by its modeled standard deviation \eqn{\varepsilon_{ij} = \frac{Y_{ij} - X_{ij} \hat{\beta}}{\sqrt{\hat{\omega}_{ij}}}}.
 \item \code{"studentized"}: same as \code{"pearson"} but excluding the contribution of the cluster in the modeled standard deviation  \eqn{\varepsilon_{ij} = \frac{Y_{ij} - X_{ij} \hat{\beta}}{\sqrt{\hat{\omega}_{ij}-\hat{q}_{ij}}}}.
@@ -68,7 +77,7 @@ The argument \code{type} defines how the residuals are computed:
 }
 where
 \itemize{
-\item \eqn{X=(E,W)} the design matrix. For partial residuals, it is split according to the variable(s) in argument \code{var} (\eqn{E}) and the rest (\eqn{W}).
+\item \eqn{X=(E,W)} the design matrix. For partial residuals, it is split according to the variable(s) in argument \code{variable} (\eqn{E}) and the rest (\eqn{W}).
 \item \eqn{Y} the outcome
 \item \eqn{\hat{\beta}=(\hat{\gamma},\hat{\delta})} the estimated mean coefficients relative to \eqn{X=(E,W)}
 \item \eqn{\hat{\Omega}} the modeled variance-covariance of the residuals and \eqn{\hat{\omega}} its diagonal elements
@@ -76,6 +85,8 @@ where
 \item \eqn{\hat{Q}_i= X_i (X^{t}\hat{\Omega}X)^{-1}X_i^{t}} a cluster specific correction factor, approximating the contribution of cluster i to \eqn{\hat{\Omega}}. Its diagonal elements are denoted \eqn{\hat{q}_i}.
 \item \eqn{\hat{D}_i} the upper Cholesky factor of \eqn{\hat{\Omega}-\hat{Q}_i}
 }
+
+Setting argument \code{fitted.ci} to \code{TRUE}, \code{simplify} to \code{FALSE}, \code{format} to \code{"long"} returns an attribute \code{"grad"} containing the first order partial derivatives of the residuals with respect to the model parameters.
 }
 \examples{
 
@@ -87,20 +98,17 @@ dL <- sampleRem(100, n.times = 3, format = "long")
 e.lm <- lmm(Y ~ visit + X1 + X2 + X6, data = dL)
 
 ## partial residuals
-residuals(e.lm, type = "partial", var = "X6")
-## residuals(e.lm) + dL$X6 * coef(e.lm)["X6"]
-e.reslm <- residuals(e.lm, type = "partial", var = "X6", keep.data = TRUE, simplify = FALSE)
+pRes <- residuals(e.lm, type = "partial", variable = "X6")
+range(residuals(e.lm) + dL$X6 * coef(e.lm)["X6"] - pRes)
+e.reslm <- residuals(e.lm, type = "partial", variable = "X6", keep.data = TRUE, simplify = FALSE)
 plot(e.reslm)
 
 ## partial residuals with specific reference
-type <- "partial"
-attr(type,"reference") <- data.frame(visit=factor(2,1:3),X2=0,X6=3)
-residuals(e.lm, type = type, var = "X1")
-## residuals(e.lm) + dL$X1 * coef(e.lm)["X1"] + coef(e.lm)["visit2"]
+residuals(e.lm, type = "partial", variable = "X1",
+          at = data.frame(visit=factor(2,1:3),X2=0,X6=3))
 
 ## partial residuals with centered covariates
-residuals(e.lm, type = "partial-center", var = "X1")
-## residuals(e.lm) + (dL$X1-mean(dL$X1)) * coef(e.lm)["X1"]
+residuals(e.lm, type = "partial-center", variable = "X1")
 
 #### Linear Mixed Model ####
 eUN.lmm <- lmm(Y ~ visit + X1 + X2 + X5 + X6,
@@ -120,7 +128,6 @@ residuals(eUN.lmm, type = "all")
 residuals(eUN.lmm, type = "all", keep.data = TRUE)
 
 ## partial residuals
-residuals(eUN.lmm, type = "partial", var = c("(Intercept)","X6"))
-residuals(eUN.lmm, type = "partial", var = c("X6"))
+residuals(eUN.lmm, type = "partial", variable = c("(Intercept)","visit","X6"))
 }
 \keyword{methods}

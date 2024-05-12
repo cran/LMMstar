@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt  7 2020 (11:12) 
 ## Version: 
-## Last-Updated: nov  8 2023 (15:05) 
+## Last-Updated: May 12 2024 (19:18) 
 ##           By: Brice Ozenne
-##     Update #: 2965
+##     Update #: 3070
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -18,7 +18,7 @@
 ## * lmm (documentation)
 ##' @title Fit Linear Mixed Model
 ##' @description Fit a linear mixed model defined by a mean and a covariance structure.
-##'g
+##'
 ##' @param formula [formula] Specify the model for the mean.
 ##' On the left hand side the outcome and on the right hand side the covariates affecting the mean value.
 ##' E.g. Y ~ Gender + Gene.
@@ -60,6 +60,7 @@
 ##' \code{\link{plot.lmm}} for a graphical display of the model fit or diagnostic plots. \cr
 ##' \code{\link{levels.lmm}} to display the reference level. \cr
 ##' \code{\link{anova.lmm}} for testing linear combinations of coefficients (F-test, multiple Wald tests) \cr
+##' \code{\link{effects.lmm}} for evaluating average marginal or counterfactual effects \cr
 ##' \code{\link{sigma.lmm}} for extracting estimated residual variance-covariance matrices. \cr
 ##' \code{\link{residuals.lmm}} for extracting residuals or creating residual plots (e.g. qqplots). \cr
 ##' \code{\link{predict.lmm}} for evaluating mean and variance of the outcome conditional on covariates or other outcome values.
@@ -91,10 +92,6 @@
 ##' model.tables(eCS.lmm)
 ##' confint(eCS.lmm)
 ##'
-##' if(require(emmeans)){
-##'   dummy.coef(eCS.lmm)
-##' }
-##' 
 ##' ## all parameters
 ##' coef(eCS.lmm, effects = "all")
 ##' model.tables(eCS.lmm, effects = "all")
@@ -129,11 +126,11 @@
 ##' #### 6- prediction ####
 ##' ## conditional on covariates
 ##' newd <- dL[1:3,]
-##' predict(eCS.lmm, newdata = newd, keep.newdata = TRUE)
+##' predict(eCS.lmm, newdata = newd, keep.data = TRUE)
 ##' ## conditional on covariates and outcome
 ##' newd <- dL[1:3,]
 ##' newd$Y[3] <- NA
-##' predict(eCS.lmm, newdata = newd, type = "dynamic", keep.newdata = TRUE)
+##' predict(eCS.lmm, newdata = newd, type = "dynamic", keep.data = TRUE)
 ##'
 ##' #### EXTRA ####
 ##' if(require(mvtnorm)){
@@ -207,14 +204,15 @@ lmm <- function(formula, repetition, structure, data,
         var.all <- c(var.all, unlist(structure$name))
     }
     outData <- .lmmNormalizeData(as.data.frame(data)[unique(stats::na.omit(var.all))],
-                                 var.outcome = var.outcome,
+                                 var.outcome = var.outcome, 
                                  var.cluster = outArgs$var.cluster,
                                  var.time = outArgs$var.time,
                                  var.strata = outArgs$var.strata,                         
                                  droplevels = TRUE,
                                  initialize.cluster = outArgs$ranef$crossed,
-                                 initialize.time = setdiff(outArgs$ranef$vars, outArgs$var.cluster))
-    data <- outData$data
+                                 initialize.time = setdiff(outArgs$ranef$vars, outArgs$var.cluster),
+                                 na.rm = TRUE)
+    data <- outData$data    
     var.cluster <- outData$var.cluster
     var.time <- outData$var.time
     var.time.original <- attr(var.time,"original")
@@ -231,14 +229,14 @@ lmm <- function(formula, repetition, structure, data,
     ## time
     U.time <- levels(data$XXtimeXX)
     if(length(var.time.original)>=1 && any(!is.na(var.time.original))){
-        attr(U.time,"original") <- unique(data[var.time.original])
+        attr(U.time,"original") <- unique(data[do.call(order,data[var.time.original]),var.time.original,drop=FALSE])
     }
     n.time <- max(data$XXtime.indexXX) ## may not match U.time in presence of missing values
 
     ## strata
     U.strata <- levels(data$XXstrataXX)
     if(length(var.strata.original)>=1 && any(!is.na(var.strata.original))){
-        attr(U.strata,"original") <- unique(data[var.strata.original])
+        attr(U.strata,"original") <- unique(data[do.call(order,data[var.strata.original]),var.strata.original,drop=FALSE])
     }
     n.strata <- max(data$XXstrata.indexXX) ## may not match U.strata in presence of missing values
 
@@ -258,6 +256,7 @@ lmm <- function(formula, repetition, structure, data,
 
     ## *** store results
     out$formula <- list(mean = outArgs$formula,
+                        mean.outcome = outArgs$formula.outcome,
                         mean.design = outArgs$formula.design,
                         var = structure$formula$var,
                         cor = structure$formula$cor)
@@ -306,7 +305,8 @@ lmm <- function(formula, repetition, structure, data,
                                     structure = structure,
                                     data = data, var.outcome = out$outcome$var, var.weights = out$weights$var,
                                     precompute.moments = precompute.moments,
-                                    drop.X = options$drop.X)
+                                    drop.X = options$drop.X,
+                                    options = options)
 
     ## *** update xfactor according to factors used in the vcov structure
     ## NOTE: use model.frame to handline splines in the formula
@@ -691,7 +691,7 @@ lmm <- function(formula, repetition, structure, data,
     }
 
     ## ** export
-    return(list(formula = formula, formula.design = detail.formula$formula$design, ranef = detail.ranef,
+    return(list(formula = formula, formula.outcome = stats::update(formula,.~1), formula.design = detail.formula$formula$design, ranef = detail.ranef,
                 var.outcome = var.outcome, var.X = var.X, var.cluster = var.cluster, var.time = var.time, var.strata = var.strata,
                 var.weights = var.weights, var.scale.Omega = var.scale.Omega,
                 method.fit = method.fit,
@@ -707,14 +707,16 @@ lmm <- function(formula, repetition, structure, data,
 ##' @param droplevels [logical] should un-used levels in cluster/time/strata be removed?
 ##' @param initalize.cluster [logical] when the cluster variable is NA/NULL,
 ##' should a different cluster per observation be used (0) or the same cluster for all observations (1)
-##' @param initalize.time [logical] when the time variable is NA/NULL,
-##' how should the observations be ordered
+##' @param initalize.time [logical] when the time variable is NA/NULL, ##' how should the observations be ordered
+##' @param na.rm [logical] should row containing missing values be removed from the design matrix?
 ##'
 ##' @details Argument \code{var.outcome} is NA when the function is called by \code{model.matrix.lmm}
 ##' 
 ##' @noRd
-.lmmNormalizeData <- function(data, var.outcome, var.cluster, var.time, var.strata, droplevels,
-                              initialize.cluster, initialize.time){
+.lmmNormalizeData <- function(data,
+                              var.outcome, 
+                              var.cluster, var.time, var.strata, droplevels,
+                              initialize.cluster, initialize.time, na.rm){
 
 
     ## ** normalize
@@ -738,6 +740,9 @@ lmm <- function(formula, repetition, structure, data,
 
     ## ** test
     names.data <- names(data)
+    if(NROW(data)==0){
+        stop("Argument \'data\' has 0 rows. \n")
+    }
     if("XXindexXX" %in% names.data){
         stop("Argument \'data\' should not contain a column named \"XXindexXX\" as this name is used internally by the lmm function. \n")
     }
@@ -777,8 +782,22 @@ lmm <- function(formula, repetition, structure, data,
              "There should be exactly one variable after the grouping symbol (|), something like: ~ time|cluster or strata ~ time|cluster. \n", sep = "")
     }
 
+    ## ** convert logical into factor
+    test.logical <- sapply(data,is.logical)
+    if(any(test.logical)){ ## avoid an error when computing partial residuals since the formula interface treat logical as factor 
+        data[test.logical] <- lapply(data[test.logical], as.factor)
+    }
+    
     ## ** index
     data$XXindexXX <- 1:NROW(data)
+
+    ## ** outcome
+    ## handle a possible transformation of the outcome
+    ## (model.frame excludes NAs - this is avoided by removing NAs before hand)
+    ## if(!is.na(var.outcome)){
+    ##     indexY.NNA <- which(!is.na(data[[var.outcome]]))
+    ##     data[indexY.NNA,var.outcome] <- stats::model.response(stats::model.frame(formula.outcome, data[indexY.NNA,,drop=FALSE]))
+    ## }
 
     ## ** cluster
     if(is.na(var.cluster)){
@@ -835,8 +854,12 @@ lmm <- function(formula, repetition, structure, data,
             }else{
                 data$XXtimeXX <- data[[var.time]]
             }
-        }else if(is.numeric(data[[var.time]]) && all(data[[var.time]] %% 1 == 0)){
-            data$XXtimeXX <- addLeading0(data[[var.time]], as.factor = TRUE, code = attr(var.time,"code"))
+        }else if(is.numeric(data[[var.time]])){
+            if(all(data[[var.time]]>=0) && all(data[[var.time]] %% 1 == 0)){
+                data$XXtimeXX <- addLeading0(data[[var.time]], as.factor = TRUE, code = attr(var.time,"code"))
+            }else{
+                data$XXtimeXX <- factor(data[[var.time]], levels = unique(sort(data[[var.time]])))
+            }
         }else{
             data$XXtimeXX <- factor(data[[var.time]], levels = sort(unique(data[[var.time]])))
         }
@@ -901,7 +924,7 @@ lmm <- function(formula, repetition, structure, data,
 
     ## ** missing data
     index.na <- which(rowSums(is.na(data[names.data]))>0)
-    if(length(index.na) == NROW(data)){
+    if(na.rm && length(index.na) == NROW(data)){
         var.na <- names.data[colSums(!is.na(data))==0]
         if(length(var.na)==0){
             stop("All observations have at least one missing data. \n")
@@ -929,43 +952,38 @@ lmm <- function(formula, repetition, structure, data,
                                      "  ",nobs.naOther," observation",if(nobs.naOther>1){"s"}," with missing values in \"",paste(name.naOther2, collapse="\" \""),"\" ",ifelse(nobs.naOther==1,"has","have")," been removed. \n", sep = ""))
         }
 
-        if(!is.na(var.cluster)){
-            attr(index.na, "cluster") <- data[index.na,var.cluster]
-        }else{
-            attr(index.na, "cluster") <- data[index.na,"XXclusterXX"]
-        }
-        if(length(var.time)==1 && !is.na(var.time)){
-            attr(index.na, "time") <- data[index.na,var.time]
-        }else{
-            attr(index.na, "time") <- data[index.na,"XXtimeXX"]
-        }
-        keep <- list(nlevel.cluster = max(data$XXcluster.indexXX),
-                     nlevel.time = max(data$XXtime.indexXX),
-                     nlevel.strata = max(data$XXstrata.indexXX))
-        data <- data[-index.na,, drop=FALSE]
-        data$XXcluster.indexXX <- as.numeric(droplevels(data$XXclusterXX))
-        if(droplevels){
-            data$XXtime.indexXX <- as.numeric(droplevels(data$XXtimeXX))
-            data$XXstrata.indexXX <- as.numeric(droplevels(data$XXstrataXX))
-        }
+        attr(index.na, "cluster") <- data[index.na,"XXclusterXX"]
+        attr(index.na, "time") <- data[index.na,"XXtimeXX"]
 
-        loss.cluster <- keep$nlevel.cluster - max(data$XXcluster.indexXX)
-        loss.time <- keep$nlevel.time - max(data$XXtime.indexXX) 
-        loss.strata <- keep$nlevel.strata - max(data$XXstrata.indexXX)
-        if(loss.cluster>0){
-            warning <- TRUE
-            text.warning <- c(text.warning,paste0("  ",loss.cluster," cluster",ifelse(loss.cluster==1," has","s have")," been removed. \n"))
-        }
-        if(loss.time>0){
-            warning <- TRUE
-            text.warning <- c(text.warning,paste0("  ",loss.time," timepoint",ifelse(loss.time==1," has","s have")," been removed. \n"))
-        }
-        if(loss.strata>0){
-            warning <- TRUE
-            text.warning <- c(text.warning,paste0("  ",loss.strata," strata",ifelse(loss.strata==1," has"," have")," been removed. \n"))
-        }
-        if(warning){
-            warning(text.warning)
+        if(na.rm){
+            keep <- list(nlevel.cluster = max(data$XXcluster.indexXX),
+                         nlevel.time = max(data$XXtime.indexXX),
+                         nlevel.strata = max(data$XXstrata.indexXX))
+            data <- data[-index.na,, drop=FALSE]
+            data$XXcluster.indexXX <- as.numeric(droplevels(data$XXclusterXX))
+            if(droplevels){
+                data$XXtime.indexXX <- as.numeric(droplevels(data$XXtimeXX))
+                data$XXstrata.indexXX <- as.numeric(droplevels(data$XXstrataXX))
+            }
+
+            loss.cluster <- keep$nlevel.cluster - max(data$XXcluster.indexXX)
+            loss.time <- keep$nlevel.time - max(data$XXtime.indexXX) 
+            loss.strata <- keep$nlevel.strata - max(data$XXstrata.indexXX)
+            if(loss.cluster>0){
+                warning <- TRUE
+                text.warning <- c(text.warning,paste0("  ",loss.cluster," cluster",ifelse(loss.cluster==1," has","s have")," been removed. \n"))
+            }
+            if(loss.time>0){
+                warning <- TRUE
+                text.warning <- c(text.warning,paste0("  ",loss.time," timepoint",ifelse(loss.time==1," has","s have")," been removed. \n"))
+            }
+            if(loss.strata>0){
+                warning <- TRUE
+                text.warning <- c(text.warning,paste0("  ",loss.strata," strata",ifelse(loss.strata==1," has"," have")," been removed. \n"))
+            }
+            if(warning){
+                warning(text.warning)
+            }
         }
     }else{
         index.na <- NULL
@@ -1098,10 +1116,12 @@ lmm <- function(formula, repetition, structure, data,
                 args.structure$formula <- stats::as.formula(paste(var.strata.original,"~1"))
             }
         }
-
         if(n.time==1 && (structure %in% structure1time2ID || (structure == "IND" && all(all.vars(args.structure$formula) %in% var.time.original)))){
             message("Single timepoint: move from ",structure," to ID structure. \n")
             structure <- "ID"
+        }else if(structure == "UN" && all(table(data[[var.cluster]])<2)){
+            message("Single repetition per cluster: move from ",structure," to IND structure. \n")
+            structure <- "IND"
         }
 
         if(structure %in% c("UN","EXP","TOEPLITZ") || (n.time>1 && structure == "IND")){
@@ -1116,18 +1136,22 @@ lmm <- function(formula, repetition, structure, data,
 
     ## *** Variability within cluster (for clusters with more than a single value)
     if(!is.null(structure$formula$cor)){
-        check <- FALSE
-        for(iC in 1:n.cluster){ ## iC <- 1
-            iData <- data[data$XXcluster.indexXX==iC,var.outcome]
-            if(length(iData)==1 || all(is.na(iData))){
-                next
-            }else if(max(iData, na.rm = TRUE)-min(iData, na.rm = TRUE)>1e-12){
-                check <- TRUE
-                break
+        if(all(table(data$XXcluster.indexXX)<2)){
+            warning("Single observation per cluster: will not be able to estimate correlation parameters. \n")
+        }else{
+            check <- FALSE
+            for(iC in 1:n.cluster){ ## iC <- 1
+                iData <- data[data$XXcluster.indexXX==iC,var.outcome]
+                if(length(iData)==1 || all(is.na(iData))){
+                    next
+                }else if(max(iData, na.rm = TRUE)-min(iData, na.rm = TRUE)>1e-12){
+                    check <- TRUE
+                    break
+                }
             }
-        }
-        if(check == FALSE){
-            warning("Constant outcome values within cluster. \n")
+            if(check == FALSE){
+                warning("Constant outcome values within cluster. \n")
+            }
         }
     }
 

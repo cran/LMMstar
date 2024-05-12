@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: jul  5 2023 (14:01) 
 ## Version: 
-## Last-Updated: aug  1 2023 (14:26) 
+## Last-Updated: May 12 2024 (19:16) 
 ##           By: Brice Ozenne
-##     Update #: 139
+##     Update #: 147
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -23,6 +23,7 @@
 ##' @noRd
 
 ## * update.ID
+##' @noRd
 update.ID <- function(object, var.cluster, var.time, var.strata, n.time, ...){
 
     dots <- list(...)
@@ -77,6 +78,7 @@ update.ID <- function(object, var.cluster, var.time, var.strata, n.time, ...){
 }
 
 ## * update.IND
+##' @noRd
 update.IND <- function(object, var.cluster, var.time, var.strata, n.time, ...){
 
     dots <- list(...)
@@ -139,11 +141,12 @@ update.IND <- function(object, var.cluster, var.time, var.strata, n.time, ...){
 }
 
 ## * update.CS
+##' @noRd
 update.CS <- update.ID
 
 ## * update.RE
-##' @param ranef Random effect structure identified via the formula argument of lmm (mean structure).
 ##' @noRd
+##' @param ranef Random effect structure identified via the formula argument of lmm (mean structure).
 update.RE <- function(object, var.cluster, var.time, var.strata, ranef, ...){
 
     dots <- list(...)
@@ -212,12 +215,15 @@ update.RE <- function(object, var.cluster, var.time, var.strata, ranef, ...){
 }
 
 ## * update.TOEPLITZ
+##' @noRd
 update.TOEPLITZ <- update.IND
 
 ## * update.UN
+##' @noRd
 update.UN <- update.IND
 
 ## * update.CUSTOM
+##' @noRd
 update.CUSTOM <- update.ID
 
 ##----------------------------------------------------------------------

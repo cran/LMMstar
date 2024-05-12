@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt  7 2020 (11:13) 
 ## Version: 
-## Last-Updated: nov  8 2023 (15:06) 
+## Last-Updated: May 12 2024 (17:05) 
 ##           By: Brice Ozenne
-##     Update #: 1285
+##     Update #: 1408
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -76,6 +76,7 @@ summary.lmm <- function(object, level = 0.95, robust = FALSE,
     options <- LMMstar.options()
 
     n.strata <- object$strata$n
+    U.strata <- object$strata$levels
     
     ## ** normalize user input
     dots <- list(...)
@@ -230,13 +231,13 @@ summary.lmm <- function(object, level = 0.95, robust = FALSE,
             }else if(structure$type == "homogeneous0"){
                 cat(txt.strata,"crossed compound symmetry \n\n",sep="")
             }
-        }else if(inherits(structure, "TOEPLITZ")){
+        }else if(inherits(structure, "TOEPLITZ")){            
             if(all(is.na(structure$name$cor))){
                 cat(txt.strata,"Toeplitz \n\n",sep="")
             }else if(structure$type == "heterogeneous"){
                 n.block <- length(unique(structure$X$cor[,3]))-1
                 cat(txt.strata,paste0("unstructured with ",n.block," constant subdiagonal",if(n.block>1){"s"}," \n\n"),sep="")
-            }else if(structure$type == "lag"){
+            }else if(tolower(structure$type) == "lag"){
                 cat(txt.strata,"block Toeplitz \n\n",sep="")
             }else if(structure$type == "homogeneous"){
                 n.block <- length(unique(structure$X$cor[,3]))-1
@@ -342,22 +343,24 @@ summary.lmm <- function(object, level = 0.95, robust = FALSE,
         }else{
             cat("  - variance decomposition: ",paste0(object$strata$var," ",deparse(structure.ranef$formula)),"\n",sep="")
         }
-        table.re <- nlme::ranef(object, effects = "variance", format = "wide", simplify = FALSE)
+        table.reA <- nlme::ranef(object, effects = "variance", format = "long", scale = "absolute", simplify = FALSE)
+        table.reR <- nlme::ranef(object, effects = "variance", format = "long", scale = "relative", simplify = FALSE)
         if(n.strata==1){
-            printtable <- cbind(variance = table.re$variance, "%" = 100*table.re$relative, sd = sqrt(table.re$variance))
-            rownames(printtable) <- paste0("    ",table.re$variable)
+            printtable <- cbind(variance = table.reA$estimate, "%" = 100*table.reR$estimate, sd = sqrt(table.reA$estimate))
+            rownames(printtable) <- paste0("    ",table.reA$type)
         }else{
-            printtable <- unclass(by(table.re,table.re$strata, function(iDF){
-                iPrintTable <- data.frame(variance = iDF$variance, "%" = 100*iDF$relative, sd = sqrt(iDF$variance),
-                                          check.names = FALSE)
-                rownames(iPrintTable) <- paste0("    ",iDF$variable)
-                return(as.matrix(iPrintTable))
-            }, simplify = FALSE))
-            attr(printtable,"call") <- NULL
+            printtable <- stats::setNames(lapply(U.strata, function(iU){ ## iU <- "Male"
+                iPrintTable <- cbind(variance = table.reA[table.reA$strata==iU,"estimate"],
+                                     "%" = 100*table.reR[table.reA$strata==iU,"estimate"],
+                                     sd = sqrt(table.reA[table.reA$strata==iU,"estimate"]))
+                rownames(iPrintTable) <- paste0("    ",table.reA[table.reA$strata==iU,"type"])
+                return(iPrintTable)
+            }), U.strata)
         }
         print(printtable, digits = digits, na.print = "" , quote = FALSE)
     }else{
-        table.re <- NULL
+        table.reA <- NULL
+        table.reR <- NULL
     }
 
     
@@ -395,7 +398,8 @@ summary.lmm <- function(object, level = 0.95, robust = FALSE,
     return(invisible(list(correlation = table.cor,
                           variance = table.var,
                           sd = table.sd,
-                          re = table.re,
+                          reA = table.reA,
+                          reR = table.reR,
                           mean = table.mean)))
 }
 
@@ -510,13 +514,13 @@ summary.Wald_lmm <- function(object, print = TRUE, seed = NULL, columns = NULL, 
 
     ## ** extract information
     ## *** multivariate tests
-    if(print.multivariate>0){
+    if(print.multivariate>0 && any(!is.na(object$multivariate$df.num))){
         table.multivariate <- object$multivariate[,setdiff(columns.multivariate,c("type","")),drop=FALSE]
         nchar.type <- nchar(object$args$type[[1]])
         maxchar.type <- max(nchar.type)
         if("type" %in% columns.multivariate){
             vec.white <- sapply(maxchar.type-nchar.type, function(iN){paste(rep(" ", iN), collapse = "")})
-            sparsetype <- object$args$type[[1]]
+            sparsetype <- object$args$type[[1]]            
             sparsetype[duplicated(sparsetype)] <- sapply(sparsetype[duplicated(sparsetype)], function(iWord){paste(rep(" ", times = nchar(iWord)), collapse="")})
             rownames(table.multivariate) <- paste(vec.white,sparsetype,sep,object$multivariate$test,sep="")
         }else if(any(duplicated(object$multivariate$test))){
@@ -534,6 +538,7 @@ summary.Wald_lmm <- function(object, print = TRUE, seed = NULL, columns = NULL, 
         if(print.multivariate>0.5){
             cat("\t\tMultivariate Wald test \n\n")
         }
+
         .printStatTable(table = table.multivariate, robust = robust, df = df, level = NULL, type.information = type.information,
                         method.p.adjust = NULL,
                         backtransform = NULL, transform.sigma = NULL, transform.k = NULL, transform.rho = NULL,
@@ -545,7 +550,8 @@ summary.Wald_lmm <- function(object, print = TRUE, seed = NULL, columns = NULL, 
     }
 
     ## *** local tests
-    if(print.univariate>0 && ci){        
+    if(print.univariate>0 && ci){
+
         table.univariate <- confint(object, columns = union(setdiff(columns.univariate,""),"type"), ...)
         if(is.null(columns) && all(is.na(table.univariate$lower)) && all(is.na(table.univariate$upper))){
             columns.univariate <- setdiff(columns.univariate, c("lower","upper"))
@@ -585,7 +591,7 @@ summary.Wald_lmm <- function(object, print = TRUE, seed = NULL, columns = NULL, 
             rownames(table.univariate) <- paste(vec.white,table.univariate$type,sep,rownames(table.univariate),sep="")
         }else if(length(unique(table.univariate$type))>1){
             test.nduplicated <- !duplicated(table.univariate$type)            
-            rownames(table.univariate) <- sapply(1:NROW(table.univariate), function(iIndex){
+            rownames(table.univariate) <- sapply(1:NROW(table.univariate), function(iIndex){ ## iIndex <- 1
                 if(test.nduplicated[iIndex]){
                     paste(paste(rep(" ", maxchar.type-nchar.type[iIndex]), collapse = ""),table.univariate$type[iIndex],sep,rownames(table.univariate)[iIndex],sep="")
                 }else{
@@ -617,14 +623,13 @@ summary.Wald_lmm <- function(object, print = TRUE, seed = NULL, columns = NULL, 
         }else{
             digits.p.value2 <- digits.p.value
         }
-        
         .printStatTable(table = table.univariate, robust = robust, df = df, level = level, type.information = type.information,
                         method.p.adjust = method.p.adjust, factor.p.adjust = factor.p.adjust, error.p.adjust = error, seed = seed, n.sample = n.sample,
                         backtransform = backtransform, transform.sigma = transform.sigma, transform.k = transform.k, transform.rho = transform.rho,
                         columns = setdiff(columns.univariate,"type"), col.df = c("df"), name.statistic = c("t-statistic","z-statistic"),
                         digits = digits, digits.df = digits.df, digits.p.value = digits.p.value2,
                         decoration = legend, legend = legend)
-
+        
         if(print.univariate>0.5){
             cat("\n")
         }
@@ -687,6 +692,38 @@ summary.LRT_lmm <- function(object, digits = 3, digits.df = 1, digits.p.value = 
     return(invisible(NULL))
 }
 
+## * summary.effect_lmm (code)
+##' @export
+summary.effect_lmm <- function(object, columns = NULL, print = TRUE, ...){
+
+    ## ** normalize user input
+    if("print" %in% names(match.call())==FALSE && all(is.na(object$multivariate$df.num))){
+        print <- c(0,0.5)        
+    }
+    if(object$args$effect[[1]][1]=="identity" && "columns" %in% names(match.call())==FALSE){
+        object$univariate$p.value <- NULL
+        columns <- c("estimate","se","df","lower","upper")
+    }
+
+    ## ** prepare
+    outcome.txt <- switch(object$args$effect[[1]][2],
+                          "none" = "outcome",
+                          "change" = "change in outcome",
+                          "auc" = "area under the outcome curve",
+                          "auc-b" = "area under the outcome curve above baseline")
+    contrast.txt <- switch(object$args$effect[[1]][1],
+                           "identity" = "Average",
+                           "difference" = "Difference in average")
+
+    ## ** display
+    if(is.null(object$args$variable)){
+        cat("\t\t",contrast.txt," counterfactual ",outcome.txt,"\n\n", sep = "")
+    }else{
+        cat("\t\t",contrast.txt," counterfactual ",outcome.txt,"\n\t\t w.r.t \'",object$args$variable,"\' values \n\n", sep = "")
+    }
+    summary.Wald_lmm(object, print = print, columns = columns, ...)
+}
+
 ## * summary.mlmm (documentation)
 ##' @title Summary of Multiple Linear Mixed Models
 ##' @description Estimates, p-values, and confidence intevals for multiple linear mixed models.
@@ -707,7 +744,7 @@ summary.LRT_lmm <- function(object, digits = 3, digits.df = 1, digits.p.value = 
 summary.mlmm <- function(object, digits = 3, method = NULL, print = NULL, hide.data = FALSE, hide.fit = FALSE, ...){
 
     options <- LMMstar.options()
-            
+
     if(is.null(method)){
         method <- "none"
     }
@@ -956,27 +993,35 @@ summary.resample <- function(object, digits = 3, ...){
     }
 
     if(length(digits.p.value)==1){
-        digits.p.value <- c(digits.p.value,.Machine$double.eps)
+        digits.p.value <- c(digits.p.value,1e-4)
     }
-    
-    ## ** add stars
+
+    ## ** add stars    
     if("p.value" %in% names(table)){
-        table.print <- cbind(table,
-                             stats::symnum(table$p.value, corr = FALSE, na = FALSE,
-                                           cutpoints = c(0, 0.001, 0.01, 0.05, 0.1, 1),
-                                           symbols = c("***", "**", "*", ".", " "))
-                             )
-        names(table.print)[NCOL(table.print)] <- ""
+        if(all(is.na(table$p.value))){
+            table.print <- table[,setdiff(names(table),"p.value"),drop=FALSE]
+        }else{
+            table.print <- cbind(table,
+                                 stats::symnum(table$p.value, corr = FALSE, na = FALSE,
+                                               cutpoints = c(0, 0.001, 0.01, 0.05, 0.1, 1),
+                                               symbols = c("***", "**", "*", ".", " "))
+                                 )
+            names(table.print)[NCOL(table.print)] <- ""
+        }
     }else{
         table.print <- table
     }
+    
 
     ## ** round
     columns.num <- intersect(setdiff(columns,c(col.df,"null","p.value")), names(table))
-    for(iCol in columns.num){
-        table.print[[iCol]] <- as.character(round(table.print[[iCol]], digits = digits))
+    for(iCol in columns.num){ 
+        table.print[[iCol]] <- as.character(round(table[[iCol]], digits = digits))
+        if(any(!is.na(table[[iCol]])) && any(table[[iCol]]!=0 & table.print[[iCol]] == "0")){
+            table.print[[iCol]][table[[iCol]]!=0 & table.print[[iCol]] == "0"] <- paste0("<0.",paste0(rep(0,digits-1),collapse=""),"1")
+        }
     }
-    if("p.value" %in% names(table)){
+    if("p.value" %in% names(table.print)){
         table.print$p.value <- as.character(format.pval(table.print$p.value, digits = digits.p.value[1], eps = digits.p.value[2]))
     }
     if(!is.null(col.df) && all(col.df %in% columns)){

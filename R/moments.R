@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: Jun 18 2021 (09:15) 
 ## Version: 
-## Last-Updated: aug  1 2023 (16:45) 
+## Last-Updated: maj  7 2024 (11:17) 
 ##           By: Brice Ozenne
-##     Update #: 507
+##     Update #: 518
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -38,6 +38,7 @@
     }else{
         test.d2Omega  <- FALSE
     }
+
     out$reparametrize <- .reparametrize(p = param.value[index.var], type = param.type[index.var], level = param.level[index.var], 
                                         sigma = design$param$sigma[index.var], k.x = design$param$k.x[index.var], k.y = design$param$k.y[index.var],
                                         Jacobian = TRUE, dJacobian = 2*test.d2Omega, inverse = FALSE, ##  2 is necessary to export the right dJacobian

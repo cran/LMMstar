@@ -3,9 +3,9 @@
 ## Author: Brice Ozenne
 ## Created: okt 23 2020 (12:33) 
 ## Version: 
-## Last-Updated: aug  1 2023 (13:21) 
+## Last-Updated: maj  7 2024 (15:33) 
 ##           By: Brice Ozenne
-##     Update #: 144
+##     Update #: 166
 ##----------------------------------------------------------------------
 ## 
 ### Commentary: 
@@ -49,7 +49,7 @@ vitaminL$time <- as.factor(vitaminL$time)
 test_that("lmm - error due to minus sign in levels of a categorical variable",{
     data(gastricbypassL, package = "LMMstar")
     gastricbypassL$time2 <- factor(gastricbypassL$time,
-                                  levels = c("3monthsBefore", "1weekBefore", "1weekAfter", "3monthsAfter"),
+                                  levels = c("-13", "-1", "1", "13"),
                                   labels = c("-3 months", "-1 week", "+1 week", "+3 months"))
 
     eCS.lmm <- lmm(glucagonAUC~time,
@@ -70,11 +70,11 @@ test_that("lmm - error due to minus sign in levels of a categorical variable",{
                    repetition = ~time|id,
                    structure = "UN")
 
-    GS <- data.frame("estimate" = c(8.23786515, 8.07982964, 8.71529146, 8.40726178), 
-           "se" = c(0.16222142, 0.16266603, 0.16423827, 0.16222142), 
-           "df" = c(4.77074225, 11.80468799, 16.74320031, 17.18555734), 
-           "lower" = c(7.81476172, 7.72475934, 8.36837371, 8.06528579), 
-           "upper" = c(8.66096858, 8.43489993, 9.06220921, 8.74923777))
+    GS <- data.frame("estimate" = c(2.74385014, 2.59632724, 3.31926293, 3.0461797), 
+                     "se" = c(0.16222125, 0.16266595, 0.1642382, 0.16222137), 
+                     "df" = c(4.77074244, 11.80473679, 16.74319711, 17.18559845), 
+                     "lower" = c(2.32074717, 2.2412573, 2.97234531, 2.70420388), 
+                     "upper" = c(3.1669531, 2.95139719, 3.66618055, 3.38815551))
 
     test <- confint(eUN.lmm, transform.k = "logsd", effects = "variance", backtransform = FALSE,
                     columns = c("estimate","se","df","lower","upper"))
@@ -111,7 +111,7 @@ data("gastricbypassL", package = "LMMstar")
 dfres.R <- gastricbypassL[order(gastricbypassL$id),]
 
 test_that("lmm - studentized and normalized residuals",{
-    fit.main <- lmm(weight~time, 
+    fit.main <- lmm(weight~visit, 
                     repetition=~visit|id,
                     structure="UN",
                     data=dfres.R,
@@ -148,13 +148,13 @@ test_that("lmm - predicted values",{
     set.seed(11)
     dfres.R2 <- dfres.R[sample.int(NROW(dfres.R),replace = FALSE),,drop=FALSE]
 
-    fit.main <- lmm(weight~time, 
+    fit.main <- lmm(weight~visit, 
                     repetition=~visit|id,
                     structure="UN",
                     data=dfres.R,
                     df=TRUE)
-    fit.main2 <- lmm(weight~time, 
-                     repetition=~visit|id,
+    fit.main2 <- lmm(weight~visit, 
+                     repetition=~time|id,
                      structure="UN",
                      data=dfres.R2,
                      df=TRUE)
@@ -165,37 +165,37 @@ test_that("lmm - predicted values",{
     expect_equal(logLik(fit.main2),logLik(fit.main))
 
     ## error due to wrong factor
-    expect_error(predict(fit.main, newdata = data.frame(time = "-1 week"), se = FALSE))
+    expect_error(predict(fit.main, newdata = data.frame(visit = "-1 week"), se = FALSE))
     ## valid prediction
-    expect_equal(predict(fit.main, newdata = data.frame(time = "1weekBefore"), se = FALSE)[[1]],
+    expect_equal(predict(fit.main, newdata = data.frame(visit = "2"), se = FALSE)[[1]],
                  sum(coef(fit.main)[1:2]))
-    expect_equal(predict(fit.main, newdata = data.frame(time = "1weekBefore"), se = "estimation"),
+    expect_equal(predict(fit.main, newdata = data.frame(visit = "2"), se = TRUE),
                  data.frame("estimate" = c(121.24), 
                             "se" = c(4.22845441), 
                             "df" = c(18.99992877), 
                             "lower" = c(112.38974096), 
                             "upper" = c(130.09025904)),
                  tol = 1e-3)
-    expect_equal(predict(fit.main, newdata = data.frame(time = "1weekBefore", visit = 1:4, id = c(1,1,2,2)), se = "total"),
+    expect_equal(predict(fit.main2, newdata = data.frame(visit = "2", time = c(-13,-1,1,13), id = c(1,1,2,2)), se = c(TRUE,TRUE)),
                  data.frame("estimate" = c(121.24, 121.24, 121.24, 121.24), 
-                            "se" = c(20.70577588, 19.37721241, 18.75815531, 17.57030288), 
-                            "df" = c(Inf, Inf, Inf, Inf), 
-                            "lower" = c(80.65742501, 83.26136156, 84.47469117, 86.80283915), 
-                            "upper" = c(161.82257499, 159.21863844, 158.00530883, 155.67716085)),
+                            "se" = c(20.70572944, 19.37717512, 18.75812161, 17.57028128), 
+                            "df" = c(19.00000002, 19.00000002, 19.00000002, 19.00000002), 
+                            "lower" = c(77.90241022, 80.68310636, 81.97880026, 84.46497864), 
+                            "upper" = c(164.57758978, 161.79689364, 160.50119974, 158.01502136)),
                  tol = 1e-3)
 
     data("gastricbypassW", package = "LMMstar")
     GS <- predict(lm(weight2 ~ weight1, data = gastricbypassW), newdata = data.frame(weight1 = 50), se = TRUE)
     newdata <- data.frame(time = c("3monthsBefore","1weekBefore"), visit = factor(1:2,levels=1:4), weight = c(50,NA), id = c(1,1))
-    test <- predict(fit.main, newdata = newdata, type = "dynamic", keep.newdata = FALSE)
+    test <- predict(fit.main, newdata = newdata, type = "dynamic", keep.data = TRUE)
 
     expect_equivalent(test$estimate[is.na(newdata$weight)], GS$fit, tol = 1e-3)
-    expect_equivalent(test[is.na(newdata$weight),],
-                      data.frame("estimate" = c(48.3228695), 
-                                 "se" = c(17.10624779), 
-                                 "df" = c(Inf), 
-                                 "lower" = c(14.79523992), 
-                                 "upper" = c(81.85049907)),
+    expect_equivalent(test[is.na(newdata$weight),c("estimate","se","df","lower","upper")],
+                      data.frame("estimate" = c(48.32285102), 
+                                 "se" = c(2.4918983), 
+                                 "df" = c(17.04111057), 
+                                 "lower" = c(43.06637117), 
+                                 "upper" = c(53.57933087)),
                       tol = 1e-3)
     
 })
@@ -464,9 +464,6 @@ test_that("0 variability in the outcome", {
 })
 
 ## * from: Brice, Monday 22-10-10 at 11:18
-library(mvtnorm)
-library(data.table)
-
 test_that("Incorrect ordering of the coefficient in mlmm", {
     ## confusion of the order 1, 10, 2, 3 instead of 1, 2, 3, ...
     n <- 25
@@ -511,9 +508,11 @@ test_that("Start with cluster with single observation", {
     set.seed(10)
     dL <- sampleRem(100, n.times = 3, format = "long")
     e.lmm <- lmm(Y ~ X1 + (1|id), data = dL[3:19,], df = FALSE)
-    e.lmer <- lmer(Y ~ X1 + (1|id), data = dL[3:19,])
+    ## e.lmer <- lmer(Y ~ X1 + (1|id), data = dL[3:19,])
+    e.lme <- lme(Y ~ X1, random =~ 1|id, data = dL[3:19,])
     ## was giving an error
-    expect_equal(as.double(ranef(e.lmm)$estimate),as.double(ranef(e.lmer)$id[,1]), tol = 1e-6)
+    ## expect_equal(as.double(ranef(e.lmm)$estimate),as.double(ranef(e.lmer)$id[,1]), tol = 1e-6)
+    expect_equal(as.double(ranef(e.lmm)),as.double(ranef(e.lme)[,1]), tol = 1e-6)
 
 })
 
@@ -556,6 +555,40 @@ test_that("Incorrect display of the missing data patterns", {
                  tol = 1e-6)
 })
 
+## * from: Brice Sunday 24-02-11 at 23:42
+test_that("Partial residuals in presence of missing covariate values", {
+    data("abetaW", package = "LMMstar")
+    e.lmm <- suppressWarnings(lmm(qol1 ~ sex + age + group, data = abetaW))
+    
+    expect_equivalent(abetaW$qol1 - coef(e.lmm)["sexM"] * (abetaW$sex=="M") - coef(e.lmm)["age"] * abetaW$age,
+                      as.double(residuals(e.lmm, type = "partial", variable = c("(Intercept)","group"))), tol = 1e-5)
+
+
+})
+
+## * from: Brice Sunday 24-02-11 at 23:42
+test_that("lmm with missing values", {
+
+    df <- data.frame("patient" = c(1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7), 
+                     "week" = c(1, 1, 2, 2, 1, 1, 2, 2, 1, 2, 2, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2, 2, 2), 
+                     "day" = c("1", "2", "1", "2", "1", "2", "1", "2", "1", "1", "2", "1", "2", "1", "2", "1", "2", "1", "2", "1", "2", "1", "2"), 
+                     "value" = c(0.05018746, 0.10815747, 0.14628669, 0.12400832, 0.17294545, 0.06389794, 0.13791924, 0.14636324, 0.05373327, 0.02743522, 0.07101780, 0.05755782, 0.02761766, NA, 0.08741390, 0.07089347, 0.04045056, 0.06804850, 0.09925521, 0.16482979, NA, 0.06814713, 0.20325134), 
+                     "repetition" = c("1.1", "2.1", "1.2", "2.2", "1.1", "2.1", "1.2", "2.2", "1.1", "1.2", "2.2", "1.2", "2.2", "1.1", "2.1", "1.2", "2.2", "1.1", "2.1", "1.2", "2.2", "1.2", "2.2"))
+
+    xxx <- lmm(value ~ week,
+               repetition = ~repetition|patient,
+               structure = CS(list(~1,~week)),
+               data = df, df = FALSE)
+
+    yyy <- lmm(value ~ week,
+               repetition = ~repetition|patient,
+               structure = CS(list(~week,~week)),
+               data = df, df = FALSE)
+
+    ## identify a unique covariance pattern despite missing values
+    expect_true(is.matrix(sigma(xxx)))
+    expect_true(is.matrix(sigma(yyy)))
+})
 
 ######################################################################
 ### test-auto-previous-bug.R ends here
